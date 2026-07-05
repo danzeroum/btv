@@ -82,8 +82,22 @@ enum Commands {
         #[command(flatten)]
         opts: RunOpts,
     },
-    /// Roda o pipeline de verificação determinística.
-    Verify,
+    /// Roda o pipeline de verificação determinística (typecheck/test/lint/
+    /// SAST) e grava a evidência `verification-evidence.v1`. Não confundir
+    /// com a integridade do ledger — aquilo é `session.verify()` (a cadeia
+    /// de hash, checada ao fim de `run`/`chat`); isto verifica código.
+    Verify {
+        /// Caminho do forge.toml (default: ./forge.toml; se ausente, roda o
+        /// pipeline default espelhando o job `rust` do CI).
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Onde gravar a evidência (default: .forge/evidence/<run_id>.json).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Formato do resumo impresso no stdout.
+        #[arg(long, value_enum, default_value = "human")]
+        format: VerifyFormat,
+    },
     /// Delega a tarefa ao squad multi-agente (sidecar Python + gateway
     /// Rust). Degrada para agente-único → safe-mode se o squad falhar.
     Squad {
@@ -98,6 +112,14 @@ enum Commands {
         #[arg(long, default_value_t = 7878)]
         port: u16,
     },
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum VerifyFormat {
+    /// Resumo legível por passo + veredito + caminho do artefato.
+    Human,
+    /// A própria evidência JSON no stdout (além do arquivo gravado).
+    Json,
 }
 
 #[tokio::main]
@@ -116,10 +138,11 @@ async fn main() -> Result<()> {
             let (generator, root) = prepare(&opts)?;
             tui_app::run_tui(std::sync::Arc::new(generator), opts, root).await
         }
-        Commands::Verify => {
-            println!("forge verify — pipeline em implementação (Fase 5 do roadmap)");
-            Ok(())
-        }
+        Commands::Verify {
+            config,
+            out,
+            format,
+        } => run_verify(config, out, format),
         Commands::Squad { task, opts } => {
             let (generator, root) = prepare(&opts)?;
             squad::run_squad(generator, &opts, &root, task).await
@@ -148,6 +171,100 @@ async fn run_dashboard(port: u16) -> Result<()> {
     );
     forge_server::serve(telemetry, addr, web_dir).await?;
     Ok(())
+}
+
+/// Roda `/verify`: carrega `forge.toml` (ou cai no default, que espelha o
+/// job `rust` do CI) na raiz do diretório atual, executa o pipeline
+/// determinístico e grava `verification-evidence.v1` em disco.
+///
+/// Sai com código ≠ 0 quando o veredito é `Fail` — é o gate que a Onda 6
+/// (CI) vai cobrar para o self-hosting. Isso é resultado legítimo do
+/// verify, não um crash: por isso usa `process::exit` **depois** de gravar
+/// o artefato e imprimir o resumo, em vez de `anyhow::bail!` (que
+/// imprimiria como se fosse erro inesperado, com o prefixo "Error:").
+///
+/// Não recebe `root` via `prepare()` como `run`/`chat`/`squad` — verify é
+/// determinístico e offline (sem provider de LLM), então resolve
+/// `current_dir()` por conta própria, igual a `run_dashboard`.
+fn run_verify(config: Option<PathBuf>, out: Option<PathBuf>, format: VerifyFormat) -> Result<()> {
+    let root = std::env::current_dir().context("diretório atual")?;
+    let forge_dir = root.join(".forge");
+    std::fs::create_dir_all(&forge_dir)?;
+
+    let config_path = config.unwrap_or_else(|| root.join("forge.toml"));
+    let steps = match forge_verify::config::load_config(&config_path)
+        .with_context(|| format!("lendo {}", config_path.display()))?
+    {
+        Some(cfg) => cfg.to_step_specs(),
+        None => forge_verify::config::default_steps(),
+    };
+
+    let run_id = format!("run-{:x}", nanos_now() & 0xffff_ffff_ffff);
+    let sha = git_sha().unwrap_or_else(|| "unknown".to_string());
+    let produced_at = now_rfc3339();
+
+    let evidence = forge_verify::run_pipeline(&run_id, &sha, &produced_at, &steps);
+
+    let out_path = out.unwrap_or_else(|| forge_dir.join("evidence").join(format!("{run_id}.json")));
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(&evidence).context("serializando evidência")?;
+    std::fs::write(&out_path, &json).with_context(|| format!("gravando {}", out_path.display()))?;
+
+    match format {
+        VerifyFormat::Json => println!("{json}"),
+        VerifyFormat::Human => {
+            println!("forge verify — run {run_id} ({sha})");
+            for step in &evidence.steps {
+                let mark = if step.exit_code == 0 { "✓" } else { "✗" };
+                println!(
+                    "  {mark} {} ({}ms) — {} finding(s)",
+                    step.name,
+                    step.duration_ms,
+                    step.findings.len()
+                );
+                for finding in &step.findings {
+                    let loc = match (&finding.file, finding.line) {
+                        (Some(f), Some(l)) => format!(" [{f}:{l}]"),
+                        (Some(f), None) => format!(" [{f}]"),
+                        _ => String::new(),
+                    };
+                    println!("      {} {}{loc}", finding.severity, finding.message);
+                }
+            }
+            println!("veredito: {:?}", evidence.verdict);
+            println!("evidência: {}", out_path.display());
+        }
+    }
+
+    if matches!(evidence.verdict, forge_schemas::verification::Verdict::Fail) {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// `git rev-parse HEAD` best-effort — git ausente/repo fora de um worktree
+/// não deve abortar o verify, só perder a rastreabilidade do sha.
+fn git_sha() -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|s| s.trim().to_string())
+}
+
+fn nanos_now() -> u128 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
 }
 
 /// Monta o gerador concreto (gateway + rate limit + cache, salvo

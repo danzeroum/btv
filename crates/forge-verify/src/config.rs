@@ -13,6 +13,13 @@ pub struct VerifyConfig {
     pub steps: Vec<StepConfig>,
 }
 
+impl VerifyConfig {
+    /// Converte os passos declarados em TOML para o que `run_pipeline` espera.
+    pub fn to_step_specs(&self) -> Vec<StepSpec> {
+        self.steps.iter().map(StepSpec::from).collect()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct StepConfig {
     pub name: String,
@@ -149,6 +156,13 @@ args = ["test"]
         assert_eq!(specs[1].name, "test");
         assert_eq!(specs[1].timeout, None);
         assert_eq!(specs[1].parser, None);
+
+        // to_step_specs() é o método público que o CLI (Onda 2) usa — precisa
+        // produzir exatamente o mesmo resultado que o map manual acima.
+        let via_helper = config.to_step_specs();
+        assert_eq!(via_helper.len(), specs.len());
+        assert_eq!(via_helper[0].name, specs[0].name);
+        assert_eq!(via_helper[0].parser, specs[0].parser);
     }
 
     #[test]

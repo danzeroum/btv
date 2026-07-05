@@ -32,3 +32,4 @@ crossterm.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+jsonschema = "0.26"

@@ -616,6 +616,7 @@ dependencies = [
  "forge-tools",
  "forge-tui",
  "forge-verify",
+ "jsonschema",
  "ratatui",
  "serde",
  "serde_json",
