@@ -114,6 +114,25 @@ def test_consenso_fraco_com_hitl_negado_aborta(tmp_path):
     assert orch.autonomy.action_history[-1]["success"] is False
 
 
+def test_event_sink_emite_eventos_ao_vivo_na_ordem(tmp_path):
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    events: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        events.append(event)
+
+    asyncio.run(orch.execute_complex_task({"description": "tarefa"}, event_sink=sink))
+
+    kinds = [e["kind"] for e in events]
+    # 3 propostas antes do consenso; consenso antes dos handoffs/steps.
+    assert kinds[:3] == ["proposal", "proposal", "proposal"]
+    assert "consensus" in kinds
+    assert kinds.index("consensus") < kinds.index("handoff")
+    assert kinds.index("handoff") < kinds.index("step")
+    consensus_ev = next(e for e in events if e["kind"] == "consensus")
+    assert consensus_ev["requires_human"] is False
+
+
 def test_propostas_sao_envolvidas_em_proposal_e_consenso_computa(tmp_path):
     # Se o wrapping Proposal(...) falhasse, reach_consensus levantaria; aqui
     # provamos que o consenso computou um decision_maker real.

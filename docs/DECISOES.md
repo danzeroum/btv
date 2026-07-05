@@ -573,3 +573,43 @@ com resultado real (trust 0.5→0.52 sucesso, 0.5→0.4 rejeição). 11 testes
 novos (103 no workspace Python). Próximo: 4c (`SquadService` Python real
 + impls gRPC das duas interfaces + `forge squad` no Rust com fallback de
 3 níveis).
+
+## Fase 4 — Onda 4c: laço gRPC bidirecional do lado Python (2026-07-05)
+
+Todo o lado Python do laço bidirecional, testado com round-trips gRPC
+reais (sem mock): `GrpcGatewayClient`/`GrpcPermissionClient`
+(`grpc_clients.py`) implementam os Protocols do ADR 0005 falando
+`CoreService.Generate`/`RequestPermission`; o `SquadServicer`
+(`server.py`) roda o `UnifiedOrchestrator` e streama `SquadEvent` ao vivo.
+
+- **Streaming honesto, não pós-fato**: o orquestrador ganhou um
+  `event_sink` async opcional (aditivo, default None — os 103 testes
+  anteriores seguem verdes) que emite proposta/consenso/hitl/handoff/step
+  **conforme acontecem**; o servidor drena esses eventos por uma
+  `asyncio.Queue` e os yield como `SquadEvent`. Reconstruir os eventos do
+  resultado final seria teatro — a fila garante que são os eventos reais
+  da execução.
+- **Defesa contra o default-zero do proto3** (o alerta desta rodada):
+  `Consensus.requires_human` é `@property` no pydantic e **campo** no
+  proto — o mapeamento seta o campo à mão nos dois sentidos. Travado por
+  teste (`test_requires_human_true_sobrevive_ao_mapeamento_proto`): com
+  consenso fraco, o `SquadEvent.consensus.requires_human` chega `True` do
+  outro lado do socket; se o mapeamento omitisse o campo, viria `False`
+  silenciosamente. O mesmo default-zero funciona a **favor** no
+  `PermissionDecision`: enum ausente = `DECISION_UNSPECIFIED` (0) →
+  `approved=False`, fail-closed correto.
+- **ADR 0005 cobrado**: o teste bidirecional
+  (`test_squad_server.py`) sobe um `CoreService` fake (papel do Rust) + o
+  `SquadService` real + um cliente, e prova que os agentes obtêm o LLM de
+  volta via `CoreService` (`GrpcGatewayClient` fechou o laço — os
+  `Scripted*` não existem ali) e que o HITL negado aborta o stream antes
+  de qualquer step.
+
+9 testes novos (112 no workspace Python): 5 do laço bidirecional, 3 do
+mapeamento dos clients (agregação de chunks, temperature opcional,
+allow/deny→approved), 1 da ordem de emissão de eventos. `forge-squad`
+ganhou `grpcio`+`forge-proto-py` como deps (só o servidor/clients
+precisam; o núcleo segue só pydantic). Próximo: 4d (lado Rust —
+`CoreService` server sobre o `Gateway`, `SquadService` client,
+`forge squad`, fallback de 3 níveis, teste cross-process real Rust↔Python
+e os critérios de aceite da Fase 4).

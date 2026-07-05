@@ -112,11 +112,17 @@ name = "forge-squad"
 version = "0.1.0"
 source = { editable = "packages/forge-squad" }
 dependencies = [
+    { name = "forge-proto-py" },
+    { name = "grpcio" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2" }]
+requires-dist = [
+    { name = "forge-proto-py", editable = "packages/forge-proto-py" },
+    { name = "grpcio", specifier = ">=1.60" },
+    { name = "pydantic", specifier = ">=2" },
+]
 
 [[package]]
 name = "grpcio"

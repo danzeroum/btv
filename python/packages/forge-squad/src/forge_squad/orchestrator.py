@@ -75,6 +75,11 @@ class UnifiedOrchestrator:
             self.autonomy.attach_permission_client(permission_client)
         self.sandbox = SecureToolSandbox()
         self.chain_manager = ResilientPromptChain([])
+        #: Callback async opcional (por execução) — recebe eventos do squad
+        #: ao vivo (proposta/consenso/handoff/hitl/step). O servidor
+        #: `SquadService` traduz cada um em `SquadEvent` e streama pela
+        #: fronteira gRPC. None = execução silenciosa (comportamento padrão).
+        self._event_sink: Optional[Any] = None
 
         self.agents: dict[str, Any] = {
             "architect": ArchitectAgent(model=model),
@@ -87,7 +92,14 @@ class UnifiedOrchestrator:
             agent.attach_memory(self.memory)
             agent.attach_gateway(gateway)
 
-    async def execute_complex_task(self, task: dict[str, Any]) -> dict[str, Any]:
+    async def _emit(self, event: dict[str, Any]) -> None:
+        if self._event_sink is not None:
+            await self._event_sink(event)
+
+    async def execute_complex_task(
+        self, task: dict[str, Any], event_sink: Optional[Any] = None
+    ) -> dict[str, Any]:
+        self._event_sink = event_sink
         task_id = task.get("task_id", str(uuid.uuid4()))
         start = datetime.now(timezone.utc)
         logger.info("Iniciando execução da tarefa %s", task_id)
@@ -97,8 +109,21 @@ class UnifiedOrchestrator:
         proposals = await self._get_squad_proposals(plan)
         consensus = self.consensus.reach_consensus(proposals, "architecture")
 
+        await self._emit(
+            {
+                "kind": "consensus",
+                "decision_maker": consensus.decision_maker,
+                "strength": consensus.consensus_strength,
+                "requires_human": consensus.requires_human,
+                "decision": consensus.decision.model_dump() if consensus.decision else None,
+            }
+        )
+
         # ADR 0004: usa a property centralizada, não o número mágico 0.7.
         if consensus.requires_human:
+            await self._emit(
+                {"kind": "hitl", "reason": "weak_consensus", "confidence": consensus.consensus_strength}
+            )
             approval = await self.autonomy.execute_with_autonomy(
                 "orchestrator",
                 {"action": "approve_plan", "plan": plan, "critical": True},
@@ -157,6 +182,7 @@ class UnifiedOrchestrator:
         proposals["architect"] = Proposal(
             confidence=float(architect_result.get("confidence", 0.5)), content=architect_result
         )
+        await self._emit_proposal("architect", proposals["architect"])
 
         developer_result = await self.agents["developer"].execute(
             {"description": f"Assess implementation for {goal}", "plan": plan}
@@ -164,6 +190,7 @@ class UnifiedOrchestrator:
         proposals["developer"] = Proposal(
             confidence=float(developer_result.get("confidence", 0.5)), content=developer_result
         )
+        await self._emit_proposal("developer", proposals["developer"])
 
         audit_result = await self.agents["auditor"].execute(
             {
@@ -175,19 +202,30 @@ class UnifiedOrchestrator:
         proposals["auditor"] = Proposal(
             confidence=float(audit_result.get("confidence", 0.5)), content=audit_result
         )
+        await self._emit_proposal("auditor", proposals["auditor"])
 
         return proposals
+
+    async def _emit_proposal(self, agent: str, proposal: Proposal) -> None:
+        await self._emit(
+            {"kind": "proposal", "agent": agent, "confidence": proposal.confidence, "content": proposal.content}
+        )
 
     async def _execute_plan_steps(self, plan: dict[str, Any], task: dict[str, Any]) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for step in plan.get("steps", []):
             agent_name = self._select_agent_for_step(step)
+            step_id = str(step.get("step", "?"))
+            await self._emit(
+                {"kind": "handoff", "phase": "start", "from_agent": "orchestrator", "to_agent": agent_name}
+            )
             if self._can_parallelize(step, plan):
                 parallel_tasks = self._extract_parallel_tasks(step)
                 step_results = await self.parallel.execute_parallel_with_limits(parallel_tasks)
                 for result in step_results:
                     await self.evaluator.evaluate_agent_performance(agent_name, result)
                 results.extend(step_results)
+                await self._emit_step(step_id, all(r.get("success") for r in step_results), agent_name)
                 continue
 
             step_task = {
@@ -201,7 +239,14 @@ class UnifiedOrchestrator:
                 reflection = {"reason": "low_quality", "score": quality.get("technical_score", 0.0)}
                 plan = await self.planner.replan_from_point(plan, step, reflection)
             results.append(result)
+            await self._emit_step(step_id, bool(result.get("success")), agent_name)
         return results
+
+    async def _emit_step(self, step_id: str, success: bool, agent_name: str) -> None:
+        await self._emit(
+            {"kind": "handoff", "phase": "complete" if success else "error", "from_agent": agent_name, "to_agent": "orchestrator"}
+        )
+        await self._emit({"kind": "step", "step_id": step_id, "success": success, "summary": f"{agent_name} step {step_id}"})
 
     def _select_agent_for_step(self, step: dict[str, Any]) -> str:
         mapping = {
