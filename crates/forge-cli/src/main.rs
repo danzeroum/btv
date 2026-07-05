@@ -1,17 +1,23 @@
 //! `forge` — CLI da plataforma unificada (BuildToValue + opencode + prompte).
 //!
-//! Fase 1: `run` executa o loop de agente real — gateway LLM com streaming,
-//! ferramentas sob permissão interativa e ledger em `.forge/forge.db`.
+//! Fase 1: `run` executa o loop de agente real e `chat` abre o REPL
+//! multi-turno — gateway LLM com streaming e cache por hash, ferramentas
+//! sob permissão interativa e ledger em `.forge/forge.db`.
 //! `squad` ativa o sidecar Python na Fase 4; `verify` completa na Fase 5.
 
+mod cache;
 mod session;
 
 use anyhow::{bail, Context, Result};
+use cache::CachedGenerator;
 use clap::{Parser, Subcommand};
 use forge_core::{AgentLoop, LoopEvent, PermissionResolver, BUILD, PLAN};
-use forge_llm::{tier_from_id, Gateway, ModelTier};
+use forge_llm::chat::ChatMessage;
+use forge_llm::{tier_from_id, Gateway, Generator, ModelTier};
+use forge_store::PromptCache;
 use forge_tools::ToolRegistry;
-use std::io::Write;
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
@@ -24,24 +30,36 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(clap::Args, Clone)]
+struct RunOpts {
+    /// Modelo a usar (define o ModelTier).
+    #[arg(long, default_value = "claude-sonnet-5")]
+    model: String,
+    /// Perfil de agente: build (edita) ou plan (somente leitura).
+    #[arg(long, default_value = "build")]
+    agent: String,
+    /// Aprova automaticamente pedidos de permissão (use com cautela).
+    #[arg(long)]
+    yes: bool,
+    /// Desliga o cache de prompts por hash.
+    #[arg(long)]
+    no_cache: bool,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Executa uma tarefa única com o agente ativo.
     Run {
         /// Descrição da tarefa.
         task: String,
-        /// Modelo a usar (define o ModelTier).
-        #[arg(long, default_value = "claude-sonnet-5")]
-        model: String,
-        /// Perfil de agente: build (edita) ou plan (somente leitura).
-        #[arg(long, default_value = "build")]
-        agent: String,
-        /// Aprova automaticamente pedidos de permissão (use com cautela).
-        #[arg(long)]
-        yes: bool,
+        #[command(flatten)]
+        opts: RunOpts,
     },
-    /// Abre o REPL de conversa.
-    Chat,
+    /// Abre o REPL de conversa multi-turno.
+    Chat {
+        #[command(flatten)]
+        opts: RunOpts,
+    },
     /// Roda o pipeline de verificação determinística.
     Verify,
     /// Delega a tarefa ao squad multi-agente (requer sidecar Python).
@@ -52,15 +70,13 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Run {
-            task,
-            model,
-            agent,
-            yes,
-        } => run(task, model, agent, yes).await,
-        Commands::Chat => {
-            println!("forge chat — REPL em implementação (Fase 1 do roadmap)");
-            Ok(())
+        Commands::Run { task, opts } => {
+            let (generator, root) = prepare(&opts)?;
+            run_once(&generator, &opts, &root, task).await
+        }
+        Commands::Chat { opts } => {
+            let (generator, root) = prepare(&opts)?;
+            chat_repl(&generator, &opts, &root).await
         }
         Commands::Verify => {
             println!("forge verify — pipeline em implementação (Fase 5 do roadmap)");
@@ -71,6 +87,165 @@ async fn main() -> Result<()> {
             println!("(sidecar forge-squadd em implementação — Fase 4 do roadmap)");
             Ok(())
         }
+    }
+}
+
+/// Monta o gerador concreto (gateway + cache, salvo --no-cache) e valida
+/// que há providers configurados.
+fn prepare(opts: &RunOpts) -> Result<(CachedGenerator<Gateway>, PathBuf)> {
+    let gateway = Gateway::from_env();
+    let available = gateway.available();
+    if available.is_empty() {
+        bail!(
+            "nenhum provider configurado — defina ANTHROPIC_API_KEY, DEEPSEEK_API_KEY ou OPENAI_API_KEY"
+        );
+    }
+    let root = std::env::current_dir().context("diretório atual")?;
+    eprintln!(
+        "forge — modelo {} ({}) · agente {} · providers: {} · cache: {}",
+        opts.model,
+        tier_name(tier_from_id(&opts.model)),
+        opts.agent,
+        available.join(", "),
+        if opts.no_cache { "off" } else { "on" }
+    );
+
+    let forge_dir = root.join(".forge");
+    std::fs::create_dir_all(&forge_dir)?;
+    let cache = if opts.no_cache {
+        // Cache em memória: satisfaz o tipo sem persistir nada.
+        PromptCache::open_in_memory()?
+    } else {
+        PromptCache::open(
+            forge_dir
+                .join("cache.db")
+                .to_str()
+                .unwrap_or(".forge/cache.db"),
+        )?
+    };
+    Ok((CachedGenerator::new(gateway, cache), root))
+}
+
+fn build_loop<'a, G: Generator>(
+    generator: &'a G,
+    opts: &RunOpts,
+    tools: &'a ToolRegistry,
+) -> Result<AgentLoop<'a, G>> {
+    let profile = match opts.agent.as_str() {
+        "build" => &BUILD,
+        "plan" => &PLAN,
+        other => bail!("agente desconhecido: {other} (use build ou plan)"),
+    };
+    let tier = tier_from_id(&opts.model);
+    Ok(AgentLoop {
+        generator,
+        tools,
+        permissions: (profile.permissions)(),
+        model: opts.model.clone(),
+        system: system_prompt(tier),
+        max_steps: 20,
+        max_tokens: 4096,
+    })
+}
+
+async fn run_once<G: Generator>(
+    generator: &G,
+    opts: &RunOpts,
+    root: &std::path::Path,
+    task: String,
+) -> Result<()> {
+    let tools = ToolRegistry::default_set(root);
+    let agent_loop = build_loop(generator, opts, &tools)?;
+    let mut session = session::Session::open(root, &task, &opts.model)?;
+    let mut resolver = CliResolver { auto_yes: opts.yes };
+
+    let mut on_event = |event: LoopEvent| {
+        print_event(&event);
+        session.record(&event);
+    };
+    match agent_loop.run(&task, &mut resolver, &mut on_event).await {
+        Ok(outcome) => {
+            session.finish(true, outcome.steps)?;
+            eprintln!(
+                "\nconcluído em {} passo(s) · ledger íntegro: {} entrada(s)",
+                outcome.steps,
+                session.verify()?
+            );
+            Ok(())
+        }
+        Err(e) => {
+            session.finish(false, 0)?;
+            bail!("{e}");
+        }
+    }
+}
+
+async fn chat_repl<G: Generator>(
+    generator: &G,
+    opts: &RunOpts,
+    root: &std::path::Path,
+) -> Result<()> {
+    let tools = ToolRegistry::default_set(root);
+    let agent_loop = build_loop(generator, opts, &tools)?;
+    let mut session = session::Session::open(root, "<chat>", &opts.model)?;
+    let mut resolver = CliResolver { auto_yes: opts.yes };
+
+    eprintln!("forge chat — digite a mensagem (vazio, \"sair\" ou Ctrl-D encerra)\n");
+    let stdin = std::io::stdin();
+    let mut history: Vec<ChatMessage> = Vec::new();
+    let mut turns = 0usize;
+
+    loop {
+        eprint!("> ");
+        let _ = std::io::stderr().flush();
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line)? == 0 {
+            break; // EOF
+        }
+        let input = line.trim();
+        if input.is_empty() || matches!(input, "sair" | "exit" | "quit") {
+            break;
+        }
+
+        session.note("user.turn", serde_json::json!({"chars": input.len()}));
+        history.push(ChatMessage::user_text(input));
+        let mut on_event = |event: LoopEvent| {
+            print_event(&event);
+            session.record(&event);
+        };
+        match agent_loop
+            .continue_run(&mut history, &mut resolver, &mut on_event)
+            .await
+        {
+            Ok(_) => turns += 1,
+            Err(e) => {
+                eprintln!("\nerro: {e}");
+                break;
+            }
+        }
+        println!();
+    }
+
+    session.finish(true, turns)?;
+    eprintln!(
+        "\nchat encerrado após {turns} turno(s) · ledger íntegro: {} entrada(s)",
+        session.verify()?
+    );
+    Ok(())
+}
+
+fn print_event(event: &LoopEvent) {
+    match event {
+        LoopEvent::TextDelta(d) => {
+            print!("{d}");
+            let _ = std::io::stdout().flush();
+        }
+        LoopEvent::TurnCompleted { .. } => println!(),
+        LoopEvent::ToolStarted { name, scope } => eprintln!("  ⚒ {name} {scope:?}"),
+        LoopEvent::ToolFinished { name, ok, summary } => {
+            eprintln!("  {} {name}: {summary}", if *ok { "✓" } else { "✗" })
+        }
+        LoopEvent::ToolDenied { name, scope } => eprintln!("  ⛔ {name} {scope:?} negado"),
     }
 }
 
@@ -94,78 +269,6 @@ impl PermissionResolver for CliResolver {
             answer.trim().to_lowercase().as_str(),
             "s" | "sim" | "y" | "yes"
         )
-    }
-}
-
-async fn run(task: String, model: String, agent: String, yes: bool) -> Result<()> {
-    let gateway = Gateway::from_env();
-    let available = gateway.available();
-    if available.is_empty() {
-        bail!(
-            "nenhum provider configurado — defina ANTHROPIC_API_KEY, DEEPSEEK_API_KEY ou OPENAI_API_KEY"
-        );
-    }
-
-    let profile = match agent.as_str() {
-        "build" => &BUILD,
-        "plan" => &PLAN,
-        other => bail!("agente desconhecido: {other} (use build ou plan)"),
-    };
-
-    let root = std::env::current_dir().context("diretório atual")?;
-    let tools = ToolRegistry::default_set(&root);
-    let tier = tier_from_id(&model);
-
-    let mut session = session::Session::open(&root, &task, &model)?;
-    eprintln!(
-        "forge run — modelo {model} ({}) · agente {} · providers: {}",
-        tier_name(tier),
-        profile.name,
-        available.join(", ")
-    );
-
-    let agent_loop = AgentLoop {
-        generator: &gateway,
-        tools: &tools,
-        permissions: (profile.permissions)(),
-        model: model.clone(),
-        system: system_prompt(tier),
-        max_steps: 20,
-        max_tokens: 4096,
-    };
-
-    let mut resolver = CliResolver { auto_yes: yes };
-    let mut on_event = |event: LoopEvent| {
-        match &event {
-            LoopEvent::TextDelta(d) => {
-                print!("{d}");
-                let _ = std::io::stdout().flush();
-            }
-            LoopEvent::TurnCompleted { .. } => println!(),
-            LoopEvent::ToolStarted { name, scope } => eprintln!("  ⚒ {name} {scope:?}"),
-            LoopEvent::ToolFinished { name, ok, summary } => {
-                eprintln!("  {} {name}: {summary}", if *ok { "✓" } else { "✗" })
-            }
-            LoopEvent::ToolDenied { name, scope } => eprintln!("  ⛔ {name} {scope:?} negado"),
-        }
-        session.record(&event);
-    };
-
-    let result = agent_loop.run(&task, &mut resolver, &mut on_event).await;
-    match result {
-        Ok(outcome) => {
-            session.finish(true, outcome.steps)?;
-            eprintln!(
-                "\nconcluído em {} passo(s) · ledger íntegro: {} entrada(s)",
-                outcome.steps,
-                session.verify()?
-            );
-            Ok(())
-        }
-        Err(e) => {
-            session.finish(false, 0)?;
-            bail!("{e}");
-        }
     }
 }
 

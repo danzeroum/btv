@@ -100,8 +100,16 @@ genérico sobre `Generator` (testes com gerador roteirizado cobrem edição
 fim-a-fim, negação de permissão e limite de passos) e sessão com ledger
 hash-chain em `.forge/forge.db`.
 
-Restante da Fase 1:
-1. `forge chat` — REPL multi-turno reusando o loop.
-2. Cache de prompt (`prompt-cache-key.v1`) ligado ao gateway.
-3. Critério final da fase: `forge run "corrija o teste X"` com permissão
-   interativa num repo real (exige API key configurada).
+Fase 1 concluída (terceiro commit da main): `forge chat` (REPL multi-turno
+via `continue_run`, histórico carregado entre turnos — testado) e cache de
+prompt ligado ao gateway (`CachedGenerator` decorando o `Gateway`; chave =
+`request_hash` do envelope canônico modelo+system+tools+histórico; hit
+devolve o turno sem rede e marca provider `+cache` no ledger — testado com
+gerador contador). Total: 51 testes Rust + 13 Python.
+
+O critério de aceite com API real (`forge run` editando um repo de verdade)
+fica pendente de uma API key configurada pelo usuário — toda a cadeia até a
+borda HTTP está coberta por testes.
+
+Fase 2 na sequência: sessões duráveis (System Context/Epochs/compaction),
+TUI ratatui, tier-gating completo.

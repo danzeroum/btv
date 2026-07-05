@@ -39,15 +39,18 @@ Sem `just`: `cargo test --workspace` e `cd python && uv sync && uv run pytest`.
 
 ## Estado
 
-**Fase 1 quase completa**: `forge run` executa o loop de agente real — gateway
-LLM com streaming SSE (Anthropic/OpenAI/DeepSeek, fallback automático, keys por
-env), ferramentas read/grep/edit/bash sob permissão interativa, e cada turno
+**Fase 1 concluída**: `forge run` (tarefa única) e `forge chat` (REPL
+multi-turno) executam o loop de agente real — gateway LLM com streaming SSE
+(Anthropic/OpenAI/DeepSeek, fallback automático, keys por env), cache de
+prompts por hash (`prompt-cache-key.v1`, desative com `--no-cache`),
+ferramentas read/grep/edit/bash sob permissão interativa e cada turno
 registrado no ledger append-only (`.forge/forge.db`).
 
 ```sh
 export ANTHROPIC_API_KEY=...   # ou DEEPSEEK_API_KEY / OPENAI_API_KEY
 cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
+cargo run -p forge-cli -- chat
 ```
 
-Falta para fechar a Fase 1: `forge chat` (REPL) e o cache de prompt ligado ao
-gateway. Fase 2 na sequência: sessões duráveis, TUI e ModelTier tier-gated.
+Próxima: **Fase 2** — sessões duráveis (System Context/Epochs/compaction),
+TUI ratatui e tier-gating completo do ModelTier.

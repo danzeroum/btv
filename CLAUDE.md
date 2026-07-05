@@ -40,12 +40,14 @@ just test | just lint | just verify    # atalhos (requer just)
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
-Fase 1 quase completa — `forge run` roda o loop de agente real (gateway com
-streaming SSE e fallback em `forge-llm/src/gateway.rs`, loop genérico sobre
-`Generator` em `forge-core/src/agent_loop.rs`, ferramentas em `forge-tools`,
-sessão+ledger em `forge-cli/src/session.rs`). Falta: `forge chat` (REPL) e o
-cache de prompt ligado ao gateway; depois Fase 2 (sessões duráveis, TUI,
-tier-gating completo).
+**Fase 1 concluída** — `forge run` e `forge chat` rodam o loop de agente real
+(gateway com streaming SSE e fallback em `forge-llm/src/gateway.rs`, loop
+genérico sobre `Generator` com `continue_run` multi-turno em
+`forge-core/src/agent_loop.rs`, ferramentas em `forge-tools`, cache por hash
+em `forge-cli/src/cache.rs` + `forge-store/src/prompt_cache.rs`, sessão+ledger
+em `forge-cli/src/session.rs`). Próxima: Fase 2 — sessões duráveis (System
+Context/Epochs/compaction, spec `opencode/CONTEXT.md`), TUI ratatui e
+tier-gating completo.
 
 ## Convenções
 

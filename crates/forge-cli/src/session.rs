@@ -80,6 +80,14 @@ impl Session {
         }
     }
 
+    /// Registra um evento avulso (ex.: `user.turn` no chat). Falhas são
+    /// reportadas no stderr, sem derrubar a sessão.
+    pub fn note(&mut self, kind: &str, payload: Value) {
+        if let Err(e) = self.append(kind, payload) {
+            eprintln!("  [ledger] falha ao registrar {kind}: {e}");
+        }
+    }
+
     pub fn finish(&mut self, success: bool, steps: usize) -> anyhow::Result<()> {
         self.append("session.end", json!({"success": success, "steps": steps}))
     }

@@ -73,6 +73,14 @@ pub struct LoopOutcome {
     pub messages: Vec<ChatMessage>,
 }
 
+/// Resumo de uma rodada (uma entrada do usuário até `end_turn`) quando o
+/// histórico é gerenciado pelo chamador (`continue_run`, usado pelo REPL).
+#[derive(Debug)]
+pub struct TurnSummary {
+    pub final_text: String,
+    pub steps: usize,
+}
+
 impl<'a, G: Generator> AgentLoop<'a, G> {
     fn tool_specs(&self) -> Vec<ToolSpec> {
         self.tools
@@ -85,7 +93,7 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
             .collect()
     }
 
-    /// Executa a tarefa até o modelo encerrar o turno sem pedir ferramentas.
+    /// Executa uma tarefa única até o modelo encerrar o turno.
     pub async fn run(
         &self,
         task: &str,
@@ -93,6 +101,23 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
         on_event: &mut (dyn FnMut(LoopEvent) + Send),
     ) -> Result<LoopOutcome, LoopError> {
         let mut messages = vec![ChatMessage::user_text(task)];
+        let summary = self.continue_run(&mut messages, resolver, on_event).await?;
+        Ok(LoopOutcome {
+            final_text: summary.final_text,
+            steps: summary.steps,
+            messages,
+        })
+    }
+
+    /// Continua uma conversa existente: assume que a última mensagem do
+    /// histórico é a entrada pendente do usuário e itera até `end_turn`,
+    /// anexando os turnos ao histórico (base do REPL `forge chat`).
+    pub async fn continue_run(
+        &self,
+        messages: &mut Vec<ChatMessage>,
+        resolver: &mut (dyn PermissionResolver + Send),
+        on_event: &mut (dyn FnMut(LoopEvent) + Send),
+    ) -> Result<TurnSummary, LoopError> {
         let specs = self.tool_specs();
 
         for step in 1..=self.max_steps {
@@ -128,10 +153,9 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
             });
 
             if turn.stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
-                return Ok(LoopOutcome {
+                return Ok(TurnSummary {
                     final_text: turn.text(),
                     steps: step,
-                    messages,
                 });
             }
 
@@ -365,6 +389,72 @@ mod tests {
             ContentBlock::ToolResult { is_error: true, .. }
         ));
         let _ = last_user;
+    }
+
+    /// Gerador que registra quantas mensagens recebeu em cada chamada.
+    struct Counting {
+        turns: Mutex<Vec<AssistantTurn>>,
+        seen: Mutex<Vec<usize>>,
+    }
+
+    impl Generator for Counting {
+        async fn generate(
+            &self,
+            req: GenerateRequest,
+            _on_delta: &mut (dyn FnMut(&str) + Send),
+        ) -> Result<AssistantTurn, GatewayError> {
+            self.seen.lock().unwrap().push(req.messages.len());
+            Ok(self.turns.lock().unwrap().remove(0))
+        }
+    }
+
+    #[tokio::test]
+    async fn continue_run_carrega_o_historico_entre_turnos() {
+        let dir = tempfile::tempdir().unwrap();
+        let tools = ToolRegistry::default_set(dir.path());
+        let gen = Counting {
+            turns: Mutex::new(vec![
+                turn(
+                    vec![ContentBlock::Text {
+                        text: "olá".into()
+                    }],
+                    StopReason::EndTurn,
+                ),
+                turn(
+                    vec![ContentBlock::Text {
+                        text: "de novo".into(),
+                    }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+            seen: Mutex::new(vec![]),
+        };
+        let al = AgentLoop {
+            generator: &gen,
+            tools: &tools,
+            permissions: PermissionEngine::default(),
+            model: "test".into(),
+            system: "t".into(),
+            max_steps: 3,
+            max_tokens: 64,
+        };
+
+        let mut history = vec![ChatMessage::user_text("primeira")];
+        let s1 = al
+            .continue_run(&mut history, &mut AllowAll, &mut |_| {})
+            .await
+            .unwrap();
+        history.push(ChatMessage::user_text("segunda"));
+        let s2 = al
+            .continue_run(&mut history, &mut AllowAll, &mut |_| {})
+            .await
+            .unwrap();
+
+        assert_eq!(s1.final_text, "olá");
+        assert_eq!(s2.final_text, "de novo");
+        // 1ª chamada viu 1 mensagem; a 2ª viu 3 (user, assistant, user).
+        assert_eq!(*gen.seen.lock().unwrap(), vec![1, 3]);
+        assert_eq!(history.len(), 4);
     }
 
     #[tokio::test]

@@ -1,9 +1,11 @@
 //! Storage durável da plataforma Forge (SQLite via rusqlite).
 //!
-//! Fase 1 (scaffold): ledger append-only com hash-chain verificável.
-//! Sessões, biblioteca de prompts, memória do squad e buffer de telemetria
-//! ganham tabelas próprias ao longo das Fases 1–3.
+//! Fase 1: ledger append-only com hash-chain verificável e cache de
+//! prompts por hash. Sessões duráveis, biblioteca de prompts e buffer de
+//! telemetria ganham tabelas próprias nas Fases 2–3.
 
 pub mod ledger;
+pub mod prompt_cache;
 
 pub use ledger::LedgerStore;
+pub use prompt_cache::PromptCache;
