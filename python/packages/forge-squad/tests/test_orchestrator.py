@@ -1,0 +1,123 @@
+import asyncio
+import json
+
+import pytest
+
+from forge_squad.gateway import LlmRequest, LlmResponse
+from forge_squad.memory import AgentMemorySystem
+from forge_squad.orchestrator import UnifiedOrchestrator
+from forge_squad.permission import PermissionDecision, ScriptedPermissionClient
+
+
+class RoutingGatewayClient:
+    """Gateway falso que roteia por `requester` — cada agente/planner tem
+    sua própria resposta, tornando o fluxo multi-agente do orquestrador
+    determinístico sem depender da ordem exata das chamadas."""
+
+    def __init__(self, by_requester: dict[str, LlmResponse]) -> None:
+        self.by_requester = by_requester
+        self.calls: list[LlmRequest] = []
+
+    async def generate(self, request: LlmRequest) -> LlmResponse:
+        self.calls.append(request)
+        resp = self.by_requester.get(request.requester)
+        if resp is None:
+            raise AssertionError(f"sem resposta roteirizada para requester={request.requester}")
+        return resp
+
+
+def _gateway(arch_conf: float, dev_conf: float, aud_conf: float, approved: bool) -> RoutingGatewayClient:
+    return RoutingGatewayClient(
+        {
+            # plano de um passo "deploy" → não paralelizável → ops (conf alta, sem replan).
+            "planner": LlmResponse(
+                text=json.dumps(
+                    {
+                        "steps": [
+                            {"step": 1, "action": "deploy", "description": "publicar serviço", "estimated_time": 10, "dependencies": [], "can_fail": True}
+                        ],
+                        "estimated_duration": 10,
+                        "confidence": 0.8,
+                    }
+                )
+            ),
+            "architect": LlmResponse(
+                text=json.dumps(
+                    {"problem_analysis": "x", "recommendation": "microservices", "architecture": "microservices", "components": ["api"], "confidence": arch_conf}
+                )
+            ),
+            "developer": LlmResponse(
+                text=json.dumps({"final_output": "codigo", "status": "completed", "confidence": dev_conf})
+            ),
+            "auditor": LlmResponse(
+                text=json.dumps(
+                    {"passed": approved, "approved": approved, "confidence": aud_conf, "notes": "ok", "issues": [], "agent_scores": {}, "additional_checks": []}
+                )
+            ),
+            "designer": LlmResponse(text=json.dumps({"pattern": "material", "components": ["ui"], "confidence": 0.8})),
+            "ops": LlmResponse(
+                text=json.dumps({"strategy": "blue-green", "stages": ["build"], "confidence": 0.9})
+            ),
+        }
+    )
+
+
+def test_instancia_exatamente_os_5_agentes_reais(tmp_path):
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    assert set(orch.agents) == {"architect", "developer", "auditor", "designer", "ops"}
+
+
+def test_consenso_forte_dispensa_hitl_e_completa(tmp_path):
+    # arch 0.9/dev 0.2/aud 0.2 → strength ~0.79 ≥ 0.7 → requires_human False.
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    result = asyncio.run(orch.execute_complex_task({"description": "publicar serviço de pagamentos"}))
+
+    assert result["success"] is True  # auditor.validate_results approved
+    assert result["consensus"]["requires_human"] is False
+    assert result["consensus"]["decision_maker"] == "architect"
+
+
+def test_record_action_registra_o_resultado_real_apos_execucao(tmp_path):
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    asyncio.run(orch.execute_complex_task({"description": "tarefa"}))
+
+    # ADR 0006: o portão não registra; o orquestrador registra o resultado real.
+    assert len(orch.autonomy.action_history) == 1
+    assert orch.autonomy.action_history[-1]["success"] is True
+    assert orch.autonomy.agent_trust_scores["orchestrator"] == pytest.approx(0.52)  # 0.5 + 0.02
+
+
+def test_consenso_fraco_dispara_hitl_e_aprovacao_deixa_seguir(tmp_path):
+    # arch 0.6/dev 0.6/aud 0.9 → strength 0.4 < 0.7 → requires_human True.
+    orch = UnifiedOrchestrator(
+        _gateway(0.6, 0.6, 0.9, approved=True),
+        permission_client=ScriptedPermissionClient([PermissionDecision(approved=True)]),
+        memory=AgentMemorySystem(storage_dir=tmp_path),
+    )
+    result = asyncio.run(orch.execute_complex_task({"description": "tarefa crítica"}))
+
+    assert result["consensus"]["requires_human"] is True
+    assert result["success"] is True  # humano aprovou e a execução seguiu
+
+
+def test_consenso_fraco_com_hitl_negado_aborta(tmp_path):
+    orch = UnifiedOrchestrator(
+        _gateway(0.6, 0.6, 0.9, approved=True),
+        permission_client=ScriptedPermissionClient([PermissionDecision(approved=False, operator_note="risco alto")]),
+        memory=AgentMemorySystem(storage_dir=tmp_path),
+    )
+    result = asyncio.run(orch.execute_complex_task({"description": "tarefa crítica"}))
+
+    assert result["success"] is False
+    assert result["reason"] == "Plan rejected"
+    # A negação humana foi registrada como falha para o orquestrador.
+    assert orch.autonomy.action_history[-1]["success"] is False
+
+
+def test_propostas_sao_envolvidas_em_proposal_e_consenso_computa(tmp_path):
+    # Se o wrapping Proposal(...) falhasse, reach_consensus levantaria; aqui
+    # provamos que o consenso computou um decision_maker real.
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    result = asyncio.run(orch.execute_complex_task({"description": "tarefa"}))
+    assert result["consensus"]["decision_maker"] in {"architect", "developer", "auditor"}
+    assert 0.0 <= result["consensus"]["consensus_strength"] <= 1.0

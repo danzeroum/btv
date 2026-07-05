@@ -17,10 +17,12 @@ from forge_squad.agents import (
 )
 from forge_squad.chains import ChainStep, ResilientPromptChain
 from forge_squad.consensus import ConsensusResult, WeightedConsensusEngine
+from forge_squad.evaluation import ContinuousEvaluator
 from forge_squad.forgetting import IntelligentForgetting, MemoryStore
 from forge_squad.gateway import GatewayClient, LlmRequest, LlmResponse, ScriptedGatewayClient
 from forge_squad.hitl import ProgressiveAutonomyManager
 from forge_squad.memory import AgentMemorySystem
+from forge_squad.orchestrator import UnifiedOrchestrator
 from forge_squad.parallel import ParallelResourceManager
 from forge_squad.permission import (
     PermissionClient,
@@ -41,6 +43,7 @@ __all__ = [
     "BaseAgent",
     "ChainStep",
     "ConsensusResult",
+    "ContinuousEvaluator",
     "DesignerAgent",
     "DeveloperAgent",
     "DockerSandbox",
@@ -63,5 +66,6 @@ __all__ = [
     "SecureToolSandbox",
     "SecurityConfig",
     "SecurityError",
+    "UnifiedOrchestrator",
     "WeightedConsensusEngine",
 ]

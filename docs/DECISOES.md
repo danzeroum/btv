@@ -538,3 +538,38 @@ Nenhuma mudança breaking: os protos novos são aditivos (a regra do plano
 Rust seguem verdes; clippy/fmt limpos. Próximo: 4b (porte do
 `UnifiedOrchestrator` com as adaptações dos ADR 0004/0006) e 4c
 (`SquadService` real + impls gRPC de `GatewayClient`/`PermissionClient`).
+
+## Fase 4 — Onda 4b: UnifiedOrchestrator + ContinuousEvaluator (2026-07-05)
+
+Capstone do porte (ADR 0007). O orquestrador é **coordenação
+determinística** — não chama o gateway, compõe os agentes que chamam. As
+adaptações mapeadas nos ADR 0004/0006 aterrissaram: consenso via
+`requires_human` (não o `< 0.7` manual), propostas em `Proposal(...)`,
+5 agentes reais com `attach_gateway`+`attach_memory`, planner com
+`attach_gateway`, autonomia com `attach_permission_client`, e
+`record_action` chamado com o resultado real **após** a execução (o
+portão não registra mais — ADR 0006).
+
+Dois achados novos, mesmo padrão de rigor das ondas anteriores:
+
+1. **`ContinuousEvaluator` fabricava a nota técnica**: na origem,
+   `evaluate_technical_quality` devolvia `result.get("technical_score", 0.8)`,
+   mas nenhum agente produz `technical_score` — sempre 0.8, e o portão de
+   replanejamento (`< 0.6`) nunca disparava. Mesmo bug do `create_plan`.
+   Corrigido: deriva de `confidence`/`success` reais; `improvement` é
+   delta contra a média histórica; `business_score` fabricado (0.7)
+   removido.
+2. **`requires_human` sumia na serialização**: é uma `@property`, e
+   `model_dump()` só serializa campos — então o sinal de HITL era perdido
+   no dict de resultado que a TUI vai consumir. Corrigido com um helper
+   que injeta a property explicitamente. Pego pelo teste (`KeyError`),
+   não em produção.
+
+Testado com `RoutingGatewayClient` (fake que roteia por `requester` —
+fluxo multi-agente determinístico) e `ScriptedPermissionClient`: 5
+agentes, consenso forte dispensa HITL, consenso fraco dispara o portão
+(aprovação segue / negação aborta com `success=False`), `record_action`
+com resultado real (trust 0.5→0.52 sucesso, 0.5→0.4 rejeição). 11 testes
+novos (103 no workspace Python). Próximo: 4c (`SquadService` Python real
++ impls gRPC das duas interfaces + `forge squad` no Rust com fallback de
+3 níveis).
