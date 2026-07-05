@@ -3,10 +3,12 @@ BuildToValue `src/agents/architect_agent.py`).
 
 Na origem, `reason_with_cot` era 100% heurística fixa — os "passos" de
 raciocínio eram literais constantes, independentes do problema recebido.
-Esta versão chama o gateway LLM de verdade (ADR 0005); `create_plan` e
-`create_adr` continuam deterministas, transformando o resultado real do
-raciocínio — não são heurística disfarçada de decisão, são bookkeeping
-mecânico sobre uma decisão que agora é real.
+Esta versão chama o gateway LLM de verdade (ADR 0005) e pede ao modelo a
+arquitetura, componentes, riscos, mitigações e esforço estimado — não só
+o "recommendation" solto. `create_plan` e `create_adr` são bookkeeping
+mecânico sobre esse resultado real (nenhum campo é constante fixa; ver
+ADR 0005 para o histórico da primeira versão, que ainda fabricava boa
+parte do plano por trás de uma chamada real ao modelo).
 """
 
 from __future__ import annotations
@@ -30,9 +32,15 @@ Dado um problema, responda SOMENTE com um objeto JSON (sem markdown, sem texto f
   "applicable_patterns": ["lista de strings — padrões de design aplicáveis"],
   "trade_offs": {"padrão ou opção": "string — trade-off dessa escolha"},
   "recommendation": "string — a solução recomendada",
+  "architecture": "string — estilo arquitetural recomendado (ex.: microservices, monolito modular, serverless)",
+  "components": ["lista de strings — componentes principais do sistema proposto para ESTE problema"],
+  "risks": ["lista de strings — riscos técnicos específicos desta solução"],
+  "mitigations": ["lista de strings — mitigações para os riscos listados"],
+  "estimated_effort": "string — estimativa de esforço (ex.: '2 sprints', '3 semanas')",
   "confidence": 0.0
 }
-"confidence" é um float entre 0.0 e 1.0 representando sua certeza na recomendação."""
+"confidence" é um float entre 0.0 e 1.0 representando sua certeza na recomendação.
+Todos os campos devem refletir o problema específico recebido — nunca liste componentes ou riscos genéricos que serviriam para qualquer sistema."""
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -123,25 +131,29 @@ class ArchitectAgent(BaseAgent):
             "applicable_patterns": parsed.get("applicable_patterns", []),
             "trade_offs": parsed.get("trade_offs", {}),
             "recommendation": parsed.get("recommendation", ""),
+            "architecture": parsed.get("architecture", ""),
+            "components": parsed.get("components", []),
+            "risks": parsed.get("risks", []),
+            "mitigations": parsed.get("mitigations", []),
+            "estimated_effort": parsed.get("estimated_effort", ""),
             "confidence": float(parsed.get("confidence", 0.0)),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     async def create_plan(self, task: dict[str, Any], reasoning: dict[str, Any]) -> dict[str, Any]:
-        """Deriva um plano leve a partir do raciocínio real do agente."""
-
-        components = ["API Gateway", "Auth Service", "Business Logic", "Database"]
-        if "cache" in reasoning.get("recommendation", "").lower():
-            components.append("Caching Layer")
+        """Estrutura o plano a partir do raciocínio real do agente — todo
+        campo vem do modelo; nada aqui é constante fixa. Numa resposta que
+        falhou o parsing, os campos chegam vazios (sinal honesto de baixa
+        confiança), não preenchidos com um plano genérico."""
 
         return {
             "goal": task.get("description", ""),
-            "architecture": "microservices",
-            "components": components,
+            "architecture": reasoning.get("architecture", ""),
+            "components": reasoning.get("components", []),
             "patterns": reasoning.get("applicable_patterns", []),
-            "risks": ["Complexidade", "Custo operacional"],
-            "mitigations": ["Documentação", "Observabilidade"],
-            "estimated_effort": "2 sprints",
+            "risks": reasoning.get("risks", []),
+            "mitigations": reasoning.get("mitigations", []),
+            "estimated_effort": reasoning.get("estimated_effort", ""),
         }
 
     def create_adr(self, decision: dict[str, Any]) -> str:

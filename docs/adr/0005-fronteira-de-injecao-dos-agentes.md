@@ -80,14 +80,38 @@ quando `forge_review` existir (Fase 5), sem a Onda 2 esperar por ela.
   `reason_with_cot` na origem era 100% heurística fixa (os "passos" de
   Chain-of-Thought eram literais constantes, independentes do problema
   recebido) — a versão portada chama `self.gateway.generate(...)` de
-  verdade, pedindo ao modelo um JSON estruturado
-  (`problem_analysis`/`constraints`/`applicable_patterns`/`trade_offs`/
-  `recommendation`/`confidence`), com fallback defensivo (confiança 0.0)
-  se o parsing falhar — nunca lança exceção para uma resposta mal-formada
-  do modelo. `create_plan`/`create_adr` continuam como transformação
-  determinística sobre o resultado do raciocínio (não chamam o gateway de
-  novo) — não são "fake", são bookkeeping mecânico sobre uma decisão que
-  agora é real.
+  verdade, pedindo ao modelo um JSON estruturado, com fallback defensivo
+  (confiança 0.0) se o parsing falhar — nunca lança exceção para uma
+  resposta mal-formada do modelo.
 - Os outros 4 agentes (`developer`/`auditor`/`designer`/`ops`) seguem o
   mesmo padrão (`self.gateway.generate(...)` + parsing defensivo) em
   trabalho subsequente da Onda 2 — não portados nesta ADR.
+
+### Correção: `create_plan` ainda fabricava a maior parte do plano
+
+A primeira versão desta ADR pediu ao modelo apenas
+`problem_analysis`/`constraints`/`applicable_patterns`/`trade_offs`/
+`recommendation`/`confidence`, e `create_plan` continuava com
+`architecture`, `components`, `risks`, `mitigations` e `estimated_effort`
+como **constantes fixas** (só `"cache" in recommendation` mudava um
+componente da lista) — ou seja, `reason_with_cot` virou uma chamada real
+ao gateway, mas `create_plan` (o método que o orquestrador de fato
+executa e o auditor de fato audita) continuava fabricando a maior parte
+da saída. Era exatamente o "Nada Fake" que a Fase 4 existe para eliminar,
+só que agora escondido atrás de uma chamada real ao modelo no método
+vizinho — o risco concreto era os outros 4 agentes copiarem esse molde e
+o squad *parecer* real (chamadas LLM de verdade) enquanto *produz* saída
+fabricada, o que é particularmente grave no `auditor_agent` (um
+`validate_results` com aprovação hardcoded é um carimbo automático,
+contrário à tese "o LLM orquestra; ferramentas determinísticas
+verificam").
+
+Corrigido: `_SYSTEM_PROMPT` agora pede também `architecture`,
+`components`, `risks`, `mitigations` e `estimated_effort` — explicitando
+que devem refletir o problema recebido, não ser genéricos — e
+`create_plan` lê todos os campos de `reasoning`, sem nenhuma constante.
+No fallback defensivo (parsing falhou), esses campos chegam vazios
+(`""`/`[]`) em vez de um plano genérico — sinal honesto de baixa
+confiança, não fabricação. Testado com dois problemas diferentes
+produzindo planos diferentes (`test_dois_problemas_diferentes_produzem_planos_diferentes`),
+o que a versão anterior não conseguiria passar.

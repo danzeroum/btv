@@ -392,3 +392,33 @@ entre chamadas).
 Restam da Onda 2: `developer_agent.py` (ReAct loop real +
 `review_system` opcional), `auditor_agent.py`, `designer_agent.py`,
 `ops_agent.py` — mesmo padrão do `ArchitectAgent`.
+
+## Fase 4 — Onda 2 corrigida: `create_plan` ainda fabricava a maior parte do plano (2026-07-05)
+
+Revisão do molde antes de replicá-lo 4x encontrou uma falha real: a
+primeira versão do `ArchitectAgent` tornou `reason_with_cot` uma chamada
+de verdade ao gateway, mas `create_plan` — o método que o orquestrador
+executa e o auditor audita — continuava devolvendo `architecture`,
+`components`, `risks`, `mitigations` e `estimated_effort` como
+**constantes fixas**, com só um componente extra (`"Caching Layer"`)
+condicionado a uma checagem de string em `recommendation`. Ou seja: dois
+problemas completamente diferentes produziam o mesmo plano. A docstring
+chamava isso de "bookkeeping mecânico sobre uma decisão real", o que era
+falso — era heurística disfarçada de decisão, atrás de uma chamada real
+no método vizinho. O risco não era cosmético: se os 4 agentes restantes
+copiassem esse molde, o squad pareceria real (chamadas LLM de verdade no
+raciocínio) e produziria saída fabricada — especialmente grave no
+`auditor_agent`, onde uma aprovação hardcoded seria um carimbo
+automático, o oposto da tese "o LLM orquestra; ferramentas
+determinísticas verificam".
+
+Corrigido (ADR 0005 atualizada com o histórico): `_SYSTEM_PROMPT` passou
+a pedir `architecture`/`components`/`risks`/`mitigations`/
+`estimated_effort` ao modelo, com instrução explícita de refletir o
+problema recebido; `create_plan` lê todos os campos de `reasoning`, zero
+constantes. Fallback defensivo devolve campos vazios (não um plano
+genérico) quando o parsing falha. Novo teste
+(`test_dois_problemas_diferentes_produzem_planos_diferentes`) trava
+exatamente o que a versão anterior não conseguiria passar: dois
+problemas, dois planos diferentes. 33 testes no `forge-squad` (49 no
+workspace Python).

@@ -12,6 +12,11 @@ def _well_formed_response() -> LlmResponse:
         "applicable_patterns": ["Cache-aside", "API Gateway"],
         "trade_offs": {"Cache-aside": "Simplicidade, mas dados podem ficar obsoletos"},
         "recommendation": "Introduzir uma camada de cache na frente da API",
+        "architecture": "monolito modular",
+        "components": ["Cache Redis", "API HTTP", "Serviço de faturamento"],
+        "risks": ["Dados obsoletos sob invalidação incorreta"],
+        "mitigations": ["TTL curto", "Invalidação ativa no write"],
+        "estimated_effort": "1 sprint",
         "confidence": 0.88,
     }
     return LlmResponse(text=json.dumps(payload))
@@ -26,8 +31,41 @@ def test_execute_chama_o_gateway_e_produz_decisao_real():
     assert result["success"] is True
     assert result["confidence"] == 0.88
     assert "cache" in result["reasoning"]["recommendation"].lower()
-    assert "Caching Layer" in result["plan"]["components"]
+    # O plano inteiro vem do modelo, não de uma lista fixa — "Serviço de
+    # faturamento" não existe em nenhuma constante do código, só na
+    # resposta roteirizada. Se aparecer aqui, é prova de derivação real.
+    assert result["plan"]["architecture"] == "monolito modular"
+    assert "Serviço de faturamento" in result["plan"]["components"]
+    assert result["plan"]["risks"] == ["Dados obsoletos sob invalidação incorreta"]
+    assert result["plan"]["estimated_effort"] == "1 sprint"
     assert "Accepted" in result["adr"]
+
+
+def test_dois_problemas_diferentes_produzem_planos_diferentes():
+    # Trava o bug que este teste substitui: antes, create_plan devolvia a
+    # mesma lista fixa de componentes para qualquer problema.
+    payload_a = {
+        "recommendation": "cache",
+        "architecture": "monolito",
+        "components": ["Redis"],
+        "confidence": 0.7,
+    }
+    payload_b = {
+        "recommendation": "filas",
+        "architecture": "event-driven",
+        "components": ["Kafka", "Consumer Group"],
+        "confidence": 0.7,
+    }
+    agent = ArchitectAgent()
+    agent.attach_gateway(
+        ScriptedGatewayClient([LlmResponse(text=json.dumps(payload_a)), LlmResponse(text=json.dumps(payload_b))])
+    )
+
+    plan_a = asyncio.run(agent.execute({"description": "problema A"}))["plan"]
+    plan_b = asyncio.run(agent.execute({"description": "problema B"}))["plan"]
+
+    assert plan_a["architecture"] != plan_b["architecture"]
+    assert plan_a["components"] != plan_b["components"]
 
 
 def test_execute_sem_gateway_anexado_levanta_erro_claro():
@@ -48,7 +86,10 @@ def test_resposta_do_modelo_sem_json_cai_no_fallback_defensivo():
     assert result["success"] is True
     assert result["confidence"] == 0.0
     assert result["reasoning"]["recommendation"] == ""
-    assert "Caching Layer" not in result["plan"]["components"]
+    # Fallback honesto: plano vazio (baixa confiança), não um plano
+    # genérico fabricado por engano.
+    assert result["plan"]["components"] == []
+    assert result["plan"]["architecture"] == ""
 
 
 def test_json_com_texto_ao_redor_ainda_e_parseado():
