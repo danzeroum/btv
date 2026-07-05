@@ -342,4 +342,53 @@ identificado e documentado (não corrigido, só registrado): em
 `SecureToolSandbox._validate_security`, o `ValueError` de
 `_validate_params_safety` é inalcançável, porque `SecurityConfig.validate_tool_call`
 já varre a mesma lista `FORBIDDEN_PATTERNS` contra `str(params)` primeiro e
-sempre levanta `SecurityError` antes.
+sempre levanta `SecurityError` antes (nuance: isso vale na prática, para
+qualquer padrão realista — as duas checagens serializam os params de
+formas diferentes, `str()` × `json.dumps()`, então não é uma prova formal
+para todo input possível).
+
+## Fase 4 — Onda 2 iniciada: ADR 0005 e ArchitectAgent real (2026-07-05)
+
+Dois obstáculos de sequenciamento identificados antes de portar os
+agentes: (1) `core.proto`/`llm.proto` ainda não têm stubs gerados nem em
+Rust (`forge-proto/build.rs`) nem em Python (`gen_proto_py.py` só compila
+`promptforge.proto`) — a ativação do gRPC real é Onda 4, então agentes que
+dependessem do client real ficariam bloqueados fora de ordem; (2)
+`developer_agent.py` importa `BuildToValueReviewSystem` de um pacote
+externo `buildtovalue`, acoplando a Fase 5 dentro de um agente da Fase 4.
+
+**ADR 0005** resolve os dois com o mesmo movimento — injeção de
+dependência na fronteira do agente: `forge_squad.gateway.GatewayClient`
+(`Protocol` async `generate(LlmRequest) -> LlmResponse`, pydantic,
+espelhando `llm.proto` sem depender dos stubs gerados) +
+`ScriptedGatewayClient` (fake roteirizado para teste, mesmo princípio do
+gerador roteirizado já usado nos testes Rust do loop de agente);
+`BaseAgent.attach_gateway()` no mesmo padrão de `attach_memory()`; e
+`review_system` como dependência opcional (`None` por padrão) em vez de
+instanciado direto — fica pendente para quando `forge_review` existir.
+
+`BaseAgent` portado (`forge_squad/agents/base.py`, fiel à origem +
+`attach_gateway`). `ArchitectAgent` portado como implementação de
+referência (`forge_squad/agents/architect.py`): na origem,
+`reason_with_cot` era 100% heurística fixa — os "passos" de Chain-of-
+Thought eram literais constantes, sempre os mesmos independente do
+problema recebido. A versão portada chama `self.gateway.generate(...)`
+de verdade, pedindo ao modelo um JSON estruturado
+(`problem_analysis`/`constraints`/`applicable_patterns`/`trade_offs`/
+`recommendation`/`confidence`), com parsing defensivo — bloco JSON
+extraído via regex (tolera cercas de código markdown ao redor), e
+qualquer falha de parsing cai num fallback de confiança 0.0 em vez de
+lançar. `create_plan`/`create_adr` continuam deterministas sobre o
+resultado real do raciocínio.
+
+12 testes novos (48 no total do workspace Python): `ScriptedGatewayClient`
+(ordem das respostas, esgotamento), `BaseAgent` (injeção de dependências,
+`validate_confidence`, `log_decision` sem memória anexada) e
+`ArchitectAgent` (execução real com gateway roteirizado, erro claro sem
+gateway anexado, fallback defensivo em resposta sem JSON, parsing
+tolerante a texto ao redor do JSON, histórico de raciocínio acumulando
+entre chamadas).
+
+Restam da Onda 2: `developer_agent.py` (ReAct loop real +
+`review_system` opcional), `auditor_agent.py`, `designer_agent.py`,
+`ops_agent.py` — mesmo padrão do `ArchitectAgent`.
