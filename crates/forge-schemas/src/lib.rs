@@ -1,0 +1,13 @@
+//! Tipos compartilhados e contratos serializados da plataforma Forge.
+//!
+//! Os documentos persistidos/auditáveis têm schema canônico em
+//! `platform/schemas/json/*.v1.schema.json`. Os tipos deste crate devem
+//! permanecer compatíveis com esses arquivos (testes de contrato garantem).
+
+pub mod canonical;
+pub mod handoff;
+pub mod ledger;
+pub mod telemetry;
+pub mod verification;
+
+pub use canonical::{canonical_json, request_hash, sha256_hex};

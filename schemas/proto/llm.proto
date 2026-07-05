@@ -1,0 +1,29 @@
+// Tipos do gateway LLM compartilhados entre CoreService e SquadService.
+syntax = "proto3";
+
+package forge.llm.v1;
+
+message LlmRequest {
+  string model = 1;
+  // Mensagens no formato JSON canônico (contrato prompt-cache-key.v1).
+  string messages_json = 2;
+  optional double temperature = 3;
+  optional uint32 max_tokens = 4;
+  // Identifica o agente solicitante para telemetria e rate limiting.
+  string requester = 5;
+}
+
+message LlmChunk {
+  oneof payload {
+    string text_delta = 1;
+    Usage usage = 2;
+    string error = 3;
+  }
+}
+
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  bool cache_hit = 3;
+  string provider = 4;
+}

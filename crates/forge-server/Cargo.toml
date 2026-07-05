@@ -1,0 +1,8 @@
+[package]
+name = "forge-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "API local e dashboard de métricas da plataforma Forge (axum) — Fase 3"
+
+[dependencies]

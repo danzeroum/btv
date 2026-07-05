@@ -1,0 +1,28 @@
+[project]
+name = "forge-python-workspace"
+version = "0.1.0"
+description = "Workspace Python da plataforma Forge (sidecar de orquestração)"
+requires-python = ">=3.11"
+dependencies = [
+    "forge-squad",
+    "forge-promptforge",
+    "forge-review",
+    "forge-eval",
+    "forge-proto-py",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+forge-squad = { workspace = true }
+forge-promptforge = { workspace = true }
+forge-review = { workspace = true }
+forge-eval = { workspace = true }
+forge-proto-py = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]

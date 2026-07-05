@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.buildtovalue.dev/schemas/prompt-template.v1.schema.json",
+  "title": "prompt-template.v1",
+  "description": "Formato declarativo dos geradores de prompt (origem: prompte generators.js — {name, fields, build}). A função build vive no código; este schema descreve a parte serializável do template.",
+  "type": "object",
+  "required": ["name", "category", "fields"],
+  "properties": {
+    "name": { "type": "string" },
+    "category": { "type": "string", "examples": ["codigo", "repositorio", "diff", "avancado"] },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "label"],
+        "properties": {
+          "name": { "type": "string" },
+          "label": { "type": "string" },
+          "required": { "type": "boolean", "default": true },
+          "placeholder": { "type": "string" }
+        }
+      }
+    }
+  }
+}

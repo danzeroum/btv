@@ -1,0 +1,80 @@
+// SquadService — serviço que o sidecar Python expõe ao núcleo Rust.
+// Um ExecuteTask devolve um stream de SquadEvent: propostas, votos,
+// consenso, handoffs (start/ack/complete/error) e pedidos de HITL,
+// renderizados ao vivo no painel do squad da TUI.
+syntax = "proto3";
+
+package forge.squad.v1;
+
+service SquadService {
+  rpc ExecuteTask(SquadTask) returns (stream SquadEvent);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message SquadTask {
+  string task_id = 1;
+  string description = 2;
+  // Tipo de decisão dominante (ex.: "architecture", "implementation").
+  string decision_type = 3;
+  // Nível máximo de autonomia permitido (autonomia progressiva).
+  uint32 max_autonomy_level = 4;
+}
+
+message SquadEvent {
+  string task_id = 1;
+  string ts = 2;
+  oneof payload {
+    Proposal proposal = 3;
+    Consensus consensus = 4;
+    Handoff handoff = 5;
+    HitlEscalation hitl = 6;
+    StepResult step = 7;
+    string error = 8;
+  }
+}
+
+message Proposal {
+  string agent = 1;
+  double confidence = 2;
+  string content_json = 3;
+}
+
+message Consensus {
+  string decision_maker = 1;
+  double strength = 2;
+  string decision_json = 3;
+  bool requires_human = 4;
+}
+
+message Handoff {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    START = 1;
+    ACK = 2;
+    COMPLETE = 3;
+    ERROR = 4;
+  }
+  Phase phase = 1;
+  string from_agent = 2;
+  string to_agent = 3;
+  string contract = 4;
+  string payload_digest = 5;
+}
+
+message HitlEscalation {
+  string reason = 1;
+  double confidence = 2;
+}
+
+message StepResult {
+  string step_id = 1;
+  bool success = 2;
+  string summary = 3;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+  string version = 2;
+}

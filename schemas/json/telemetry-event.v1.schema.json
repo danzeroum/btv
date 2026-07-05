@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.buildtovalue.dev/schemas/telemetry-event.v1.schema.json",
+  "title": "telemetry-event.v1",
+  "description": "Evento de telemetria offline-first (origem: prompte). Enfileirado localmente no SQLite e descarregado em lote; agregado no dashboard do forge-server.",
+  "type": "object",
+  "required": ["name", "session_id", "ts"],
+  "properties": {
+    "name": { "type": "string", "examples": ["llm.call", "cache.hit", "cache.miss", "rate.limited", "tool.run", "error"] },
+    "session_id": { "type": "string" },
+    "props": { "type": "object" },
+    "ts": { "type": "string", "format": "date-time" }
+  }
+}

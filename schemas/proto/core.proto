@@ -1,0 +1,83 @@
+// CoreService — serviços que o núcleo Rust expõe ao sidecar Python.
+// Regra de ouro: o sidecar nunca fala com provedores LLM nem toca disco
+// diretamente; tudo passa por aqui (keys, permissões e ledger ficam no core).
+syntax = "proto3";
+
+package forge.core.v1;
+
+import "llm.proto";
+
+service CoreService {
+  // Geração LLM via gateway (streaming de chunks).
+  rpc Generate(forge.llm.v1.LlmRequest) returns (stream forge.llm.v1.LlmChunk);
+  // Execução de ferramenta sujeita ao motor de permissões.
+  rpc RunTool(ToolCall) returns (ToolResult);
+  // Anexa entrada ao ledger append-only.
+  rpc AppendLedger(LedgerAppend) returns (LedgerAck);
+  // Memória do squad persistida no forge-store.
+  rpc Recall(RecallRequest) returns (RecallResponse);
+  rpc Remember(RememberRequest) returns (RememberAck);
+  // Pedido de permissão/escalonamento HITL (decisão vem da TUI).
+  rpc RequestPermission(PermissionRequest) returns (PermissionDecision);
+}
+
+message ToolCall {
+  string tool = 1;
+  string args_json = 2;
+  string scope = 3;
+}
+
+message ToolResult {
+  string content = 1;
+  bool truncated = 2;
+  int32 exit_code = 3;
+}
+
+message LedgerAppend {
+  string kind = 1;
+  string actor = 2;
+  string payload_json = 3;
+  optional string fake_marker = 4;
+}
+
+message LedgerAck {
+  uint64 seq = 1;
+  string entry_hash = 2;
+}
+
+message RecallRequest {
+  string agent = 1;
+  string query = 2;
+  uint32 limit = 3;
+}
+
+message RecallResponse {
+  repeated string memories_json = 1;
+}
+
+message RememberRequest {
+  string agent = 1;
+  string memory_json = 2;
+}
+
+message RememberAck {
+  bool stored = 1;
+}
+
+message PermissionRequest {
+  string tool = 1;
+  string scope = 2;
+  string reason = 3;
+  // Confiança do agente na ação (gatilho HITL: < 0.3/0.5).
+  double confidence = 4;
+}
+
+message PermissionDecision {
+  enum Decision {
+    DECISION_UNSPECIFIED = 0;
+    ALLOW = 1;
+    DENY = 2;
+  }
+  Decision decision = 1;
+  optional string operator_note = 2;
+}

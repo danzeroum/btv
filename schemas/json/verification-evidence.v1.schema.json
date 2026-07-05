@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.buildtovalue.dev/schemas/verification-evidence.v1.schema.json",
+  "title": "verification-evidence.v1",
+  "description": "Evidência do pipeline de verificação determinística (/verify): o LLM orquestra, ferramentas determinísticas verificam. O Auditor do squad consome esta evidência no lugar de opinião de LLM.",
+  "type": "object",
+  "required": ["run_id", "git_sha", "steps", "verdict", "produced_at"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "git_sha": { "type": "string" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "tool", "exit_code", "duration_ms"],
+        "properties": {
+          "name": { "type": "string", "examples": ["typecheck", "test", "lint", "sast"] },
+          "tool": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["tool", "severity", "message"],
+              "properties": {
+                "tool": { "type": "string" },
+                "severity": { "type": "string" },
+                "message": { "type": "string" },
+                "file": { "type": "string" },
+                "line": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "verdict": { "enum": ["pass", "fail", "skipped"] },
+    "produced_at": { "type": "string", "format": "date-time" }
+  }
+}

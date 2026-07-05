@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/forge-cli",
+    "crates/forge-core",
+    "crates/forge-llm",
+    "crates/forge-proto",
+    "crates/forge-schemas",
+    "crates/forge-server",
+    "crates/forge-store",
+    "crates/forge-tools",
+    "crates/forge-tui",
+    "crates/forge-verify",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/danzeroum/mix_btv_code"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+regex = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+
+forge-schemas = { path = "crates/forge-schemas" }
+forge-core = { path = "crates/forge-core" }
+forge-llm = { path = "crates/forge-llm" }
+forge-store = { path = "crates/forge-store" }
+forge-tools = { path = "crates/forge-tools" }
+forge-verify = { path = "crates/forge-verify" }

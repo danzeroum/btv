@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.buildtovalue.dev/schemas/ledger-entry.v1.schema.json",
+  "title": "ledger-entry.v1",
+  "description": "Entrada do ledger append-only (governança BuildToValue). entry_hash = sha256(prev_hash + JSON canônico do corpo {kind, actor, payload, override, fake_marker, ts}). Overrides marcados e 'Nada Fake' são campos de primeira classe.",
+  "type": "object",
+  "required": ["seq", "prev_hash", "entry_hash", "kind", "actor", "payload", "ts"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "prev_hash": { "type": "string" },
+    "entry_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "kind": { "type": "string", "examples": ["session.start", "consensus.reached", "tool.run", "override.applied"] },
+    "actor": { "type": "string" },
+    "payload": {},
+    "override": {
+      "type": "object",
+      "required": ["marked"],
+      "properties": {
+        "marked": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "fake_marker": {
+      "type": "string",
+      "description": "Presente quando o payload contém dados simulados/mock (política 'Nada Fake')."
+    },
+    "ts": { "type": "string", "format": "date-time" }
+  }
+}

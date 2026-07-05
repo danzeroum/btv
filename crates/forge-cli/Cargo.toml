@@ -1,0 +1,20 @@
+[package]
+name = "forge-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI da plataforma Forge"
+
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
+[dependencies]
+forge-core.workspace = true
+forge-llm.workspace = true
+forge-schemas.workspace = true
+forge-store.workspace = true
+forge-verify.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true

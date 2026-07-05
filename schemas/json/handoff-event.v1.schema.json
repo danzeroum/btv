@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.buildtovalue.dev/schemas/handoff-event.v1.schema.json",
+  "title": "handoff-event.v1",
+  "description": "Evento de handoff entre agentes/padrões (matriz de orquestração BuildToValue). Todo handoff emite start/ack/complete/error com telemetria obrigatória.",
+  "type": "object",
+  "required": ["event", "task_id", "from_agent", "to_agent", "contract", "payload_digest", "ts"],
+  "properties": {
+    "event": { "enum": ["start", "ack", "complete", "error"] },
+    "task_id": { "type": "string" },
+    "from_agent": { "type": "string" },
+    "to_agent": { "type": "string" },
+    "contract": { "type": "string", "examples": ["plan.v1", "proposal.v1", "evidence.v1"] },
+    "payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ts": { "type": "string", "format": "date-time" },
+    "error": { "type": "string" }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "$comment": "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por forge-schemas (Rust, tests/parity.rs) e forge_promptforge (Python, tests/test_hashing.py). Regeneração: just gen-fixtures.",
+  "cases": [
+    {
+      "name": "simples",
+      "messages": [
+        {
+          "role": "user",
+          "content": "oi"
+        }
+      ],
+      "temperature": 0.7,
+      "sha256": "58f500e14771dad50b6e02033f42434e2f88d45b7b46af085e57a85867f7d942"
+    },
+    {
+      "name": "temperatura-nula",
+      "messages": [
+        {
+          "role": "user",
+          "content": "oi"
+        }
+      ],
+      "temperature": null,
+      "sha256": "4d6911ee82b6368a943252cf944f498875b35c3af6de0f536e7eb959885d76c4"
+    },
+    {
+      "name": "chaves-fora-de-ordem",
+      "messages": [
+        {
+          "role": "system",
+          "content": "seja conciso",
+          "z": 1,
+          "a": 2
+        }
+      ],
+      "temperature": 0.3,
+      "sha256": "75626f7b1e7e85f4a682c8a7966f8865e2c3980ea7698e5adfb192d60e39d4a7"
+    },
+    {
+      "name": "acentuacao-utf8",
+      "messages": [
+        {
+          "role": "user",
+          "content": "canonicalização não-ASCII: ção, ñ, 中文"
+        }
+      ],
+      "temperature": 0.5,
+      "sha256": "6d74c6d50d9f063b8e5df9172f017bfe27305793e7d28a3058e867d195c35d05"
+    },
+    {
+      "name": "multi-turno-aninhado",
+      "messages": [
+        {
+          "role": "user",
+          "content": "a"
+        },
+        {
+          "role": "assistant",
+          "content": "b",
+          "meta": {
+            "tags": [
+              "x",
+              "y"
+            ],
+            "n": 3
+          }
+        }
+      ],
+      "temperature": 0.2,
+      "sha256": "fd46da0be05d5ec1012940f86f8e688cc353bdc35518f91ee37a9031c847e70a"
+    },
+    {
+      "name": "escapes-json",
+      "messages": [
+        {
+          "role": "user",
+          "content": "linha1\nlinha2\t\"aspas\" e \\barra"
+        }
+      ],
+      "temperature": 0.9,
+      "sha256": "13c066c5b9fbbc99990a9c5643789813685f106c13edc1d1411e1f746625bf47"
+    },
+    {
+      "name": "inteiros-e-booleans",
+      "messages": [
+        {
+          "role": "user",
+          "content": "x",
+          "count": 42,
+          "flag": true,
+          "none": null
+        }
+      ],
+      "temperature": 1,
+      "sha256": "c0a36a55a3b663bb6b79587b14a1d529d4799f21a09764e87589b0527c7954c7"
+    }
+  ]
+}
