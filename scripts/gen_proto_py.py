@@ -15,10 +15,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROTO_DIR = ROOT / "schemas" / "proto"
 OUT_DIR = ROOT / "python" / "packages" / "forge-proto-py" / "src" / "forge_proto"
-PROTOS = ["promptforge.proto"]
+PROTOS = ["llm.proto", "core.proto", "squad.proto", "promptforge.proto"]
 
 # grpc_tools gera import absoluto (`import x_pb2 as x__pb2`); como os stubs
-# vivem dentro do pacote forge_proto, precisa virar import relativo.
+# vivem dentro do pacote forge_proto, precisa virar import relativo. Isso
+# aparece tanto nos `*_pb2_grpc.py` (import do próprio `*_pb2`) quanto nos
+# `*_pb2.py` que importam outro proto (ex.: `core_pb2` importa `llm_pb2`,
+# já que core.proto tem `import "llm.proto"`).
 _ABS_IMPORT = re.compile(r"^import (\w+_pb2) as (\w+)$", re.MULTILINE)
 
 
@@ -36,10 +39,13 @@ def main() -> None:
     ]
     subprocess.run(cmd, check=True)
 
-    for grpc_file in OUT_DIR.glob("*_pb2_grpc.py"):
-        text = grpc_file.read_text(encoding="utf-8")
+    # Reescreve imports absolutos → relativos em todos os módulos gerados
+    # (both *_pb2.py com cross-import e *_pb2_grpc.py).
+    for py_file in OUT_DIR.glob("*_pb2*.py"):
+        text = py_file.read_text(encoding="utf-8")
         patched = _ABS_IMPORT.sub(r"from . import \1 as \2", text)
-        grpc_file.write_text(patched, encoding="utf-8")
+        if patched != text:
+            py_file.write_text(patched, encoding="utf-8")
 
     init_file = OUT_DIR / "__init__.py"
     if not init_file.exists():

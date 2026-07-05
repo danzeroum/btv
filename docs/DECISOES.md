@@ -505,3 +505,36 @@ a fabricação.
 completa. Próximo: Onda 4 (`UnifiedOrchestrator` + `SquadService`
 bidirecional — a peça que finalmente conecta `GatewayClient`/
 `PermissionClient` aos RPCs de verdade).
+
+## Fase 4 — Onda 4a: stubs de proto ativados (core/squad/llm) (2026-07-05)
+
+Passo-porteiro da Onda 4: até aqui, `forge-proto/build.rs` e
+`gen_proto_py.py` compilavam **só `promptforge.proto`** (verificado três
+vezes ao longo da migração — era o motivo do padrão GatewayClient/
+PermissionClient existir). Agora os quatro protos são gerados nos dois
+lados.
+
+Decisões técnicas do lado Rust: `core.proto` importa `llm.proto`, e o
+prost gera referências entre pacotes por caminho relativo
+(`super::super::llm::v1::LlmRequest`) — então a estrutura de módulos em
+`forge-proto/src/lib.rs` teve que espelhar a hierarquia de pacotes
+(`forge::core::v1`, `forge::llm::v1`, ...), não módulos planos. Aliases
+curtos (`pub mod core { pub use crate::forge::core::v1::*; }`) mantêm
+caminhos estáveis para os consumidores; em particular `pub mod promptforge`
+foi preservado como estava, porque `forge-sidecar` já dependia dele
+(confirmado: seus testes, incluindo o do processo Python real, continuam
+verdes sem tocar em uma linha do crate).
+
+Do lado Python: o `gen_proto_py.py` só reescrevia imports absolutos →
+relativos nos `*_pb2_grpc.py`. Como `core_pb2.py` agora tem `import
+llm_pb2` (por `core.proto` importar `llm.proto`), a reescrita passou a
+cobrir todos os `*_pb2*.py`. Verificado por round-trip real: importar
+`core_pb2`/`squad_pb2`/`llm_pb2` e construir mensagens
+(`LlmRequest`/`SquadTask`/`PermissionRequest`), com `CoreServiceStub` e
+`SquadServiceServicer` presentes.
+
+Nenhuma mudança breaking: os protos novos são aditivos (a regra do plano
+"breaking → `.v2` + ADR" não é acionada). 92 testes Python + workspace
+Rust seguem verdes; clippy/fmt limpos. Próximo: 4b (porte do
+`UnifiedOrchestrator` com as adaptações dos ADR 0004/0006) e 4c
+(`SquadService` real + impls gRPC de `GatewayClient`/`PermissionClient`).

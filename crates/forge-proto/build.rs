@@ -9,7 +9,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("PROTOC", protoc);
 
     let proto_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../schemas/proto");
-    let protos = ["promptforge.proto"];
+    // llm.proto é folha; core.proto o importa; squad/promptforge são
+    // autocontidos. tonic resolve os imports via o include path (proto_dir).
+    let protos = [
+        "llm.proto",
+        "core.proto",
+        "squad.proto",
+        "promptforge.proto",
+    ];
 
     for proto in protos {
         println!("cargo:rerun-if-changed={proto_dir}/{proto}");
