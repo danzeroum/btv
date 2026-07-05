@@ -463,3 +463,45 @@ diferença), fallback honesto (vazio/não-aprovado, nunca fabricado).
 
 57 testes no `forge-squad`, 73 no workspace Python. Onda 2 da Fase 4
 está completa. Próximo: Onda 3 (planning/parallel/hitl).
+
+## Fase 4 — Onda 3 completa: planning, parallel e hitl (2026-07-05)
+
+Nit cosmético resolvido antes de seguir: `DeveloperAgent.react_loop`
+renomeado para `implement_task` — o método deixou de ser um loop (é uma
+chamada única ao gateway, decisão documentada no ADR 0005), então o nome
+antigo descrevia o que ele deixou de fazer.
+
+**ADR 0006** registra as duas colisões de nome encontradas em
+`planning/` (mesmo padrão do ADR 0004): `planning/adaptive_planner.py::AdaptivePlanner`
+é o único com chamador real (`unified_orchestrator.py`);
+`planning/adaptive_replanner.py::AdaptivePlanner` (nome igual, interface
+diferente, `_execute_plan` sempre `{"success": True}`) e
+`planning/hierarchical_planner.py::HierarchicalPlanner` (confiança
+sempre fixa) não têm chamador algum — descartados. O `AdaptivePlanner`
+real tinha o mesmo bug já corrigido no `ArchitectAgent.create_plan`:
+`_decompose_task` devolvia passos com descrições fixas para qualquer
+tarefa. Corrigido do mesmo jeito — decomposição real via gateway, testes
+provando igualdade entre tarefas diferentes.
+
+`parallel/resource_manager.py::ParallelResourceManager` portado sem
+nenhuma chamada de gateway — é infraestrutura determinística legítima
+(semáforo + `asyncio.gather`), forçar uma decisão de LLM ali seria
+fabricar onde já existe resposta mecânica.
+
+`hitl/progressive_autonomy.py::ProgressiveAutonomyManager` tinha dois
+placeholders: `_request_human_approval` sempre aprovava (carimbo
+automático) e `_execute_action` sempre "tinha sucesso" — mas esse
+segundo resultado nunca era lido pelo único chamador real, que só
+verifica o portão booleano `executed`. Era fabricação morta. Corrigido
+com o mesmo padrão do `GatewayClient` (`core.proto`/`RequestPermission`
+também sem stubs gerados): `PermissionClient` Protocol +
+`ScriptedPermissionClient`. `execute_with_autonomy` virou só o portão —
+não finge executar nada; `record_action` fica público para quem executa
+de verdade chamar depois com o resultado real. Mudança deliberada de
+contrato, não migração literal — preservar o original teria preservado
+a fabricação.
+
+19 testes novos (92 no total do workspace Python). Onda 3 da Fase 4 está
+completa. Próximo: Onda 4 (`UnifiedOrchestrator` + `SquadService`
+bidirecional — a peça que finalmente conecta `GatewayClient`/
+`PermissionClient` aos RPCs de verdade).

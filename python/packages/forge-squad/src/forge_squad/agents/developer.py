@@ -63,7 +63,7 @@ class DeveloperAgent(BaseAgent):
             raise ValueError("Invalid development task payload")
 
         description = task.get("description", "")
-        result = await self.react_loop(description)
+        result = await self.implement_task(description)
         decision = {
             "task": task,
             "result": result,
@@ -76,7 +76,7 @@ class DeveloperAgent(BaseAgent):
         """Implementa a tarefa via gateway real e devolve o código gerado."""
 
         description = task.get("description") or task.get("task_description") or ""
-        result = await self.react_loop(description)
+        result = await self.implement_task(description)
         return result.get("final_output", "")
 
     async def generate_code(self, task: dict[str, Any]) -> str:
@@ -119,7 +119,7 @@ class DeveloperAgent(BaseAgent):
 
         return code
 
-    async def react_loop(self, task: str) -> dict[str, Any]:
+    async def implement_task(self, task: str) -> dict[str, Any]:
         """Chamada real ao gateway que implementa a tarefa (ver docstring
         do módulo sobre o escopo atual do loop ReAct)."""
 
