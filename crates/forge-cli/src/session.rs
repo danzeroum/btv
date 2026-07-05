@@ -65,7 +65,9 @@ impl Session {
             LoopEvent::ToolStarted { name, scope } => {
                 Some(("tool.run", json!({"tool": name, "scope": scope})))
             }
-            LoopEvent::ToolFinished { name, ok, summary } => Some((
+            LoopEvent::ToolFinished {
+                name, ok, summary, ..
+            } => Some((
                 "tool.result",
                 json!({"tool": name, "ok": ok, "summary": summary}),
             )),

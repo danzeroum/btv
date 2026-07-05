@@ -40,16 +40,18 @@ just test | just lint | just verify    # atalhos (requer just)
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
-**Fase 2 avançada** — além do loop real da Fase 1: sessões duráveis
+**Fase 2 concluída** — além do loop real da Fase 1: sessões duráveis
 (`forge-store/src/events.rs` + `forge-core/src/session.rs`, ADR 0002),
 Context Epochs + compaction (`forge-core/src/compaction.rs`: heurística
 chars/4, threshold tier-gated, resumo via Generator; fronteira segura =
 assistente sem tool_use pendente; `DurableSession::compact` grava
-`epoch.started.1` + baseline atomicamente) e TUI (`forge-tui` = estado+render
-puros com testes TestBackend; `forge-cli/src/tui_app.rs` = event loop
-crossterm com canais UI↔agente e resolver de permissão por modal).
-Restante da Fase 2: diff viewer e seletor de modelo na TUI, Managed Tool
-Output Files.
+`epoch.started.1` + baseline atomicamente), TUI (`forge-tui` = estado+render
+puros com testes TestBackend, incl. diff colorido via `Item::Diff`;
+`forge-cli/src/tui_app.rs` = event loop crossterm com canais UI↔agente,
+resolver de permissão por modal e seletor de modelo/agente via `Ctrl+M`/
+`Ctrl+G`) e Managed Tool Output Files (`forge-tools::bound_output_managed`
+persiste outputs truncados em `.forge/tool-outputs/`).
+Próxima: Fase 3 — primeira ativação do gRPC com o sidecar Python.
 
 ## Convenções
 

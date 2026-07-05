@@ -1,5 +1,6 @@
 //! Ferramenta `edit`: substituição exata e única de trecho num arquivo.
 
+use crate::diff::{format_diff, line_diff};
 use crate::{required_str, Tool, ToolError, ToolOutput};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -55,19 +56,27 @@ impl Tool for EditTool {
                 "old_string não encontrada em {path}"
             ))),
             1 => {
-                std::fs::write(&full, content.replacen(old, new, 1))
+                let updated = content.replacen(old, new, 1);
+                std::fs::write(&full, &updated)
                     .map_err(|e| ToolError::Execution(format!("{}: {e}", full.display())))?;
+                let diff = line_diff(&content, &updated);
                 Ok(ToolOutput {
-                    content: format!("editado: {path}"),
+                    content: format!("editado: {path}\n{}", format_diff(&diff)),
                     truncated: false,
+                    overflow_path: None,
+                    diff: Some(diff),
                 })
             }
             n if replace_all => {
-                std::fs::write(&full, content.replace(old, new))
+                let updated = content.replace(old, new);
+                std::fs::write(&full, &updated)
                     .map_err(|e| ToolError::Execution(format!("{}: {e}", full.display())))?;
+                let diff = line_diff(&content, &updated);
                 Ok(ToolOutput {
-                    content: format!("editado: {path} ({n} ocorrências)"),
+                    content: format!("editado: {path} ({n} ocorrências)\n{}", format_diff(&diff)),
                     truncated: false,
+                    overflow_path: None,
+                    diff: Some(diff),
                 })
             }
             n => Err(ToolError::Execution(format!(
@@ -121,6 +130,19 @@ mod tests {
             std::fs::read_to_string(dir.path().join("f.rs")).unwrap(),
             "b\nb\nb\n"
         );
+    }
+
+    #[test]
+    fn substituicao_unica_anexa_diff_estruturado() {
+        let (_dir, tool) = setup("let x = 1;\nlet y = 2;\n");
+        let out = tool
+            .run(&json!({"path": "f.rs", "old_string": "let x = 1;", "new_string": "let x = 10;"}))
+            .unwrap();
+        let diff = out.diff.expect("diff calculado");
+        assert!(diff.contains(&crate::DiffLine::Removed("let x = 1;".into())));
+        assert!(diff.contains(&crate::DiffLine::Added("let x = 10;".into())));
+        assert!(out.content.contains("- let x = 1;"));
+        assert!(out.content.contains("+ let x = 10;"));
     }
 
     #[test]

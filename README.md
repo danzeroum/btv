@@ -52,12 +52,20 @@ cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
 cargo run -p forge-cli -- chat
 ```
 
-**Fase 2 em andamento** — entregues: sessões duráveis (eventos em
-`.forge/sessions.db`, `--session <id>` retoma após restart), **Context
-Epochs + compaction** em fronteiras seguras (automática pelo threshold
-tier-gated do ModelTier — small ~75%, demais ~90% da janela `--context-window`;
-`/compact` força no chat; cada época é um evento `epoch.started.1` e o replay
-parte do resumo) e a **TUI ratatui** (`forge tui`: transcript com streaming,
-modal de permissão s/n, render coberto por testes com TestBackend).
-Restante da fase: diff viewer, seletor de modelo/agente na TUI e Managed
-Tool Output Files.
+**Fase 2 concluída** — sessões duráveis (eventos em `.forge/sessions.db`,
+`--session <id>` retoma após restart), **Context Epochs + compaction** em
+fronteiras seguras (automática pelo threshold tier-gated do ModelTier —
+small ~75%, demais ~90% da janela `--context-window`; `/compact` força no
+chat), **TUI ratatui** (`forge tui`: transcript com streaming, **diff
+colorido** dos edits, modal de permissão s/n, seletor de modelo (`Ctrl+M`)
+e de agente (`Ctrl+G`)) e **Managed Tool Output Files** (saídas truncadas
+gravam o conteúdo completo em `.forge/tool-outputs/`, com o caminho
+devolvido ao modelo).
+
+```sh
+export ANTHROPIC_API_KEY=...
+cargo run -p forge-cli -- tui --model claude-sonnet-5
+```
+
+Próxima: **Fase 3** — primeira ativação do gRPC com o sidecar Python
+(PromptForge: geradores, knowledge base, quality linter).

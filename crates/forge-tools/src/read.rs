@@ -1,6 +1,8 @@
 //! Ferramenta `read`: lê um arquivo do workspace com números de linha.
 
-use crate::{bound_output, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT};
+use crate::{
+    bound_output_managed, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT,
+};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -49,7 +51,7 @@ impl Tool for ReadTool {
             .take(limit)
             .map(|(i, line)| format!("{}\t{line}\n", i + 1))
             .collect();
-        Ok(bound_output(out, DEFAULT_OUTPUT_LIMIT))
+        bound_output_managed(&self.root, out, DEFAULT_OUTPUT_LIMIT)
     }
 }
 

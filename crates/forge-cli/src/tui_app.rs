@@ -5,6 +5,11 @@
 //! [`TuiState`]; pedidos de permissão bloqueiam o resolver até o usuário
 //! responder no modal (s/n). A UI roda na thread principal (crossterm),
 //! com o terminal restaurado por guard mesmo em erro.
+//!
+//! Seletor de modelo/agente: `Ctrl+M` percorre uma lista curada de modelos
+//! (cobrindo os tiers) e `Ctrl+G` alterna build/plan. A troca é um
+//! `UiCommand` consumido pela task do agente, que reconstrói o
+//! `AgentLoop` (barato — sem I/O) antes do próximo turno.
 
 use crate::{maybe_compact, open_durable, session::Session, RunOpts};
 use anyhow::Result;
@@ -15,11 +20,22 @@ use crossterm::terminal::{
 use forge_core::{LoopEvent, PermissionResolver};
 use forge_llm::chat::ChatMessage;
 use forge_llm::Generator;
-use forge_tools::ToolRegistry;
-use forge_tui::{Item, PermissionPrompt, TuiState};
+use forge_tools::{DiffLine, ToolRegistry};
+use forge_tui::{DiffKind, Item, PermissionPrompt, TuiState};
 use std::sync::mpsc as std_mpsc;
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+/// Modelos curados para o seletor — um por tier (small/medium/large),
+/// cobrindo os três providers do gateway.
+const MODEL_CHOICES: &[&str] = &[
+    "claude-sonnet-5",
+    "claude-opus-4-8",
+    "claude-haiku-4-5",
+    "deepseek-chat",
+    "gpt-4o",
+    "gpt-4o-mini",
+];
 
 /// Mensagens do loop de agente para a UI (donas dos dados — atravessam threads).
 #[derive(Debug)]
@@ -30,14 +46,31 @@ pub enum TuiMsg {
         name: String,
         detail: String,
         ok: bool,
+        diff: Option<Vec<DiffLine>>,
     },
     Permission {
         tool: String,
         scope: String,
     },
     Notice(String),
+    Status(String),
     Idle,
     Fatal(String),
+}
+
+/// Comando da UI para a task do agente.
+pub enum UiCommand {
+    Send(String),
+    SetModel(String),
+    SetAgent(String),
+}
+
+fn diff_kind(line: &DiffLine) -> (DiffKind, &str) {
+    match line {
+        DiffLine::Context(s) => (DiffKind::Context, s.as_str()),
+        DiffLine::Removed(s) => (DiffKind::Removed, s.as_str()),
+        DiffLine::Added(s) => (DiffKind::Added, s.as_str()),
+    }
 }
 
 /// Aplica uma mensagem ao estado da UI (puro — testável).
@@ -45,11 +78,29 @@ pub fn apply(state: &mut TuiState, msg: TuiMsg) {
     match msg {
         TuiMsg::Delta(d) => state.streaming.push_str(&d),
         TuiMsg::TurnDone => state.finish_turn(),
-        TuiMsg::Tool { name, detail, ok } => state.items.push(Item::Tool { name, detail, ok }),
+        TuiMsg::Tool {
+            name,
+            detail,
+            ok,
+            diff,
+        } => {
+            state.items.push(Item::Tool { name, detail, ok });
+            if let Some(diff) = diff.filter(|d| !d.is_empty()) {
+                state.items.push(Item::Diff(
+                    diff.iter()
+                        .map(|l| {
+                            let (k, s) = diff_kind(l);
+                            (k, s.to_string())
+                        })
+                        .collect(),
+                ));
+            }
+        }
         TuiMsg::Permission { tool, scope } => {
             state.permission = Some(PermissionPrompt { tool, scope })
         }
         TuiMsg::Notice(text) => state.items.push(Item::Notice(text)),
+        TuiMsg::Status(text) => state.status = text,
         TuiMsg::Idle => state.busy = false,
         TuiMsg::Fatal(text) => {
             state
@@ -92,18 +143,25 @@ impl Drop for TerminalGuard {
     }
 }
 
+fn status_line(opts: &RunOpts) -> String {
+    format!(
+        "modelo {} · agente {} · Ctrl+M troca modelo · Ctrl+G troca agente · Esc sai",
+        opts.model, opts.agent
+    )
+}
+
 pub async fn run_tui<G: Generator + Send + Sync + 'static>(
     generator: std::sync::Arc<G>,
     opts: RunOpts,
     root: std::path::PathBuf,
 ) -> Result<()> {
     let (evt_tx, mut evt_rx) = mpsc::unbounded_channel::<TuiMsg>();
-    let (input_tx, mut input_rx) = mpsc::unbounded_channel::<String>();
+    let (input_tx, mut input_rx) = mpsc::unbounded_channel::<UiCommand>();
     let (resp_tx, resp_rx) = std_mpsc::channel::<bool>();
 
-    // Task do agente: consome entradas do usuário e emite TuiMsgs.
+    // Task do agente: consome comandos da UI e emite TuiMsgs.
     let agent_evt_tx = evt_tx.clone();
-    let agent_opts = opts.clone();
+    let mut agent_opts = opts.clone();
     let agent_root = root.clone();
     let agent = tokio::spawn(async move {
         let run = async {
@@ -117,13 +175,30 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
                     durable.resumed_messages()
                 )));
             }
-            let agent_loop = crate::build_loop(generator.as_ref(), &agent_opts, &tools)?;
             let mut resolver = TuiResolver {
                 evt_tx: agent_evt_tx.clone(),
                 resp_rx,
             };
 
-            while let Some(input) = input_rx.recv().await {
+            while let Some(cmd) = input_rx.recv().await {
+                let input = match cmd {
+                    UiCommand::SetModel(m) => {
+                        agent_opts.model = m;
+                        let _ = agent_evt_tx.send(TuiMsg::Status(status_line(&agent_opts)));
+                        continue;
+                    }
+                    UiCommand::SetAgent(a) => {
+                        agent_opts.agent = a;
+                        let _ = agent_evt_tx.send(TuiMsg::Status(status_line(&agent_opts)));
+                        continue;
+                    }
+                    UiCommand::Send(text) => text,
+                };
+
+                // Reconstrói o loop a cada turno: barato (sem I/O) e sempre
+                // reflete o modelo/agente correntes escolhidos na UI.
+                let agent_loop = crate::build_loop(generator.as_ref(), &agent_opts, &tools)?;
+
                 if maybe_compact(
                     generator.as_ref(),
                     &agent_opts,
@@ -150,15 +225,22 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
                             LoopEvent::TextDelta(d) => Some(TuiMsg::Delta(d.to_string())),
                             LoopEvent::TurnCompleted { .. } => Some(TuiMsg::TurnDone),
                             LoopEvent::ToolStarted { .. } => None,
-                            LoopEvent::ToolFinished { name, ok, summary } => Some(TuiMsg::Tool {
+                            LoopEvent::ToolFinished {
+                                name,
+                                ok,
+                                summary,
+                                diff,
+                            } => Some(TuiMsg::Tool {
                                 name,
                                 detail: summary,
                                 ok,
+                                diff,
                             }),
                             LoopEvent::ToolDenied { name, scope } => Some(TuiMsg::Tool {
                                 name,
                                 detail: format!("{scope:?} negado"),
                                 ok: false,
+                                diff: None,
                             }),
                         };
                         if let Some(msg) = msg {
@@ -191,8 +273,9 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
     let mut terminal =
         ratatui::Terminal::new(ratatui::backend::CrosstermBackend::new(std::io::stdout()))?;
 
+    let mut ui_opts = opts.clone();
     let mut state = TuiState {
-        status: format!("modelo {} · Esc sai", opts.model),
+        status: status_line(&ui_opts),
         ..Default::default()
     };
 
@@ -229,16 +312,54 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
                 continue;
             }
 
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match key.code {
+                    KeyCode::Char('c') => break,
+                    KeyCode::Char('m') => {
+                        let idx = MODEL_CHOICES
+                            .iter()
+                            .position(|m| *m == ui_opts.model)
+                            .map(|i| (i + 1) % MODEL_CHOICES.len())
+                            .unwrap_or(0);
+                        ui_opts.model = MODEL_CHOICES[idx].to_string();
+                        state.status = status_line(&ui_opts);
+                        if input_tx
+                            .send(UiCommand::SetModel(ui_opts.model.clone()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                    KeyCode::Char('g') => {
+                        ui_opts.agent = if ui_opts.agent == "build" {
+                            "plan"
+                        } else {
+                            "build"
+                        }
+                        .to_string();
+                        state.status = status_line(&ui_opts);
+                        if input_tx
+                            .send(UiCommand::SetAgent(ui_opts.agent.clone()))
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
             match key.code {
                 KeyCode::Esc => break,
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
                 KeyCode::Enter => {
                     let text = state.input.trim().to_string();
                     if !text.is_empty() && !state.busy {
                         state.items.push(Item::User(text.clone()));
                         state.input.clear();
                         state.busy = true;
-                        if input_tx.send(text).is_err() {
+                        if input_tx.send(UiCommand::Send(text)).is_err() {
                             break;
                         }
                     }
@@ -283,8 +404,15 @@ mod tests {
                 name: "edit".into(),
                 detail: "src/lib.rs".into(),
                 ok: true,
+                diff: Some(vec![
+                    DiffLine::Removed("let x = 1;".into()),
+                    DiffLine::Added("let x = 2;".into()),
+                ]),
             },
         );
+        assert!(matches!(&state.items[1], Item::Tool { name, .. } if name == "edit"));
+        assert!(matches!(&state.items[2], Item::Diff(lines) if lines.len() == 2));
+
         apply(
             &mut state,
             TuiMsg::Permission {
@@ -296,5 +424,27 @@ mod tests {
 
         apply(&mut state, TuiMsg::Idle);
         assert!(!state.busy);
+    }
+
+    #[test]
+    fn tool_sem_diff_nao_cria_item_de_diff() {
+        let mut state = TuiState::default();
+        apply(
+            &mut state,
+            TuiMsg::Tool {
+                name: "read".into(),
+                detail: "f.txt".into(),
+                ok: true,
+                diff: None,
+            },
+        );
+        assert_eq!(state.items.len(), 1);
+    }
+
+    #[test]
+    fn status_muda_com_o_modelo() {
+        let mut state = TuiState::default();
+        apply(&mut state, TuiMsg::Status("modelo x".into()));
+        assert_eq!(state.status, "modelo x");
     }
 }

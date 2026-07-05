@@ -1,6 +1,8 @@
 //! Ferramenta `bash`: executa um comando shell no workspace, com timeout.
 
-use crate::{bound_output, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT};
+use crate::{
+    bound_output_managed, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT,
+};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -89,7 +91,7 @@ impl Tool for BashTool {
         if !status.success() {
             output.push_str(&format!("\n[exit code: {}]", status.code().unwrap_or(-1)));
         }
-        Ok(bound_output(output, DEFAULT_OUTPUT_LIMIT))
+        bound_output_managed(&self.root, output, DEFAULT_OUTPUT_LIMIT)
     }
 }
 

@@ -11,6 +11,15 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
+/// Sinal de uma linha de diff (decorado só com a cor, não a semântica —
+/// esta crate não conhece `forge-tools`; quem converte é o `forge-cli`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffKind {
+    Context,
+    Removed,
+    Added,
+}
+
 /// Um item do transcript, com a origem visual.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
@@ -21,6 +30,8 @@ pub enum Item {
         detail: String,
         ok: bool,
     },
+    /// Bloco de diff colorido (ex.: resultado de um `edit`).
+    Diff(Vec<(DiffKind, String)>),
     Notice(String),
 }
 
@@ -89,6 +100,16 @@ pub fn render(frame: &mut Frame, state: &TuiState) {
                 format!("  {} {name}: {detail}", if *ok { "⚒" } else { "✗" }),
                 Style::default().fg(if *ok { Color::Green } else { Color::Red }),
             ))),
+            Item::Diff(diff_lines) => {
+                for (kind, text) in diff_lines {
+                    let (prefix, style) = match kind {
+                        DiffKind::Context => ("  ", Style::default().fg(Color::DarkGray)),
+                        DiffKind::Removed => ("- ", Style::default().fg(Color::Red)),
+                        DiffKind::Added => ("+ ", Style::default().fg(Color::Green)),
+                    };
+                    lines.push(Line::from(Span::styled(format!("{prefix}{text}"), style)));
+                }
+            }
             Item::Notice(text) => lines.push(Line::from(Span::styled(
                 format!("· {text}"),
                 Style::default().fg(Color::DarkGray),
@@ -222,6 +243,20 @@ mod tests {
         assert!(state.streaming.is_empty());
         assert_eq!(state.items.len(), 1);
         assert!(draw(&state).contains("forge ▸ Analisando o arquivo..."));
+    }
+
+    #[test]
+    fn diff_aparece_com_sinais_de_linha() {
+        let mut state = TuiState::default();
+        state.items.push(Item::Diff(vec![
+            (DiffKind::Context, "let y = 2;".into()),
+            (DiffKind::Removed, "let x = 1;".into()),
+            (DiffKind::Added, "let x = 10;".into()),
+        ]));
+        let screen = draw(&state);
+        assert!(screen.contains("- let x = 1;"));
+        assert!(screen.contains("+ let x = 10;"));
+        assert!(screen.contains("  let y = 2;"));
     }
 
     #[test]

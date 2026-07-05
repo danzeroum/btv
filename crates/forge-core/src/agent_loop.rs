@@ -8,7 +8,7 @@
 use crate::permission::{Decision, PermissionEngine};
 use forge_llm::chat::{ChatMessage, ContentBlock, GenerateRequest, Role, StopReason, ToolSpec};
 use forge_llm::gateway::{GatewayError, Generator};
-use forge_tools::ToolRegistry;
+use forge_tools::{DiffLine, ToolRegistry};
 use serde_json::Value;
 
 /// Eventos observáveis do loop (streaming, ledger, telemetria).
@@ -29,6 +29,8 @@ pub enum LoopEvent<'a> {
         name: String,
         ok: bool,
         summary: String,
+        /// Diff de linhas, quando a ferramenta alterou um arquivo texto (edit).
+        diff: Option<Vec<DiffLine>>,
     },
     /// Ferramenta negada pela política ou pelo usuário.
     ToolDenied { name: String, scope: String },
@@ -219,10 +221,18 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
                     name: name.to_string(),
                     ok: true,
                     summary,
+                    diff: out.diff.clone(),
                 });
                 let mut content = out.content;
                 if out.truncated {
-                    content.push_str("\n[output truncado]");
+                    match &out.overflow_path {
+                        Some(path) => {
+                            content.push_str(&format!(
+                                "\n[output truncado; completo em {path} — use read para consultar]"
+                            ));
+                        }
+                        None => content.push_str("\n[output truncado]"),
+                    }
                 }
                 (content, false)
             }
@@ -231,6 +241,7 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
                     name: name.to_string(),
                     ok: false,
                     summary: e.to_string(),
+                    diff: None,
                 });
                 (e.to_string(), true)
             }
@@ -336,6 +347,61 @@ mod tests {
         let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
         assert_eq!(content, "valor = 2\n");
         assert!(events.iter().any(|e| e.contains("ToolStarted")));
+    }
+
+    #[tokio::test]
+    async fn output_grande_vira_managed_tool_output_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let tools = ToolRegistry::default_set(dir.path());
+
+        let gen = Scripted {
+            turns: Mutex::new(vec![
+                turn(
+                    vec![ContentBlock::ToolUse {
+                        id: "tu1".into(),
+                        name: "bash".into(),
+                        // gera >32 KiB de saída para ultrapassar DEFAULT_OUTPUT_LIMIT
+                        input: serde_json::json!({"command": "yes MARCADOR_FINAL | head -c 40000"}),
+                    }],
+                    StopReason::ToolUse,
+                ),
+                turn(
+                    vec![ContentBlock::Text { text: "ok".into() }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+        };
+
+        let al = agent_loop(&gen, &tools);
+        let outcome = al
+            .run("rode o comando", &mut AllowAll, &mut |_| {})
+            .await
+            .unwrap();
+
+        let tool_result = match &outcome.messages[2].content[0] {
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => {
+                assert!(!is_error);
+                content.clone()
+            }
+            other => panic!("esperava ToolResult, achei {other:?}"),
+        };
+        assert!(tool_result.contains("output truncado"));
+        assert!(tool_result.contains(".forge/tool-outputs/"));
+
+        let marker = tool_result
+            .rsplit("completo em ")
+            .next()
+            .unwrap()
+            .split(" —")
+            .next()
+            .unwrap();
+        let persisted = std::fs::read_to_string(dir.path().join(marker)).unwrap();
+        assert!(
+            persisted.len() >= 40_000 && persisted.contains("MARCADOR_FINAL"),
+            "arquivo gerenciado tem o conteúdo completo"
+        );
     }
 
     #[tokio::test]

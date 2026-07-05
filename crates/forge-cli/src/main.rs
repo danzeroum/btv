@@ -349,7 +349,9 @@ fn print_event(event: &LoopEvent) {
         }
         LoopEvent::TurnCompleted { .. } => println!(),
         LoopEvent::ToolStarted { name, scope } => eprintln!("  ⚒ {name} {scope:?}"),
-        LoopEvent::ToolFinished { name, ok, summary } => {
+        LoopEvent::ToolFinished {
+            name, ok, summary, ..
+        } => {
             eprintln!("  {} {name}: {summary}", if *ok { "✓" } else { "✗" })
         }
         LoopEvent::ToolDenied { name, scope } => eprintln!("  ⛔ {name} {scope:?} negado"),

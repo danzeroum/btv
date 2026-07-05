@@ -151,3 +151,29 @@ de journal de migrations, crates acoplados ao opencode.
   `forge tui` no CLI — loop de agente numa task tokio, UI na thread
   principal, canais para eventos e resolver de permissão bloqueante
   respondido pelo modal (s/n). Sessão durável e ledger integrados.
+
+## Fase 2 concluída: diff viewer, seletor de modelo/agente e Managed Tool Output Files (2026-07-05)
+
+- **Managed Tool Output Files**: `forge-tools::bound_output_managed` — quando
+  o output de uma ferramenta excede `DEFAULT_OUTPUT_LIMIT` (32 KiB), o
+  conteúdo completo é gravado em `.forge/tool-outputs/<id>.txt` e o
+  `tool_result` devolvido ao modelo inclui o caminho ("use read para
+  consultar"). `read`, `grep` e `bash` usam a versão gerenciada; testado
+  fim-a-fim pelo loop de agente (comando que gera >32 KiB via `bash`).
+- **Diff viewer**: `forge-tools::diff` calcula o diff de linhas do `edit`
+  pela simplificação maior-prefixo-comum/maior-sufixo-comum (exata para
+  edições localizadas, o caso comum), com janela de contexto de 2 linhas.
+  O `ToolOutput` ganhou o campo `diff`, propagado por
+  `LoopEvent::ToolFinished` até a TUI, que renderiza um bloco colorido
+  (`Item::Diff` em `forge-tui`, vermelho/verde/cinza) logo após o resultado
+  da ferramenta.
+- **Seletor de modelo/agente na TUI**: `Ctrl+M` percorre uma lista curada de
+  modelos (cobrindo os três tiers e providers) e `Ctrl+G` alterna
+  build/plan. A troca é um `UiCommand` consumido pela task do agente, que
+  reconstrói o `AgentLoop` (barato, sem I/O) antes do turno seguinte — sem
+  precisar reiniciar o processo.
+
+Com isso a Fase 2 do roadmap está completa: sessões duráveis, epochs +
+compaction, TUI (transcript, diff, permissões, seletor) e Managed Tool
+Output Files. 81 testes Rust + 13 Python verdes. Próximo marco: Fase 3
+(ativação do gRPC com o sidecar Python PromptForge).

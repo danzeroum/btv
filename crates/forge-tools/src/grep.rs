@@ -5,7 +5,9 @@
 //! `Searcher` do ripgrep dá a mesma semântica de matching da ferramenta
 //! `grep` clássica do opencode, com custo linear em memória por linha.
 
-use crate::{bound_output, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT};
+use crate::{
+    bound_output_managed, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT,
+};
 use grep::regex::RegexMatcher;
 use grep::searcher::sinks::UTF8;
 use grep::searcher::Searcher;
@@ -93,9 +95,11 @@ impl Tool for GrepTool {
             return Ok(ToolOutput {
                 content: "nenhuma ocorrência".into(),
                 truncated: false,
+                overflow_path: None,
+                diff: None,
             });
         }
-        Ok(bound_output(matches.join("\n"), DEFAULT_OUTPUT_LIMIT))
+        bound_output_managed(&self.root, matches.join("\n"), DEFAULT_OUTPUT_LIMIT)
     }
 }
 
