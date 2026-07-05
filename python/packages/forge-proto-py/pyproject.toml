@@ -1,9 +1,9 @@
 [project]
 name = "forge-proto-py"
 version = "0.1.0"
-description = "Stubs gRPC gerados de platform/schemas/proto — nunca editados à mão"
+description = "Stubs gRPC gerados de schemas/proto — nunca editados à mão"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["grpcio>=1.60"]
 
 [build-system]
 requires = ["hatchling"]

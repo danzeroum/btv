@@ -1,0 +1,91 @@
+//! Sobe e supervisiona o sidecar Python (`forge_promptforge.server`) e
+//! espera o health check antes de devolver um cliente pronto para uso.
+//!
+//! Fallback progressivo (ADR 0001/0002): se o sidecar não subir a tempo,
+//! quem chama recebe `SidecarError::Unavailable` e decide degradar (pular
+//! lint/geradores) em vez de falhar a tarefa do usuário.
+
+use crate::client::{socket_ready, SidecarClient, SidecarError};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::process::{Child, Command};
+
+pub struct SidecarSupervisor {
+    child: Child,
+    socket_path: PathBuf,
+}
+
+impl SidecarSupervisor {
+    /// Spawna `uv run python -m forge_promptforge.server --socket <path>`
+    /// no diretório do workspace Python. Não bloqueia — use
+    /// [`Self::wait_ready`] para esperar o sidecar responder.
+    pub fn spawn(python_workspace_dir: &Path, socket_path: PathBuf) -> Result<Self, SidecarError> {
+        let _ = std::fs::remove_file(&socket_path); // socket de uma execução anterior
+        let child = Command::new("uv")
+            .args([
+                "run",
+                "python",
+                "-m",
+                "forge_promptforge.server",
+                "--socket",
+            ])
+            .arg(&socket_path)
+            .current_dir(python_workspace_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| SidecarError::Unavailable(format!("spawn do sidecar: {e}")))?;
+        Ok(Self { child, socket_path })
+    }
+
+    /// Faz poll do socket + health check até `timeout`. Devolve um cliente
+    /// já validado (ready == true) ou `Unavailable` se o prazo esgotar —
+    /// inclusive se o processo morreu antes (stderr é incluído no erro).
+    pub async fn wait_ready(&mut self, timeout: Duration) -> Result<SidecarClient, SidecarError> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            if let Some(status) = self
+                .child
+                .try_wait()
+                .map_err(|e| SidecarError::Unavailable(e.to_string()))?
+            {
+                return Err(SidecarError::Unavailable(format!(
+                    "sidecar encerrou antes de ficar pronto (status: {status})"
+                )));
+            }
+            if socket_ready(&self.socket_path) {
+                if let Ok(mut client) = SidecarClient::connect(self.socket_path.clone()).await {
+                    if let Ok((true, _)) = client.health().await {
+                        return Ok(client);
+                    }
+                }
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(SidecarError::Unavailable(format!(
+                    "timeout de {timeout:?} esperando o sidecar iniciar"
+                )));
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn processo_inexistente_falha_rapido_com_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("s.sock");
+        // "uv" existe no ambiente de dev, mas sem o pacote forge_promptforge
+        // instalado num diretório vazio o processo Python vai falhar/sair —
+        // exercita o caminho de "sidecar encerrou antes de ficar pronto".
+        let mut sup = SidecarSupervisor::spawn(dir.path(), sock).unwrap();
+        let err = sup.wait_ready(Duration::from_secs(5)).await.unwrap_err();
+        assert!(matches!(err, SidecarError::Unavailable(_)));
+    }
+}

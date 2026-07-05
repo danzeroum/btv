@@ -1,0 +1,65 @@
+// PromptForgeService — primeira ativação do canal gRPC Rust↔Python (Fase 3).
+// O sidecar Python expõe geradores declarativos, quality linter e glossário
+// (origem: prompte); o núcleo Rust consome via forge-sidecar sobre UDS.
+// Regra de ouro (ADR 0001) mantida: este serviço não gera texto de LLM —
+// isso continua exclusivo do gateway Rust.
+syntax = "proto3";
+
+package forge.promptforge.v1;
+
+service PromptForgeService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Lint(LintRequest) returns (LintReport);
+  rpc Render(RenderRequest) returns (RenderResponse);
+  rpc ListGenerators(ListGeneratorsRequest) returns (ListGeneratorsResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+  string version = 2;
+}
+
+message LintRequest {
+  string prompt = 1;
+}
+
+message LintIssue {
+  string rule = 1;
+  string message = 2;
+}
+
+message LintReport {
+  double score = 1;
+  string grade = 2;
+  repeated LintIssue issues = 3;
+}
+
+message RenderRequest {
+  string generator = 1;
+  map<string, string> fields = 2;
+}
+
+message RenderResponse {
+  string prompt = 1;
+}
+
+message GeneratorField {
+  string name = 1;
+  string label = 2;
+  bool required = 3;
+  string placeholder = 4;
+}
+
+message GeneratorInfo {
+  string name = 1;
+  string category = 2;
+  repeated GeneratorField fields = 3;
+}
+
+message ListGeneratorsRequest {}
+
+message ListGeneratorsResponse {
+  repeated GeneratorInfo generators = 1;
+}

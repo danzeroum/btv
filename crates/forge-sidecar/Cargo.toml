@@ -1,0 +1,18 @@
+[package]
+name = "forge-sidecar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cliente e supervisor do sidecar Python (gRPC sobre UDS) — Fase 3"
+
+[dependencies]
+forge-proto.workspace = true
+tonic.workspace = true
+tower.workspace = true
+hyper-util.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-stream.workspace = true

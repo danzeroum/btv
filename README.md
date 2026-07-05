@@ -52,20 +52,23 @@ cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
 cargo run -p forge-cli -- chat
 ```
 
-**Fase 2 concluída** — sessões duráveis (eventos em `.forge/sessions.db`,
-`--session <id>` retoma após restart), **Context Epochs + compaction** em
-fronteiras seguras (automática pelo threshold tier-gated do ModelTier —
-small ~75%, demais ~90% da janela `--context-window`; `/compact` força no
-chat), **TUI ratatui** (`forge tui`: transcript com streaming, **diff
-colorido** dos edits, modal de permissão s/n, seletor de modelo (`Ctrl+M`)
-e de agente (`Ctrl+G`)) e **Managed Tool Output Files** (saídas truncadas
-gravam o conteúdo completo em `.forge/tool-outputs/`, com o caminho
-devolvido ao modelo).
+**Fase 2 concluída** — sessões duráveis, Context Epochs + compaction
+tier-gated, TUI ratatui completa (diff colorido, seletor de modelo/agente)
+e Managed Tool Output Files.
+
+**Fase 3 em andamento** — primeira ativação real do gRPC: o sidecar Python
+`forge_promptforge` expõe `PromptForgeService` (Lint/Render/ListGenerators)
+sobre Unix Domain Socket; `forge-sidecar` sobe e supervisiona o processo
+(`SidecarSupervisor`) e fala com ele (`SidecarClient`), com **degradação
+graciosa total** — sem `uv`/workspace Python, `run`/`chat`/`tui` seguem
+funcionando normalmente, só sem lint/geradores. `forge chat` ganhou
+`/prompt` (lista e renderiza geradores) e um aviso consultivo de lint por
+turno.
 
 ```sh
 export ANTHROPIC_API_KEY=...
-cargo run -p forge-cli -- tui --model claude-sonnet-5
+cargo run -p forge-cli -- tui --model claude-sonnet-5   # sidecar sobe sozinho se `uv` estiver disponível
 ```
 
-Próxima: **Fase 3** — primeira ativação do gRPC com o sidecar Python
-(PromptForge: geradores, knowledge base, quality linter).
+Restante da Fase 3: rate limiting por tier, biblioteca de prompts e
+telemetria + dashboard (`forge-server`).

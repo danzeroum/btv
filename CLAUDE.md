@@ -40,18 +40,24 @@ just test | just lint | just verify    # atalhos (requer just)
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
-**Fase 2 concluída** — além do loop real da Fase 1: sessões duráveis
-(`forge-store/src/events.rs` + `forge-core/src/session.rs`, ADR 0002),
-Context Epochs + compaction (`forge-core/src/compaction.rs`: heurística
-chars/4, threshold tier-gated, resumo via Generator; fronteira segura =
-assistente sem tool_use pendente; `DurableSession::compact` grava
-`epoch.started.1` + baseline atomicamente), TUI (`forge-tui` = estado+render
-puros com testes TestBackend, incl. diff colorido via `Item::Diff`;
-`forge-cli/src/tui_app.rs` = event loop crossterm com canais UI↔agente,
-resolver de permissão por modal e seletor de modelo/agente via `Ctrl+M`/
-`Ctrl+G`) e Managed Tool Output Files (`forge-tools::bound_output_managed`
-persiste outputs truncados em `.forge/tool-outputs/`).
-Próxima: Fase 3 — primeira ativação do gRPC com o sidecar Python.
+**Fase 2 concluída** (sessões duráveis, epochs+compaction, TUI, Managed
+Tool Output Files — ver histórico). **Fase 3 em andamento**: primeira
+ativação real do gRPC (ADR 0003). Contrato em
+`schemas/proto/promptforge.proto`; `forge-proto/build.rs` compila via
+tonic-build com protoc vendorizado (`protoc-bin-vendored`, sem exigir
+protoc de sistema); `scripts/gen_proto_py.py` gera os stubs Python
+(grpcio-tools, não betterproto — mais maduro). `forge-sidecar`:
+`SidecarSupervisor::spawn`+`wait_ready` sobe `uv run python -m
+forge_promptforge.server` e espera o health check; `SidecarClient` fala
+`PromptForgeService` sobre UDS. `forge-cli/src/sidecar.rs::try_start()`
+degrada para `None` sem quebrar `run`/`chat`/`tui` se o sidecar não
+estiver disponível. Servidor real em
+`python/packages/forge-promptforge/src/forge_promptforge/server.py`.
+Testes em duas camadas: mock Rust (`client_over_uds.rs`, sempre roda) e
+processo Python real (`python_sidecar.rs`, pula graciosamente sem
+`uv`/workspace — o CI instala `uv` para exercitar o caminho real).
+Restante da Fase 3: rate limiting por tier, biblioteca de prompts,
+telemetria + dashboard (`forge-server`).
 
 ## Convenções
 

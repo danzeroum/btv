@@ -177,3 +177,55 @@ Com isso a Fase 2 do roadmap está completa: sessões duráveis, epochs +
 compaction, TUI (transcript, diff, permissões, seletor) e Managed Tool
 Output Files. 81 testes Rust + 13 Python verdes. Próximo marco: Fase 3
 (ativação do gRPC com o sidecar Python PromptForge).
+
+## Fase 3 iniciada: primeira ativação do gRPC — PromptForgeService (2026-07-05)
+
+ADR 0003. Contrato `schemas/proto/promptforge.proto` (Health/Lint/Render/
+ListGenerators) — nenhum RPC gera texto de LLM, mantendo a regra de ouro
+do ADR 0001.
+
+**Desvio deliberado do ADR 0001**: Python usa `grpcio`/`grpcio-tools` em
+vez de `betterproto`/`grpclib` — mais maduro e mantido; o script
+`scripts/gen_proto_py.py` corrige o import absoluto que o
+`grpc_tools.protoc` gera por padrão para relativo, já que os stubs vivem
+dentro do pacote `forge_proto`.
+
+**Geração sem toolchain de sistema**: `forge-proto/build.rs` usa
+`protoc-bin-vendored` (protoc vendorizado) em vez de exigir `protoc`
+instalado — funciona em qualquer máquina com Rust.
+
+**forge-sidecar** (novo crate): `SidecarClient` conecta via
+`tonic::transport::Endpoint::connect_with_connector` sobre
+`tokio::net::UnixStream`; `SidecarSupervisor::spawn` sobe `uv run python
+-m forge_promptforge.server --socket <path>` e `wait_ready` faz poll do
+socket + health check até um timeout, detectando também se o processo
+morreu antes (stderr incluído no erro). `kill_on_drop` mata o processo
+quando o supervisor é dropado.
+
+**Degradação graciosa total** (fallback progressivo do BuildToValue
+aplicado aqui): `forge-cli::sidecar::try_start()` devolve `None` se o
+workspace Python, `uv`, ou o health check falharem — `run`/`chat`/`tui`
+continuam funcionando por completo, só sem lint consultivo e sem
+`/prompt`. Nunca é fatal.
+
+**Servidor Python real**: `forge_promptforge/server.py` — `grpc.aio`
+sobre `unix://`, implementando o servicer com os módulos puros já
+existentes (`lint_prompt`, `GENERATORS`), sem duplicar lógica.
+
+**CLI**: lint automático (aviso não bloqueante) antes de cada turno em
+`run`/`chat`/`tui`; comando `/prompt` no chat lista e renderiza geradores
+via sidecar.
+
+**Verificação em duas camadas**: `forge-sidecar/tests/client_over_uds.rs`
+(servidor mock Rust sobre UDS, sempre roda) e
+`forge-sidecar/tests/python_sidecar.rs` (processo Python real via `uv
+run`, valida health/lint/render/list_generators fim-a-fim; pula
+graciosamente sem `uv`/workspace). CI (`rust` job) instala `uv` e roda
+`uv sync` antes dos testes para exercitar o caminho real — confirmado
+localmente com o processo Python de verdade respondendo por gRPC.
+
+Total: 84 testes Rust + 19 Python verdes; clippy `-D warnings` e rustfmt
+limpos.
+
+Restante da Fase 3: rate limiting por tier no gateway, biblioteca de
+prompts + histórico, telemetria + dashboard (`forge-server`).

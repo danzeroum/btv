@@ -7,6 +7,7 @@
 
 mod cache;
 mod session;
+mod sidecar;
 mod tui_app;
 
 use anyhow::{bail, Context, Result};
@@ -242,6 +243,15 @@ async fn run_once<G: Generator>(
     let mut durable = open_durable(root, opts, &task)?;
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
+    // Sidecar opcional (Fase 3): lint consultivo, nunca bloqueante.
+    if let Some((_supervisor, mut client)) = sidecar::try_start().await {
+        if let Ok(report) = client.lint(&task).await {
+            if let Some(notice) = sidecar::advisory(&report) {
+                eprintln!("{notice}");
+            }
+        }
+    }
+
     maybe_compact(generator, opts, &mut durable, &mut session, false).await?;
     durable.messages.push(ChatMessage::user_text(&task));
     let result = {
@@ -286,7 +296,15 @@ async fn chat_repl<G: Generator>(
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
     let mut durable = open_durable(root, opts, "<chat>")?;
-    eprintln!("forge chat — digite a mensagem (vazio, \"sair\" ou Ctrl-D encerra; /compact força nova época)\n");
+    // Sidecar opcional (Fase 3): mantido vivo durante todo o chat para
+    // lint consultivo e o comando /prompt; None se indisponível (degrada).
+    let sidecar_session = sidecar::try_start().await;
+    if sidecar_session.is_none() {
+        eprintln!(
+            "  (sidecar PromptForge indisponível — /prompt e o aviso de lint ficam desativados)"
+        );
+    }
+    eprintln!("forge chat — digite a mensagem (vazio, \"sair\" ou Ctrl-D encerra; /compact força nova época; /prompt lista geradores)\n");
     let stdin = std::io::stdin();
     let mut turns = 0usize;
 
@@ -307,7 +325,23 @@ async fn chat_repl<G: Generator>(
             }
             continue;
         }
+        if let Some(rest) = input.strip_prefix("/prompt") {
+            if let Some((_, client)) = &sidecar_session {
+                handle_prompt_command(&mut client.clone(), rest.trim()).await;
+            } else {
+                eprintln!("  sidecar indisponível — geradores desativados");
+            }
+            continue;
+        }
         maybe_compact(generator, opts, &mut durable, &mut session, false).await?;
+
+        if let Some((_, client)) = &sidecar_session {
+            if let Ok(report) = client.clone().lint(input).await {
+                if let Some(notice) = sidecar::advisory(&report) {
+                    eprintln!("{notice}");
+                }
+            }
+        }
 
         session.note("user.turn", serde_json::json!({"chars": input.len()}));
         durable.messages.push(ChatMessage::user_text(input));
@@ -339,6 +373,43 @@ async fn chat_repl<G: Generator>(
         session.verify()?
     );
     Ok(())
+}
+
+/// Trata `/prompt` no chat: sem argumentos (ou `list`) lista os geradores
+/// do sidecar; com `<gerador> chave=valor ...` renderiza e imprime o
+/// prompt (o usuário decide se cola como próxima mensagem).
+async fn handle_prompt_command(client: &mut forge_sidecar::SidecarClient, rest: &str) {
+    if rest.is_empty() || rest == "list" {
+        match client.list_generators().await {
+            Ok(generators) => {
+                eprintln!("  geradores disponíveis:");
+                for g in generators {
+                    let fields: Vec<String> = g.fields.iter().map(|f| f.name.clone()).collect();
+                    eprintln!(
+                        "    {} [{}] — campos: {}",
+                        g.name,
+                        g.category,
+                        fields.join(", ")
+                    );
+                }
+            }
+            Err(e) => eprintln!("  falha ao listar geradores: {e}"),
+        }
+        return;
+    }
+
+    let mut parts = rest.split_whitespace();
+    let Some(name) = parts.next() else { return };
+    let mut fields = std::collections::HashMap::new();
+    for pair in parts {
+        if let Some((k, v)) = pair.split_once('=') {
+            fields.insert(k.to_string(), v.to_string());
+        }
+    }
+    match client.render(name, fields).await {
+        Ok(prompt) => eprintln!("  --- prompt gerado ---\n{prompt}\n  ---------------------"),
+        Err(e) => eprintln!("  falha ao renderizar {name}: {e}"),
+    }
 }
 
 fn print_event(event: &LoopEvent) {

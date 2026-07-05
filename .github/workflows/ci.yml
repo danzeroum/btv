@@ -14,6 +14,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # uv é necessário para o teste de integração cross-process do
+      # sidecar (forge-sidecar/tests/python_sidecar.rs sobe o servidor
+      # Python de verdade); sem ele o teste pula graciosamente.
+      - uses: astral-sh/setup-uv@v5
+      - run: cd python && uv sync
       - run: cargo test --workspace
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo fmt --all --check

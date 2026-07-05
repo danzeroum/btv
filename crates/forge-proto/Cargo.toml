@@ -3,6 +3,12 @@ name = "forge-proto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Stubs gRPC gerados de platform/schemas/proto (tonic) — ativado na Fase 3"
+description = "Stubs gRPC gerados de schemas/proto (tonic) — ativado na Fase 3"
 
 [dependencies]
+tonic.workspace = true
+prost.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
+protoc-bin-vendored.workspace = true

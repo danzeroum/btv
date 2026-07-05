@@ -159,6 +159,16 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
     let (input_tx, mut input_rx) = mpsc::unbounded_channel::<UiCommand>();
     let (resp_tx, resp_rx) = std_mpsc::channel::<bool>();
 
+    // Sidecar opcional (Fase 3): mantido vivo pelo escopo de run_tui inteiro;
+    // None se indisponível (lint fica desativado, sem afetar o restante).
+    let sidecar_session = crate::sidecar::try_start().await;
+    if sidecar_session.is_none() {
+        let _ = evt_tx.send(TuiMsg::Notice(
+            "sidecar PromptForge indisponível — aviso de lint desativado".into(),
+        ));
+    }
+    let sidecar_client = sidecar_session.as_ref().map(|(_, client)| client.clone());
+
     // Task do agente: consome comandos da UI e emite TuiMsgs.
     let agent_evt_tx = evt_tx.clone();
     let mut agent_opts = opts.clone();
@@ -194,6 +204,14 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
                     }
                     UiCommand::Send(text) => text,
                 };
+
+                if let Some(client) = &sidecar_client {
+                    if let Ok(report) = client.clone().lint(&input).await {
+                        if let Some(notice) = crate::sidecar::advisory(&report) {
+                            let _ = agent_evt_tx.send(TuiMsg::Notice(notice));
+                        }
+                    }
+                }
 
                 // Reconstrói o loop a cada turno: barato (sem I/O) e sempre
                 // reflete o modelo/agente correntes escolhidos na UI.
