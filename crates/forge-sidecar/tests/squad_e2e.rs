@@ -12,7 +12,7 @@
 use forge_proto::core::PermissionRequest;
 use forge_proto::llm::{LlmRequest, Usage};
 use forge_proto::squad::{handoff, squad_event, SquadEvent, SquadTask};
-use forge_sidecar::{serve_core, CoreBackend, SquadSupervisor};
+use forge_sidecar::{drain_stream, serve_core, CoreBackend, SquadRun, SquadSupervisor};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -173,4 +173,95 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
         phases.contains(&(handoff::Phase::Complete as i32)),
         "handoff phases: {phases:?}"
     );
+}
+
+/// Backend do Core que demora — mantém o squad bloqueado na primeira
+/// chamada `Generate` (o planner) tempo suficiente para o `kill -9`.
+struct SlowCore;
+
+#[tonic::async_trait]
+impl CoreBackend for SlowCore {
+    async fn generate(&self, _req: &LlmRequest) -> Result<(String, Usage), String> {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        Ok((
+            "{}".into(),
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_hit: false,
+                provider: "slow".into(),
+            },
+        ))
+    }
+    async fn request_permission(&self, _req: &PermissionRequest) -> bool {
+        true
+    }
+}
+
+/// Critério de aceite da Fase 4: `kill -9` no sidecar dispara o fallback.
+/// Com o squad bloqueado esperando o `Generate` (lento), matamos o processo
+/// Python; a quebra do stream vira `SquadRun::Failed` — o sinal que o CLI
+/// usa para degradar (squad → agente-único → safe-mode).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn kill_do_sidecar_dispara_fallback() {
+    let dir = python_workspace_dir();
+    if !dir.join("pyproject.toml").exists() {
+        eprintln!("workspace Python ausente em {dir:?} — pulando teste de kill/fallback");
+        return;
+    }
+
+    let pid = std::process::id();
+    let core_sock = std::env::temp_dir().join(format!("forge-kill-core-{pid}.sock"));
+    let squad_sock = std::env::temp_dir().join(format!("forge-kill-squad-{pid}.sock"));
+
+    let core_task = tokio::spawn(serve_core(SlowCore, core_sock.clone()));
+    for _ in 0..100 {
+        if core_sock.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    let mut supervisor =
+        match SquadSupervisor::spawn(&dir, squad_sock, &core_sock, "claude-sonnet-5") {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("não foi possível spawnar o squad ({e}) — pulando");
+                core_task.abort();
+                return;
+            }
+        };
+    let mut client = supervisor
+        .wait_ready(Duration::from_secs(30))
+        .await
+        .expect("squad deveria ficar pronto");
+
+    let stream = client
+        .execute_task(SquadTask {
+            task_id: "t-kill".into(),
+            description: "tarefa interrompida".into(),
+            decision_type: "architecture".into(),
+            max_autonomy_level: 3,
+        })
+        .await
+        .expect("ExecuteTask deveria abrir o stream");
+
+    // Squad agora está bloqueado no Generate lento do planner. kill -9.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    supervisor.kill().await.expect("kill deveria funcionar");
+
+    let outcome = drain_stream(stream).await;
+    core_task.abort();
+
+    match outcome {
+        SquadRun::Failed { reason, .. } => {
+            assert!(!reason.is_empty(), "a falha deveria ter um motivo");
+        }
+        SquadRun::Completed(events) => {
+            panic!(
+                "esperava Failed após kill -9, veio Completed com {} eventos",
+                events.len()
+            );
+        }
+    }
 }

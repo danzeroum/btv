@@ -6,7 +6,7 @@
 
 use crate::client::{socket_ready, SidecarError};
 use forge_proto::squad::squad_service_client::SquadServiceClient;
-use forge_proto::squad::{HealthRequest, SquadEvent, SquadTask};
+use forge_proto::squad::{squad_event, HealthRequest, SquadEvent, SquadTask};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -57,6 +57,47 @@ impl SquadClient {
     }
 }
 
+/// Resultado de drenar o stream do squad — a base do fallback progressivo.
+#[derive(Debug)]
+pub enum SquadRun {
+    /// O stream completou normalmente; eventos coletados.
+    Completed(Vec<SquadEvent>),
+    /// O stream quebrou (ex.: sidecar morto com `kill -9`) ou o squad
+    /// emitiu um `SquadEvent::error` — quem chama deve degradar para o
+    /// nível seguinte (agente-único → safe-mode).
+    Failed {
+        events: Vec<SquadEvent>,
+        reason: String,
+    },
+}
+
+/// Drena o stream do squad até o fim ou até a primeira falha. Uma quebra
+/// de transporte (o processo Python morto no meio da execução) vira
+/// `Failed` via `Err(Status)`; um `error` no stream vira `Failed` pelo
+/// conteúdo — os dois disparam o fallback.
+pub async fn drain_stream(mut stream: Streaming<SquadEvent>) -> SquadRun {
+    let mut events = Vec::new();
+    loop {
+        match stream.message().await {
+            Ok(Some(ev)) => {
+                if let Some(squad_event::Payload::Error(reason)) = &ev.payload {
+                    let reason = reason.clone();
+                    events.push(ev);
+                    return SquadRun::Failed { events, reason };
+                }
+                events.push(ev);
+            }
+            Ok(None) => return SquadRun::Completed(events),
+            Err(status) => {
+                return SquadRun::Failed {
+                    events,
+                    reason: status.to_string(),
+                }
+            }
+        }
+    }
+}
+
 pub struct SquadSupervisor {
     child: Child,
     socket_path: PathBuf,
@@ -72,8 +113,8 @@ impl SquadSupervisor {
         model: &str,
     ) -> Result<Self, SidecarError> {
         let _ = std::fs::remove_file(&socket_path);
-        let child = Command::new("uv")
-            .args(["run", "python", "-m", "forge_squad.server", "--socket"])
+        let mut cmd = Command::new("uv");
+        cmd.args(["run", "python", "-m", "forge_squad.server", "--socket"])
             .arg(&socket_path)
             .arg("--core-socket")
             .arg(core_socket)
@@ -83,10 +124,33 @@ impl SquadSupervisor {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        // `uv run` spawna o Python como filho: matar só o processo `uv`
+        // deixaria o servidor Python órfão (rodando). Colocando o `uv` como
+        // líder do próprio grupo de processos, `kill()` sinaliza o grupo
+        // inteiro (uv + python).
+        #[cfg(unix)]
+        cmd.process_group(0);
+        let child = cmd
             .spawn()
             .map_err(|e| SidecarError::Unavailable(format!("spawn do squad: {e}")))?;
         Ok(Self { child, socket_path })
+    }
+
+    /// Mata o squad (SIGKILL). Em Unix, sinaliza o **grupo** de processos
+    /// (uv + python), não só o wrapper `uv` — do contrário o servidor
+    /// Python ficaria órfão. Usado para injeção de falha nos testes de
+    /// fallback e para encerramento explícito.
+    pub async fn kill(&mut self) -> std::io::Result<()> {
+        #[cfg(unix)]
+        if let Some(pid) = self.child.id() {
+            // Grupo == pid do líder (process_group(0) no spawn). Sinal
+            // negativo = grupo inteiro.
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+        self.child.kill().await
     }
 
     /// Poll do socket + health check até `timeout`; devolve um cliente

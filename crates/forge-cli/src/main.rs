@@ -9,6 +9,7 @@ mod cache;
 mod rate_limit_gen;
 mod session;
 mod sidecar;
+mod squad;
 mod tui_app;
 
 use anyhow::{bail, Context, Result};
@@ -83,8 +84,14 @@ enum Commands {
     },
     /// Roda o pipeline de verificação determinística.
     Verify,
-    /// Delega a tarefa ao squad multi-agente (requer sidecar Python).
-    Squad { task: String },
+    /// Delega a tarefa ao squad multi-agente (sidecar Python + gateway
+    /// Rust). Degrada para agente-único → safe-mode se o squad falhar.
+    Squad {
+        /// Descrição da tarefa.
+        task: String,
+        #[command(flatten)]
+        opts: RunOpts,
+    },
     /// Sobe o dashboard de telemetria (`.forge/telemetry.db`) em localhost.
     Dashboard {
         /// Porta local do dashboard.
@@ -113,10 +120,9 @@ async fn main() -> Result<()> {
             println!("forge verify — pipeline em implementação (Fase 5 do roadmap)");
             Ok(())
         }
-        Commands::Squad { task } => {
-            println!("forge squad — tarefa: {task:?}");
-            println!("(sidecar forge-squadd em implementação — Fase 4 do roadmap)");
-            Ok(())
+        Commands::Squad { task, opts } => {
+            let (generator, root) = prepare(&opts)?;
+            squad::run_squad(generator, &opts, &root, task).await
         }
         Commands::Dashboard { port } => run_dashboard(port).await,
     }

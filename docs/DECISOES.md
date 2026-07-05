@@ -658,3 +658,37 @@ Dois achados reais de interop, ambos corrigidos:
 Onda 4d: `forge squad` no CLI (CoreService sobre o `Gateway` real +
 resolver de permissão na TUI) e o fallback de 3 níveis (squad →
 agente-único → safe-mode).
+
+## Fase 4 — Onda 4d (parte 2): `forge squad` + fallback de 3 níveis (2026-07-05)
+
+O comando `forge squad "..."` fecha a Fase 4. `forge-cli/src/squad.rs`:
+`GatewayCoreBackend` implementa o `CoreBackend` sobre o `Gateway` real
+(parseia `messages_json` → `GenerateRequest`, agrega o turno, devolve
+`(texto, usage)`) — as API keys ficam só no Rust (ADR 0001, confirmado por
+grep: zero referência a key de provider no Python, que só conhece o UDS).
+`request_permission` resolve o HITL no terminal (auto-aprova com `--yes`),
+fechando o caminho humano. O consenso é registrado no ledger via
+`session.note("squad.consensus", ...)` conforme o evento chega — critério
+literal da Fase 4.
+
+**Fallback progressivo de 3 níveis**, exercitado de verdade num smoke com
+key inválida: L1 squad (o Python subiu, o laço rodou, o `Generate` do
+planner bateu no Gateway com a key falsa → `error` → `SquadRun::Failed`)
+→ L2 agente-único (`run_once`, mesma falha de gateway) → L3 safe-mode
+read-only (mensagem, nenhuma ação de escrita, saída limpa). A cascata
+inteira num exit 0, sem panic.
+
+**Achado real de robustez — o `kill -9`**: o teste de injeção de falha
+(`kill_do_sidecar_dispara_fallback`) revelou que `uv run` spawna o Python
+como filho, então `Child::kill()` matava só o wrapper `uv` e deixava o
+servidor Python **órfão** (rodando) — o `kill_on_drop` tinha o mesmo
+vazamento latente. Corrigido colocando o `uv` como líder do próprio grupo
+de processos (`process_group(0)`) e matando o **grupo** inteiro via
+`libc::kill(-pid, SIGKILL)`. Só depois disso o `kill -9` de fato quebra o
+stream → `Failed` → fallback. Sem essa correção o critério de aceite do
+`kill -9` passaria falsamente (o squad sobrevivia e completava).
+
+104 testes Rust (o e2e + o kill, ambos cross-process reais) + 112 Python,
+zero falhas. clippy/fmt limpos. **Fase 4 concluída** — o gRPC bidirecional
+tonic × grpc-python sobre UDS deixou de ser a aposta mais arriscada do
+plano e virou fato testado de ponta a ponta.

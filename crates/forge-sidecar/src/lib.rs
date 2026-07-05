@@ -13,5 +13,5 @@ pub mod supervisor;
 
 pub use client::{SidecarClient, SidecarError};
 pub use core_server::{serve_core, CoreBackend, CoreServer};
-pub use squad_client::{SquadClient, SquadSupervisor};
+pub use squad_client::{drain_stream, SquadClient, SquadRun, SquadSupervisor};
 pub use supervisor::SidecarSupervisor;
