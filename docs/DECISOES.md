@@ -291,11 +291,15 @@ nomes entre `evaluation/continuous_eval.py` e `continuous_evaluator.py`
 pelo orquestrador canônico).
 
 Achado que corrige o próprio plano: são **5 agentes wireados**, não os 8
-que a tabela de mapeamento 100% lista — Supervisor/Exploration existem
-como arquivos sem chamador real, e Recovery é um método do orquestrador
-(`_attempt_recovery`), não uma classe de agente. A tabela ganhou uma nota
-de rodapé apontando para o ADR 0004. Duas adaptações de interface também
-já mapeadas para a Onda 4 do checklist: o check manual de consenso
+que a tabela de mapeamento 100% lista. Exploration/Recovery não têm
+chamador algum (Recovery é o método `_attempt_recovery` do orquestrador,
+não uma classe). Supervisor é diferente: tem um chamador real
+(`src/main.py`, o único entrypoint `__main__` do repo), mas com uma
+interface incompatível com `BaseAgent` (`run()` num `@dataclass` solto,
+não `execute()` numa ABC) — não é "sem uso", é uma peça de arquitetura
+separada (coordenador acima do squad) que não pertence à Onda 2. A tabela
+ganhou uma nota de rodapé apontando para o ADR 0004. Duas adaptações de
+interface já mapeadas para a Onda 4 do checklist: o check manual de consenso
 `< 0.7` vira `consensus.requires_human` (property já pronta no
 `ConsensusResult` pydantic migrado em `forge_squad/consensus.py`), e as
 propostas dos agentes precisam ser envolvidas em `Proposal(...)` antes de

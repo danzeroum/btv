@@ -76,14 +76,26 @@ não o conjunto que o `UnifiedOrchestrator` de fato instancia. Na prática:
   `ops` — os mesmos nomes usados em `WeightedConsensusEngine.agent_weights`
   (`forge_squad/consensus.py`, já migrado), o que confirma que a
   correspondência é 1:1 e nenhuma adaptação de nomenclatura é necessária.
-- **`SupervisorAgent`/`ExplorationAgent` existem como arquivos
-  (903 e 488 bytes) mas não são instanciados pelo orquestrador** — não há
-  chamador real para migrar; construir seu uso é trabalho novo, não porte.
-- **`RecoveryAgent` (arquivo de 499 bytes) não é usado; a recuperação é o
-  método `UnifiedOrchestrator._attempt_recovery`** — reexecuta a tarefa
-  simplificada (`priority: "low", simplified: True`) em vez de delegar a um
-  agente dedicado. Portar isso é portar o método, não a classe
-  `RecoveryAgent`.
+- **`SupervisorAgent`** (903 bytes) **não é instanciado pelo
+  `UnifiedOrchestrator`**, mas tem um chamador real: `src/main.py`, o único
+  entrypoint `__main__` do repositório — um demo que injeta um
+  orquestrador stub via `type("Orchestrator", (), {...})()` e uma lista de
+  especialistas igualmente stub. Mais importante: `SupervisorAgent` **não
+  segue o contrato de `BaseAgent`** — é um `@dataclass` solto (não herda de
+  nada), com `run(task: str) -> str` (não o `execute(task: Dict)` async
+  abstrato da ABC) e construtor `(orchestrator: Agent, specialists:
+  list[Agent])`, delegando para `orchestrator.arun(task)` e depois para
+  cada especialista via `agent.arun(summary)`. Ou seja, é desenhado como um
+  **coordenador de nível superior sobre outros agentes/orquestradores**,
+  não como um par que o `UnifiedOrchestrator` instancia ao lado dos 5
+  reais. Adotá-lo é **design novo** (um supervisor sobre o squad), não
+  porte — a interface nem é compatível com a que a Onda 2 vai portar.
+- **`ExplorationAgent`** (488 bytes) e **`RecoveryAgent`** (499 bytes) não
+  têm chamador algum, nem em `main.py` nem no orquestrador — a recuperação
+  real é o método `UnifiedOrchestrator._attempt_recovery`, que reexecuta a
+  tarefa simplificada (`priority: "low", simplified: True`) em vez de
+  delegar a um agente dedicado. Portar isso é portar o método, não a
+  classe `RecoveryAgent`.
 
 ### Adaptações de interface confirmadas para o porte (não são bugs a corrigir, são o trabalho da Onda 4)
 
@@ -116,7 +128,12 @@ não o conjunto que o `UnifiedOrchestrator` de fato instancia. Na prática:
   `protocols/mcp_server.py` **não são portados na Fase 4** —
   `rag_tool.py`/`mcp_server.py` ficam para a Fase 6 (RAG, MCP completo),
   os demais são lineage superada sem uso real.
-- `supervisor_agent.py`/`exploration_agent.py`/`recovery_agent.py` ficam
-  como candidatos a **trabalho novo**, não migração, se decidirmos dar ao
-  squad um supervisor/explorador dedicados no futuro — não bloqueiam a
-  Fase 4.
+- `exploration_agent.py`/`recovery_agent.py` ficam como candidatos a
+  **trabalho novo**, não migração, se decidirmos dar ao squad um
+  explorador/recuperador dedicados no futuro — não bloqueiam a Fase 4.
+  `supervisor_agent.py` também não bloqueia a Fase 4, mas por um motivo
+  mais específico: sua interface (`run()`, construtor
+  `orchestrator`/`specialists`, sem herdar de `BaseAgent`) é
+  incompatível com a dos 5 agentes que a Onda 2 vai portar — não é "só"
+  trabalho novo, é uma decisão de arquitetura separada (um coordenador
+  acima do squad) a tomar quando/se ela surgir.
