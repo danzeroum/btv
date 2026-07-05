@@ -110,7 +110,7 @@ mix_btv_code/
 | prompte | Cache por hash (canônico + sha256, paridade Rust×Python) | `forge-llm::prompt_cache` + `forge_promptforge.hashing` | 3 |
 | prompte | Rate limiting por tier, proxy seguro com fallback | `forge-llm` | 1/3 |
 | prompte | Biblioteca de prompts, histórico, telemetria + dashboard | `forge-store` + `forge-server` | 3 |
-| BTV | Squad (Architect/Dev/Auditor/Designer/Ops/Supervisor/Exploration/Recovery) | `forge_squad.agents` | 4 |
+| BTV | Squad (Architect/Dev/Auditor/Designer/Ops/Supervisor/Exploration/Recovery)¹ | `forge_squad.agents` | 4 |
 | BTV | UnifiedOrchestrator, consenso ponderado, planning, routing, memória, paralelo | `forge_squad.*` (migração de `src/`) | 4 |
 | BTV | HITL/autonomia progressiva, fallback 3 níveis, handoff events | `forge_squad.hitl/.fallback` + `squad.proto` | 4 |
 | fork | Pipeline `/verify` + evidência JSON + skill-vetter | `forge-verify` | 5 |
@@ -119,6 +119,11 @@ mix_btv_code/
 | fork | CI segurança (gitleaks bloqueante, semgrep), commit trailers, bench | `.github/workflows/` + criterion | 5–6 |
 | opencode | LSP, MCP, plugins/skills de terceiros | `forge-tools` + `skills/` | 6 |
 | BTV | Sandbox Docker, RAG, avaliação contínua/A-B, infra (terraform/ansible/k6/grafana) | `forge-tools::sandbox`, `forge_eval`, `infra/` | 6 |
+
+¹ Cobertura de ideias do repositório de origem, não o conjunto que o
+`UnifiedOrchestrator` de fato instancia — são 5 agentes reais (architect/
+developer/auditor/designer/ops); Supervisor/Exploration/Recovery existem
+como arquivos separados mas sem chamador real (ver ADR 0004).
 
 ## Roadmap (fases longas)
 
@@ -211,22 +216,43 @@ mix_btv_code/
 | Keys de API vazarem | Keys só no processo Rust; Python conhece só o UDS (princípio do proxy do prompte) |
 | Segurança de bash/skills de terceiros | Permissões no core Rust (não contornáveis), skill-vetter bloqueante, sandbox Docker, gitleaks |
 
-## Estado atual (scaffold da Fase 1 entregue)
+## Estado atual (Fases 1–3 concluídas; Fase 4 não iniciada)
 
-O workspace (raiz deste repositório) já contém, compilando e testado (26 testes Rust +
-13 Python, clippy/fmt limpos):
+Histórico completo, decisão a decisão, em `docs/DECISOES.md`. Resumo do que já
+compila e está testado no workspace (raiz deste repositório): 101 testes Rust +
+19 Python, clippy `-D warnings` e rustfmt limpos.
 
-- **Contratos**: 3 protos gRPC (`core`, `squad`, `llm`), 6 JSON Schemas
-  versionados e fixtures de paridade do hash de cache validadas pelos dois
-  lados (Rust `forge-schemas/tests/parity.rs` × Python
-  `forge_promptforge/tests/test_hashing.py`).
-- **Rust**: ModelTier portado (com tier-gating de compaction), motor de
-  permissões com perfis build/plan/general, ledger append-only com
-  hash-chain e detecção de adulteração, pipeline `/verify` mínimo com
-  evidência JSON, contrato de ferramenta com truncamento gerenciado, CLI
-  `forge` (clap) com subcomandos run/chat/verify/squad.
-- **Python**: consenso ponderado migrado e tipado (pydantic) com gatilho
-  HITL < 0.7, primeiros geradores declarativos, quality linter, value_score
-  do review system.
+- **Fase 1 — fundação executável**: gateway LLM real com streaming SSE
+  (Anthropic/OpenAI/DeepSeek, fallback automático), cache de prompt por hash
+  (`prompt-cache-key.v1`), ferramentas read/grep/edit/bash sob permissões,
+  loop de agente genérico (`forge run`/`forge chat`), ledger hash-chain.
+- **Fase 2 — sessões e TUI**: `EventStore` + `DurableSession` (retomada por
+  `--session`), Context Epochs + compaction tier-gated em fronteiras
+  seguras, TUI ratatui (transcript, diff colorido, modal de permissão,
+  seletor de modelo/agente), Managed Tool Output Files.
+- **Fase 3 — PromptForge + gateway completo**: primeira ativação real do
+  gRPC (`PromptForgeService` sobre Unix Domain Socket, sidecar supervisado
+  com degradação graciosa total), rate limiting tier-gated
+  (`forge-llm::RateLimiter`), telemetria offline-first
+  (`forge-store::Telemetry`), biblioteca de prompts (`/prompt
+  save|library|use|fav|rm`), dashboard de métricas (`forge-server` + `forge
+  dashboard`).
+- **Contratos**: 3 protos gRPC (`core`, `squad`, `llm` — só `promptforge`
+  ativado até agora), 6 JSON Schemas versionados e fixtures de paridade do
+  hash de cache validadas pelos dois lados.
+- **Python**: só `forge-promptforge` está ativo de verdade (servidor gRPC
+  real). `forge-squad` continua com apenas o consenso ponderado migrado
+  (`weighted_voting.py`) — o motor multi-agente do BuildToValue
+  (orquestrador, planejamento, roteamento, memória, HITL) ainda não foi
+  portado; é o escopo da Fase 4. **ADR 0004** já resolveu, por leitura
+  direta do código de origem, qual lineage é canônica (`UnifiedOrchestrator`
+  + `BaseAgent` + 5 agentes reais) e qual é lineage superada a descartar
+  (`AgentOrchestrator`/`SafeAgentBase`/`SquadOrchestrator`/
+  `continuous_eval.py`) — o checklist de porte por onda já reflete isso.
 - **Operação**: justfile, CI GitHub Actions (cargo/pytest/gitleaks
-  bloqueante), ADR 0001, script de regeneração de fixtures.
+  bloqueante), ADRs 0001–0003, script de regeneração de fixtures.
+
+**Próximo marco: Fase 4 — squad multi-agente como motor central.** Ver
+seção da Fase 4 acima para o escopo completo (migração do
+`UnifiedOrchestrator`, agentes reais via gateway Rust, `SquadService`
+bidirecional, HITL na TUI, fallback progressivo funcional).

@@ -265,3 +265,46 @@ limpos.
 Total: 101 testes Rust + 19 Python verdes; clippy `-D warnings` e rustfmt
 limpos. Fase 3 do roadmap está completa. Próximo marco: Fase 4 (squad
 multi-agente via sidecar Python, consenso ponderado do BuildToValue).
+
+## Fase 4 planejada: lineage canônica do squad resolvida antes do porte (2026-07-05)
+
+Antes de começar a migração, inspecionamos `src/` do
+`BuildToValue_AI_Agent_Specialization` arquivo a arquivo (via GitHub API,
+sem clone) para montar o checklist de porte ordenado por dependência.
+Achado central, registrado no **ADR 0004**: o repositório tem **três
+orquestradores** (`orchestrator.py::AgentOrchestrator`,
+`protocols/squad_orchestrator.py::SquadOrchestrator`,
+`orchestration/unified_orchestrator.py::UnifiedOrchestrator`) e **duas
+hierarquias de agente** (`core/safe_agent_base.py::SafeAgentBase` e
+`agents/base_agent.py::BaseAgent`) — gerações sucessivas da mesma ideia,
+não peças complementares. Só `UnifiedOrchestrator` + `BaseAgent` são
+canônicos: confirmado por leitura direta de `unified_orchestrator.py`, que
+instancia os 5 agentes reais (architect/developer/auditor/designer/ops,
+todos herdando de `BaseAgent`) e chama consenso/planning/routing/memória/
+paralelo/sandbox/avaliação — batendo exatamente com o fluxo do plano.
+`SafeAgentBase` não tem nada a migrar como código (`execute()` devolve
+`f"executed::{task}"`, simulado; seus guardrails são todos `return
+bool(pattern)`, sem lógica real, e mesmo que houvesse não pertenceriam ao
+Python pela regra de fronteira do ADR 0001). Também resolvida a colisão de
+nomes entre `evaluation/continuous_eval.py` e `continuous_evaluator.py`
+(duas classes `ContinuousEvaluator` diferentes — só a segunda é importada
+pelo orquestrador canônico).
+
+Achado que corrige o próprio plano: são **5 agentes wireados**, não os 8
+que a tabela de mapeamento 100% lista — Supervisor/Exploration existem
+como arquivos sem chamador real, e Recovery é um método do orquestrador
+(`_attempt_recovery`), não uma classe de agente. A tabela ganhou uma nota
+de rodapé apontando para o ADR 0004. Duas adaptações de interface também
+já mapeadas para a Onda 4 do checklist: o check manual de consenso
+`< 0.7` vira `consensus.requires_human` (property já pronta no
+`ConsensusResult` pydantic migrado em `forge_squad/consensus.py`), e as
+propostas dos agentes precisam ser envolvidas em `Proposal(...)` antes de
+`reach_consensus` (que já espera o tipo pydantic, não dicts soltos).
+
+Checklist de porte por onda (tasks #35–38 do tracker da sessão): onda 1
+módulos-folha (memory/routing/chains/utils/sandbox), onda 2 `BaseAgent` +
+5 agentes reais, onda 3 planning/parallel/hitl, onda 4
+`UnifiedOrchestrator` + ativação real do `SquadService` bidirecional.
+`orchestrator.py`, `safe_agent_base.py`, `squad_orchestrator.py` e
+`continuous_eval.py` ficam fora do porte; `rag_tool.py`/`mcp_server.py`
+adiados para a Fase 6.
