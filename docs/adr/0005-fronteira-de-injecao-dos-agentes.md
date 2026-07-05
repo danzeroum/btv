@@ -83,9 +83,10 @@ quando `forge_review` existir (Fase 5), sem a Onda 2 esperar por ela.
   verdade, pedindo ao modelo um JSON estruturado, com fallback defensivo
   (confiança 0.0) se o parsing falhar — nunca lança exceção para uma
   resposta mal-formada do modelo.
-- Os outros 4 agentes (`developer`/`auditor`/`designer`/`ops`) seguem o
-  mesmo padrão (`self.gateway.generate(...)` + parsing defensivo) em
-  trabalho subsequente da Onda 2 — não portados nesta ADR.
+- Os outros 4 agentes (`developer`/`auditor`/`designer`/`ops`) foram
+  portados em seguida, mesmo padrão (`self.gateway.generate(...)` +
+  parsing defensivo + zero campo constante) — ver seção "Onda 2
+  completa" abaixo.
 
 ### Correção: `create_plan` ainda fabricava a maior parte do plano
 
@@ -115,3 +116,57 @@ No fallback defensivo (parsing falhou), esses campos chegam vazios
 confiança, não fabricação. Testado com dois problemas diferentes
 produzindo planos diferentes (`test_dois_problemas_diferentes_produzem_planos_diferentes`),
 o que a versão anterior não conseguiria passar.
+
+### Reforço do padrão de teste: igualdade, não só diferença
+
+O teste acima usava `!=` (`plan_a["architecture"] != plan_b["architecture"]`)
+para provar que o bug de fabricação foi corrigido — o que mata o bug
+original (saída constante ⇒ os dois planos seriam iguais), mas só prova
+"a saída varia com a entrada", não "a saída é a decisão do modelo". Um
+`create_plan` sutilmente errado (que transformasse os valores em vez de
+repassá-los — um `+ "-x"`, um lookup) ainda passaria no `!=`. Trocado por
+asserções de igualdade contra os valores exatos da resposta roteirizada
+(`plan_a["architecture"] == "monolito"`) — prova pass-through fiel, não
+só correlação. Esse é o padrão de teste adotado nos 4 agentes seguintes.
+
+## Onda 2 completa: `developer`/`auditor`/`designer`/`ops` portados
+
+- **`DeveloperAgent`**: na origem, o "loop ReAct" (`think`/`decide_action`/
+  `execute_action`) era uma máquina de estados 100% roteirizada — cada
+  "pensamento" e "observação" era uma string canned por keyword matching,
+  sem chamada real. Como `CoreService.RunTool` também não existe ainda
+  (Onda 4), um loop de múltiplas iterações executando ferramentas de
+  verdade não é possível agora — fingir várias iterações sem execução
+  real trocaria uma fabricação por outra. Decisão honesta: uma única
+  chamada real ao gateway que implementa a tarefa e reporta
+  status/confiança, documentada como limitação de escopo atual (não como
+  o loop ReAct completo). `review_system` entra como `Optional[ReviewSystem]`
+  (`Protocol` mínimo definido localmente) — `generate_code` pula a
+  revisão quando `None`; `auto_fix_issues` continua sendo bookkeeping
+  determinístico sobre um veredito real de review (não decisão do
+  agente).
+- **`AuditorAgent`** — o mais arriscado dos quatro, porque um veredito
+  hardcoded aqui é um carimbo automático. `check_security`/`check_quality`
+  continuam determinísticos (busca de padrão / limiares — legítimos, um
+  linter não é "Nada Fake"), mas viram **evidência de entrada** para uma
+  chamada real ao gateway, que produz `passed`/`confidence`/`notes` — o
+  prompt instrui explicitamente a não aprovar automaticamente por
+  ausência de achados críticos. Testado especificamente
+  (`test_ausencia_de_achados_criticos_nao_forca_aprovacao`): o modelo pode
+  reprovar mesmo com `issues == []`, e o fallback defensivo nunca aprova
+  (`passed=False`) numa resposta não parseável. Consumir evidência
+  determinística do `/verify` completo (Rust) fica para a Fase 5 — este
+  agente audita com o que existe na Fase 4, sem invadir o escopo seguinte.
+  `validate_results` (usado pelo orquestrador para julgar os resultados
+  agregados de outros agentes) segue o mesmo desenho: veredito real, não
+  a fórmula de pontuação hardcoded da origem.
+- **`DesignerAgent`**/**`OpsAgent`**: mesmo molde do `ArchitectAgent` —
+  todo campo de saída (cores/tipografia/componentes para o designer;
+  estágios/scaling/monitoramento para o ops) vem do gateway. O único
+  resquício determinístico em ambos é uma guarda de domínio legítima (o
+  `pattern`/`strategy` escolhido pelo modelo precisa estar entre as
+  opções suportadas, com fallback para uma opção segura) — validação de
+  uma escolha externa, não fabricação de conteúdo.
+
+57 testes no `forge_squad` (73 no workspace Python). Onda 2 da Fase 4
+está completa.

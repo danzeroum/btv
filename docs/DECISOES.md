@@ -422,3 +422,44 @@ genérico) quando o parsing falha. Novo teste
 exatamente o que a versão anterior não conseguiria passar: dois
 problemas, dois planos diferentes. 33 testes no `forge-squad` (49 no
 workspace Python).
+
+Revisão adicional do teste de derivação: a asserção original usava `!=`
+(prova só que a saída varia, não que é fiel à resposta do modelo — um
+`create_plan` que transformasse os valores em vez de repassá-los ainda
+passaria). Trocada por igualdade contra os valores exatos da resposta
+roteirizada. Esse virou o padrão de teste adotado nos 4 agentes
+seguintes.
+
+## Fase 4 — Onda 2 completa: developer, auditor, designer e ops portados (2026-07-05)
+
+Últimos 4 agentes portados no molde corrigido do `ArchitectAgent` — todo
+campo de saída deriva do gateway real, testes provam igualdade (não só
+diferença), fallback honesto (vazio/não-aprovado, nunca fabricado).
+
+- **`developer_agent`**: o "loop ReAct" original era 100% roteirizado
+  (`think`/`decide_action`/`execute_action` devolviam strings canned por
+  keyword matching). Como `CoreService.RunTool` também não existe ainda
+  (Onda 4), um loop real de múltiplas iterações executando ferramentas
+  não é possível hoje — fingir iterações que não fariam nada de verdade
+  seria trocar uma fabricação por outra. Decisão registrada no ADR 0005:
+  uma chamada real ao gateway que implementa a tarefa inteira, documentada
+  como limitação de escopo atual. `review_system` vira
+  `Optional[ReviewSystem]` (Protocol mínimo local) — sem ele,
+  `generate_code` devolve o código sem revisão.
+- **`auditor_agent`** — o mais arriscado dos quatro: um veredito hardcoded
+  aqui é um carimbo automático que destrói a tese "o LLM orquestra;
+  ferramentas determinísticas verificam". `check_security`/`check_quality`
+  continuam determinísticos (busca de padrão / limiares — legítimos, tipo
+  linter), mas viram evidência de entrada para uma chamada real ao
+  gateway, que produz o veredito. Testado que ausência de achados
+  críticos não força aprovação (`issues == []` e `passed=False` ainda é
+  um resultado válido) e que o fallback defensivo nunca aprova por
+  engano. Consumo de evidência do `/verify` completo é Fase 5 — não
+  antecipado aqui.
+- **`designer_agent`/`ops_agent`**: mesmo molde; único resquício
+  determinístico é uma guarda de domínio (pattern/strategy do modelo
+  precisa estar entre as opções suportadas) — validação de escolha
+  externa, não fabricação.
+
+57 testes no `forge-squad`, 73 no workspace Python. Onda 2 da Fase 4
+está completa. Próximo: Onda 3 (planning/parallel/hitl).

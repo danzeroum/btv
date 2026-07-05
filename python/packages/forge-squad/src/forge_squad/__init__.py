@@ -6,7 +6,15 @@ Regra de ouro: este pacote NUNCA chama provedores LLM diretamente — toda
 geração passa pelo gateway Rust via gRPC (`CoreService.Generate`).
 """
 
-from forge_squad.agents import ArchitectAgent, BaseAgent
+from forge_squad.agents import (
+    ArchitectAgent,
+    AuditorAgent,
+    BaseAgent,
+    DesignerAgent,
+    DeveloperAgent,
+    OpsAgent,
+    ReviewSystem,
+)
 from forge_squad.chains import ChainStep, ResilientPromptChain
 from forge_squad.consensus import ConsensusResult, WeightedConsensusEngine
 from forge_squad.forgetting import IntelligentForgetting, MemoryStore
@@ -19,9 +27,12 @@ from forge_squad.security import SecurityConfig
 __all__ = [
     "AgentMemorySystem",
     "ArchitectAgent",
+    "AuditorAgent",
     "BaseAgent",
     "ChainStep",
     "ConsensusResult",
+    "DesignerAgent",
+    "DeveloperAgent",
     "DockerSandbox",
     "GatewayClient",
     "IntelligentForgetting",
@@ -29,7 +40,9 @@ __all__ = [
     "LlmRequest",
     "LlmResponse",
     "MemoryStore",
+    "OpsAgent",
     "ResilientPromptChain",
+    "ReviewSystem",
     "ScriptedGatewayClient",
     "SecureToolSandbox",
     "SecurityConfig",

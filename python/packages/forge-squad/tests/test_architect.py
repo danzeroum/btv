@@ -64,8 +64,13 @@ def test_dois_problemas_diferentes_produzem_planos_diferentes():
     plan_a = asyncio.run(agent.execute({"description": "problema A"}))["plan"]
     plan_b = asyncio.run(agent.execute({"description": "problema B"}))["plan"]
 
-    assert plan_a["architecture"] != plan_b["architecture"]
-    assert plan_a["components"] != plan_b["components"]
+    # Igualdade, não só diferença: prova pass-through fiel da saída do
+    # modelo, não apenas que o plano "varia" (o que passaria mesmo se
+    # create_plan transformasse os valores em vez de repassá-los).
+    assert plan_a["architecture"] == "monolito"
+    assert plan_a["components"] == ["Redis"]
+    assert plan_b["architecture"] == "event-driven"
+    assert plan_b["components"] == ["Kafka", "Consumer Group"]
 
 
 def test_execute_sem_gateway_anexado_levanta_erro_claro():
