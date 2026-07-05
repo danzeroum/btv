@@ -3,7 +3,7 @@ name = "forge-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Gateway LLM da plataforma Forge: providers, ModelTier, cache por hash, fallback"
+description = "Gateway LLM da plataforma Forge: providers, streaming, ModelTier, cache por hash, fallback"
 
 [dependencies]
 forge-schemas.workspace = true
@@ -11,3 +11,5 @@ serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true
 thiserror.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true

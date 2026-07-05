@@ -91,10 +91,17 @@ expansão de fases, filtros da matriz (21 ideias) e acordeões funcionando.
 
 ## Próximos marcos (Fase 1)
 
-1. Loop de agente real no `forge run`: providers HTTP (Anthropic/OpenAI/DeepSeek) com
-   streaming SSE no `forge-llm`, retry e fallback de provedor.
-2. Ferramentas reais em `forge-tools` (read/grep nativo via crates `grep`/`ignore`,
-   edit/patch, bash com PTY, webfetch) sob o motor de permissões.
-3. Sessão persistida no `forge-store` + registro no ledger a cada turno.
-4. Critério de conclusão da fase: `forge run "corrija o teste X"` completa uma edição
-   com permissão interativa num repo real; ledger registra; `just test` verde.
+Entregue em 2026-07-05 (segundo commit da main): loop de agente real no
+`forge run` — gateway HTTP com streaming SSE e fallback (Anthropic/OpenAI/
+DeepSeek, keys por env), agregadores de stream testados com fixtures (sem
+rede), ferramentas read/grep/edit/bash sob o motor de permissões (grep
+respeita .gitignore; edit exige trecho único; bash com timeout), loop
+genérico sobre `Generator` (testes com gerador roteirizado cobrem edição
+fim-a-fim, negação de permissão e limite de passos) e sessão com ledger
+hash-chain em `.forge/forge.db`.
+
+Restante da Fase 1:
+1. `forge chat` — REPL multi-turno reusando o loop.
+2. Cache de prompt (`prompt-cache-key.v1`) ligado ao gateway.
+3. Critério final da fase: `forge run "corrija o teste X"` com permissão
+   interativa num repo real (exige API key configurada).

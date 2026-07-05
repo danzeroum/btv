@@ -39,7 +39,15 @@ Sem `just`: `cargo test --workspace` e `cd python && uv sync && uv run pytest`.
 
 ## Estado
 
-Scaffold da **Fase 1** do roadmap: workspaces compilando, contratos iniciais
-definidos e testados (incl. paridade de hash Rust×Python), ledger append-only com
-hash-chain funcionando, ModelTier portado. Próximo marco: loop de agente real no
-`forge run` (providers HTTP com streaming no gateway).
+**Fase 1 quase completa**: `forge run` executa o loop de agente real — gateway
+LLM com streaming SSE (Anthropic/OpenAI/DeepSeek, fallback automático, keys por
+env), ferramentas read/grep/edit/bash sob permissão interativa, e cada turno
+registrado no ledger append-only (`.forge/forge.db`).
+
+```sh
+export ANTHROPIC_API_KEY=...   # ou DEEPSEEK_API_KEY / OPENAI_API_KEY
+cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
+```
+
+Falta para fechar a Fase 1: `forge chat` (REPL) e o cache de prompt ligado ao
+gateway. Fase 2 na sequência: sessões duráveis, TUI e ModelTier tier-gated.

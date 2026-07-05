@@ -40,10 +40,12 @@ just test | just lint | just verify    # atalhos (requer just)
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
-scaffold da Fase 1 (contratos, ModelTier, permissões, ledger, /verify mínimo,
-consenso ponderado). Próximo marco da Fase 1: loop de agente real no `forge run` —
-providers HTTP (Anthropic/OpenAI/DeepSeek) com streaming SSE no `forge-llm`,
-ferramentas read/grep/edit/bash reais e sessão persistida.
+Fase 1 quase completa — `forge run` roda o loop de agente real (gateway com
+streaming SSE e fallback em `forge-llm/src/gateway.rs`, loop genérico sobre
+`Generator` em `forge-core/src/agent_loop.rs`, ferramentas em `forge-tools`,
+sessão+ledger em `forge-cli/src/session.rs`). Falta: `forge chat` (REPL) e o
+cache de prompt ligado ao gateway; depois Fase 2 (sessões duráveis, TUI,
+tier-gating completo).
 
 ## Convenções
 

@@ -30,6 +30,12 @@ hex = "0.4"
 regex = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "io-util", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"
+ignore = "0.4"
+time = { version = "0.3", features = ["formatting"] }
+tempfile = "3"
 
 forge-schemas = { path = "crates/forge-schemas" }
 forge-core = { path = "crates/forge-core" }

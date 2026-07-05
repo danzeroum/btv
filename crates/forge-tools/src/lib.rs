@@ -1,10 +1,16 @@
 //! Ferramentas determinísticas da plataforma Forge.
 //!
 //! Princípio (fork do opencode): "o LLM orquestra; ferramentas
-//! determinísticas verificam". Fase 1 (scaffold): contrato de ferramenta e
-//! truncamento gerenciado de output. As implementações reais (grep via
-//! crates `grep`/`ignore`, edit/patch, bash/PTY, webfetch) completam a
-//! Fase 1; LSP/MCP/sandbox chegam na Fase 6.
+//! determinísticas verificam". Fase 1: read, grep, edit e bash reais sob o
+//! motor de permissões; LSP/MCP/webfetch/sandbox chegam nas Fases 2–6.
+
+pub mod bash;
+pub mod edit;
+pub mod grep;
+pub mod read;
+pub mod registry;
+
+pub use registry::ToolRegistry;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,9 +31,15 @@ pub struct ToolOutput {
     pub truncated: bool,
 }
 
-/// Contrato de ferramenta: nome estável + execução com args JSON.
-pub trait Tool {
+/// Contrato de ferramenta: identidade estável, schema para o modelo,
+/// escopo para o motor de permissões e execução com args JSON.
+pub trait Tool: Send + Sync {
     fn name(&self) -> &'static str;
+    fn description(&self) -> &'static str;
+    /// JSON Schema dos argumentos, anunciado ao modelo.
+    fn input_schema(&self) -> Value;
+    /// Escopo avaliado pelo motor de permissões (caminho, comando...).
+    fn scope(&self, args: &Value) -> String;
     fn run(&self, args: &Value) -> Result<ToolOutput, ToolError>;
 }
 
@@ -52,30 +64,15 @@ pub fn bound_output(content: String, limit: usize) -> ToolOutput {
     }
 }
 
+pub(crate) fn required_str<'a>(args: &'a Value, field: &str) -> Result<&'a str, ToolError> {
+    args.get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| ToolError::InvalidArgs(format!("campo '{field}' obrigatório")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    struct EchoTool;
-    impl Tool for EchoTool {
-        fn name(&self) -> &'static str {
-            "echo"
-        }
-        fn run(&self, args: &Value) -> Result<ToolOutput, ToolError> {
-            let text = args
-                .get("text")
-                .and_then(Value::as_str)
-                .ok_or_else(|| ToolError::InvalidArgs("campo 'text' obrigatório".into()))?;
-            Ok(bound_output(text.to_string(), DEFAULT_OUTPUT_LIMIT))
-        }
-    }
-
-    #[test]
-    fn echo_roda_pelo_contrato() {
-        let out = EchoTool.run(&serde_json::json!({"text": "oi"})).unwrap();
-        assert_eq!(out.content, "oi");
-        assert!(!out.truncated);
-    }
 
     #[test]
     fn truncamento_respeita_fronteira_utf8() {
@@ -83,10 +80,5 @@ mod tests {
         assert!(out.truncated);
         assert!(out.content.len() <= 5);
         assert!(std::str::from_utf8(out.content.as_bytes()).is_ok());
-    }
-
-    #[test]
-    fn args_invalidos_dao_erro() {
-        assert!(EchoTool.run(&serde_json::json!({})).is_err());
     }
 }

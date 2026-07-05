@@ -1,0 +1,398 @@
+//! Loop de agente da Fase 1: mensagens → gateway → tool_use → permissão →
+//! execução → tool_result → repete, até `end_turn` ou o limite de passos.
+//!
+//! O loop é genérico sobre `Generator` (gateway real ou roteirizado em
+//! teste) e emite `LoopEvent`s via callback — o CLI os transforma em
+//! streaming no terminal e entradas no ledger.
+
+use crate::permission::{Decision, PermissionEngine};
+use forge_llm::chat::{ChatMessage, ContentBlock, GenerateRequest, Role, StopReason, ToolSpec};
+use forge_llm::gateway::{GatewayError, Generator};
+use forge_tools::ToolRegistry;
+use serde_json::Value;
+
+/// Eventos observáveis do loop (streaming, ledger, telemetria).
+#[derive(Debug)]
+pub enum LoopEvent<'a> {
+    /// Delta de texto do modelo (streaming).
+    TextDelta(&'a str),
+    /// Turno do assistente concluído (texto completo, provider, tokens).
+    TurnCompleted {
+        provider: String,
+        input_tokens: u64,
+        output_tokens: u64,
+    },
+    /// Ferramenta prestes a rodar (já autorizada).
+    ToolStarted { name: String, scope: String },
+    /// Resultado de ferramenta (truncado ao devolver ao modelo se preciso).
+    ToolFinished {
+        name: String,
+        ok: bool,
+        summary: String,
+    },
+    /// Ferramenta negada pela política ou pelo usuário.
+    ToolDenied { name: String, scope: String },
+}
+
+/// Decide pedidos `Ask` — no CLI pergunta ao usuário; nos testes é roteado.
+pub trait PermissionResolver {
+    fn resolve(&mut self, tool: &str, scope: &str) -> bool;
+}
+
+/// Política fixa para contextos não interativos: nega todo `Ask`.
+pub struct DenyAll;
+impl PermissionResolver for DenyAll {
+    fn resolve(&mut self, _tool: &str, _scope: &str) -> bool {
+        false
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoopError {
+    #[error("gateway: {0}")]
+    Gateway(#[from] GatewayError),
+    #[error("limite de {0} passos atingido sem end_turn")]
+    MaxSteps(usize),
+}
+
+pub struct AgentLoop<'a, G: Generator> {
+    pub generator: &'a G,
+    pub tools: &'a ToolRegistry,
+    pub permissions: PermissionEngine,
+    pub model: String,
+    pub system: String,
+    pub max_steps: usize,
+    pub max_tokens: u32,
+}
+
+/// Resultado final do loop.
+#[derive(Debug)]
+pub struct LoopOutcome {
+    pub final_text: String,
+    pub steps: usize,
+    pub messages: Vec<ChatMessage>,
+}
+
+impl<'a, G: Generator> AgentLoop<'a, G> {
+    fn tool_specs(&self) -> Vec<ToolSpec> {
+        self.tools
+            .iter()
+            .map(|t| ToolSpec {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                input_schema: t.input_schema(),
+            })
+            .collect()
+    }
+
+    /// Executa a tarefa até o modelo encerrar o turno sem pedir ferramentas.
+    pub async fn run(
+        &self,
+        task: &str,
+        resolver: &mut (dyn PermissionResolver + Send),
+        on_event: &mut (dyn FnMut(LoopEvent) + Send),
+    ) -> Result<LoopOutcome, LoopError> {
+        let mut messages = vec![ChatMessage::user_text(task)];
+        let specs = self.tool_specs();
+
+        for step in 1..=self.max_steps {
+            let req = GenerateRequest {
+                model: self.model.clone(),
+                system: self.system.clone(),
+                messages: messages.clone(),
+                tools: specs.clone(),
+                max_tokens: self.max_tokens,
+                temperature: None,
+            };
+
+            // Encaminha deltas de texto ao observador em tempo real.
+            let turn = {
+                let mut sink = |d: &str| on_event(LoopEvent::TextDelta(d));
+                self.generator.generate(req, &mut sink).await?
+            };
+            on_event(LoopEvent::TurnCompleted {
+                provider: turn.provider.clone(),
+                input_tokens: turn.usage.input_tokens,
+                output_tokens: turn.usage.output_tokens,
+            });
+
+            let tool_uses: Vec<(String, String, Value)> = turn
+                .tool_uses()
+                .into_iter()
+                .map(|(id, name, input)| (id.to_string(), name.to_string(), input.clone()))
+                .collect();
+
+            messages.push(ChatMessage {
+                role: Role::Assistant,
+                content: turn.content.clone(),
+            });
+
+            if turn.stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
+                return Ok(LoopOutcome {
+                    final_text: turn.text(),
+                    steps: step,
+                    messages,
+                });
+            }
+
+            // Executa cada ferramenta pedida, sob o motor de permissões.
+            let mut results = Vec::new();
+            for (id, name, input) in tool_uses {
+                let result = self.run_tool(&name, &input, resolver, on_event);
+                results.push(ContentBlock::ToolResult {
+                    tool_use_id: id,
+                    content: result.0,
+                    is_error: result.1,
+                });
+            }
+            messages.push(ChatMessage {
+                role: Role::User,
+                content: results,
+            });
+        }
+        Err(LoopError::MaxSteps(self.max_steps))
+    }
+
+    /// Retorna (conteúdo, is_error).
+    fn run_tool(
+        &self,
+        name: &str,
+        input: &Value,
+        resolver: &mut (dyn PermissionResolver + Send),
+        on_event: &mut (dyn FnMut(LoopEvent) + Send),
+    ) -> (String, bool) {
+        let Some(tool) = self.tools.get(name) else {
+            return (format!("ferramenta desconhecida: {name}"), true);
+        };
+        let scope = tool.scope(input);
+        let allowed = match self.permissions.evaluate(name, &scope) {
+            Decision::Allow => true,
+            Decision::Deny => false,
+            Decision::Ask => resolver.resolve(name, &scope),
+        };
+        if !allowed {
+            on_event(LoopEvent::ToolDenied {
+                name: name.to_string(),
+                scope: scope.clone(),
+            });
+            return (format!("permissão negada para {name} em {scope:?}"), true);
+        }
+        on_event(LoopEvent::ToolStarted {
+            name: name.to_string(),
+            scope,
+        });
+        match tool.run(input) {
+            Ok(out) => {
+                let summary = out
+                    .content
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(80)
+                    .collect();
+                on_event(LoopEvent::ToolFinished {
+                    name: name.to_string(),
+                    ok: true,
+                    summary,
+                });
+                let mut content = out.content;
+                if out.truncated {
+                    content.push_str("\n[output truncado]");
+                }
+                (content, false)
+            }
+            Err(e) => {
+                on_event(LoopEvent::ToolFinished {
+                    name: name.to_string(),
+                    ok: false,
+                    summary: e.to_string(),
+                });
+                (e.to_string(), true)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_llm::chat::{AssistantTurn, Usage};
+    use std::sync::Mutex;
+
+    /// Gerador roteirizado: devolve turnos pré-definidos em sequência.
+    struct Scripted {
+        turns: Mutex<Vec<AssistantTurn>>,
+    }
+
+    impl Generator for Scripted {
+        async fn generate(
+            &self,
+            _req: GenerateRequest,
+            on_delta: &mut (dyn FnMut(&str) + Send),
+        ) -> Result<AssistantTurn, GatewayError> {
+            let turn = self.turns.lock().unwrap().remove(0);
+            on_delta(&turn.text());
+            Ok(turn)
+        }
+    }
+
+    fn turn(content: Vec<ContentBlock>, stop: StopReason) -> AssistantTurn {
+        AssistantTurn {
+            content,
+            stop_reason: stop,
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+            },
+            provider: "scripted".into(),
+        }
+    }
+
+    struct AllowAll;
+    impl PermissionResolver for AllowAll {
+        fn resolve(&mut self, _t: &str, _s: &str) -> bool {
+            true
+        }
+    }
+
+    fn agent_loop<'a>(gen: &'a Scripted, tools: &'a ToolRegistry) -> AgentLoop<'a, Scripted> {
+        AgentLoop {
+            generator: gen,
+            tools,
+            permissions: PermissionEngine::default(), // tudo Ask → resolver decide
+            model: "test-model".into(),
+            system: "teste".into(),
+            max_steps: 5,
+            max_tokens: 512,
+        }
+    }
+
+    #[tokio::test]
+    async fn fluxo_completo_com_edicao_de_arquivo() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("f.txt"), "valor = 1\n").unwrap();
+        let tools = ToolRegistry::default_set(dir.path());
+
+        let gen = Scripted {
+            turns: Mutex::new(vec![
+                turn(
+                    vec![
+                        ContentBlock::Text {
+                            text: "Vou corrigir.".into(),
+                        },
+                        ContentBlock::ToolUse {
+                            id: "tu1".into(),
+                            name: "edit".into(),
+                            input: serde_json::json!({"path": "f.txt", "old_string": "valor = 1", "new_string": "valor = 2"}),
+                        },
+                    ],
+                    StopReason::ToolUse,
+                ),
+                turn(
+                    vec![ContentBlock::Text {
+                        text: "Pronto.".into(),
+                    }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+        };
+
+        let al = agent_loop(&gen, &tools);
+        let mut events = Vec::new();
+        let outcome = al
+            .run("corrija f.txt", &mut AllowAll, &mut |e| {
+                events.push(format!("{e:?}"))
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.final_text, "Pronto.");
+        assert_eq!(outcome.steps, 2);
+        let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
+        assert_eq!(content, "valor = 2\n");
+        assert!(events.iter().any(|e| e.contains("ToolStarted")));
+    }
+
+    #[tokio::test]
+    async fn negacao_vira_tool_result_de_erro_e_o_modelo_continua() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("f.txt"), "x\n").unwrap();
+        let tools = ToolRegistry::default_set(dir.path());
+
+        let gen = Scripted {
+            turns: Mutex::new(vec![
+                turn(
+                    vec![ContentBlock::ToolUse {
+                        id: "tu1".into(),
+                        name: "bash".into(),
+                        input: serde_json::json!({"command": "rm -rf /"}),
+                    }],
+                    StopReason::ToolUse,
+                ),
+                turn(
+                    vec![ContentBlock::Text {
+                        text: "Entendido, não vou executar.".into(),
+                    }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+        };
+
+        let al = agent_loop(&gen, &tools);
+        let mut denied = false;
+        let outcome = al
+            .run("tarefa", &mut DenyAll, &mut |e| {
+                if matches!(e, LoopEvent::ToolDenied { .. }) {
+                    denied = true;
+                }
+            })
+            .await
+            .unwrap();
+
+        assert!(denied);
+        assert_eq!(outcome.steps, 2);
+        // O tool_result de erro foi entregue ao "modelo" na 2ª chamada.
+        let last_user = outcome
+            .messages
+            .iter()
+            .rev()
+            .find(|m| matches!(m.role, Role::User))
+            .unwrap();
+        // mensagens: [user task, assistant tool_use, user tool_result(erro), assistant final]
+        assert!(matches!(
+            outcome.messages[2].content[0],
+            ContentBlock::ToolResult { is_error: true, .. }
+        ));
+        let _ = last_user;
+    }
+
+    #[tokio::test]
+    async fn limite_de_passos_e_um_erro() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("f.txt"), "x\n").unwrap();
+        let tools = ToolRegistry::default_set(dir.path());
+        // Sempre pede ferramenta — nunca termina.
+        let loops: Vec<AssistantTurn> = (0..6)
+            .map(|i| {
+                turn(
+                    vec![ContentBlock::ToolUse {
+                        id: format!("tu{i}"),
+                        name: "read".into(),
+                        input: serde_json::json!({"path": "f.txt"}),
+                    }],
+                    StopReason::ToolUse,
+                )
+            })
+            .collect();
+        let gen = Scripted {
+            turns: Mutex::new(loops),
+        };
+        let al = agent_loop(&gen, &tools);
+        let err = al
+            .run("tarefa", &mut AllowAll, &mut |_| {})
+            .await
+            .unwrap_err();
+        assert!(matches!(err, LoopError::MaxSteps(5)));
+    }
+}
