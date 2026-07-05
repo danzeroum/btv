@@ -52,5 +52,8 @@ cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
 cargo run -p forge-cli -- chat
 ```
 
-Próxima: **Fase 2** — sessões duráveis (System Context/Epochs/compaction),
-TUI ratatui e tier-gating completo do ModelTier.
+**Fase 2 em andamento** — sessões duráveis ativas: toda execução é
+persistida como eventos em `.forge/sessions.db` (EventStore portado da
+branch `rust-migration` do opencode — ADR 0002) e `--session <id>` retoma a
+conversa após restart, em `run` e `chat`. Restante da fase: Context Epochs +
+compaction, TUI ratatui e tier-gating completo.

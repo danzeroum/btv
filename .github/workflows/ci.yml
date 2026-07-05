@@ -18,6 +18,17 @@ jobs:
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo fmt --all --check
 
+  # Gate de supply-chain (advisories/licenças) — porte da rust-migration.
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny check
+
   python:
     runs-on: ubuntu-latest
     defaults:

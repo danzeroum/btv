@@ -22,8 +22,9 @@ impl Tool for EditTool {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "caminho relativo à raiz do workspace"},
-                "old_string": {"type": "string", "description": "trecho exato a substituir (único no arquivo)"},
-                "new_string": {"type": "string", "description": "novo trecho"}
+                "old_string": {"type": "string", "description": "trecho exato a substituir (único no arquivo, salvo replace_all)"},
+                "new_string": {"type": "string", "description": "novo trecho"},
+                "replace_all": {"type": "boolean", "description": "substitui todas as ocorrências", "default": false}
             },
             "required": ["path", "old_string", "new_string"]
         })
@@ -42,9 +43,12 @@ impl Tool for EditTool {
                 "old_string e new_string são iguais".into(),
             ));
         }
+        let replace_all = args["replace_all"].as_bool().unwrap_or(false);
         let full = self.root.join(path);
         let content = std::fs::read_to_string(&full)
             .map_err(|e| ToolError::Execution(format!("{}: {e}", full.display())))?;
+        // Semântica do opencode-tools (rust-migration): sem replace_all, a
+        // ocorrência deve ser única — edits ambíguos são rejeitados.
         let occurrences = content.matches(old).count();
         match occurrences {
             0 => Err(ToolError::Execution(format!(
@@ -58,8 +62,16 @@ impl Tool for EditTool {
                     truncated: false,
                 })
             }
+            n if replace_all => {
+                std::fs::write(&full, content.replace(old, new))
+                    .map_err(|e| ToolError::Execution(format!("{}: {e}", full.display())))?;
+                Ok(ToolOutput {
+                    content: format!("editado: {path} ({n} ocorrências)"),
+                    truncated: false,
+                })
+            }
             n => Err(ToolError::Execution(format!(
-                "old_string aparece {n} vezes em {path}; forneça um trecho único"
+                "old_string aparece {n} vezes em {path}; forneça um trecho único ou passe replace_all"
             ))),
         }
     }
@@ -94,6 +106,21 @@ mod tests {
             .run(&json!({"path": "f.rs", "old_string": "a", "new_string": "b"}))
             .unwrap_err();
         assert!(err.to_string().contains("2 vezes"));
+    }
+
+    #[test]
+    fn replace_all_substitui_todas() {
+        let (dir, tool) = setup("a\na\na\n");
+        let out = tool
+            .run(
+                &json!({"path": "f.rs", "old_string": "a", "new_string": "b", "replace_all": true}),
+            )
+            .unwrap();
+        assert!(out.content.contains("3 ocorrências"));
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.rs")).unwrap(),
+            "b\nb\nb\n"
+        );
     }
 
     #[test]

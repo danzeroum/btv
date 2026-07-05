@@ -10,3 +10,7 @@ forge-schemas.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

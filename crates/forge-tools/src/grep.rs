@@ -1,6 +1,14 @@
-//! Ferramenta `grep`: busca por regex respeitando .gitignore (crate `ignore`).
+//! Ferramenta `grep`: busca por regex com as bibliotecas do ripgrep
+//! (`grep` + `ignore`), respeitando .gitignore.
+//!
+//! Porte do `opencode-tools` da branch `rust-migration` (ADR 0002): o
+//! `Searcher` do ripgrep dá a mesma semântica de matching da ferramenta
+//! `grep` clássica do opencode, com custo linear em memória por linha.
 
 use crate::{bound_output, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT};
+use grep::regex::RegexMatcher;
+use grep::searcher::sinks::UTF8;
+use grep::searcher::Searcher;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -36,7 +44,7 @@ impl Tool for GrepTool {
 
     fn run(&self, args: &Value) -> Result<ToolOutput, ToolError> {
         let pattern = required_str(args, "pattern")?;
-        let re = regex::Regex::new(pattern)
+        let matcher = RegexMatcher::new(pattern)
             .map_err(|e| ToolError::InvalidArgs(format!("regex: {e}")))?;
         let base = match args["path"].as_str() {
             Some(p) => self.root.join(p),
@@ -52,23 +60,33 @@ impl Tool for GrepTool {
             if !entry.file_type().is_some_and(|t| t.is_file()) {
                 continue;
             }
-            let Ok(content) = std::fs::read_to_string(entry.path()) else {
-                continue; // binário ou não-UTF8
-            };
-            for (i, line) in content.lines().enumerate() {
-                if re.is_match(line) {
-                    let rel = entry
-                        .path()
-                        .strip_prefix(&self.root)
-                        .unwrap_or(entry.path());
-                    matches.push(format!("{}:{}:{}", rel.display(), i + 1, line.trim_end()));
+            let path = entry.path();
+            let rel = path.strip_prefix(&self.root).unwrap_or(path).to_path_buf();
+            let mut searcher = Searcher::new();
+            let mut full = false;
+            // Erros por arquivo (binário/não-UTF8) são pulados, não abortam.
+            let _ = searcher.search_path(
+                &matcher,
+                path,
+                UTF8(|line_number, line| {
+                    matches.push(format!(
+                        "{}:{}:{}",
+                        rel.display(),
+                        line_number,
+                        line.trim_end()
+                    ));
                     if matches.len() >= MAX_MATCHES {
-                        matches.push(format!(
-                            "... (limite de {MAX_MATCHES} ocorrências atingido)"
-                        ));
-                        break 'outer;
+                        full = true;
+                        return Ok(false); // para este arquivo
                     }
-                }
+                    Ok(true)
+                }),
+            );
+            if full {
+                matches.push(format!(
+                    "... (limite de {MAX_MATCHES} ocorrências atingido)"
+                ));
+                break 'outer;
             }
         }
         if matches.is_empty() {
@@ -110,5 +128,17 @@ mod tests {
             tool.run(&json!({"pattern": "("})),
             Err(ToolError::InvalidArgs(_))
         ));
+    }
+
+    #[test]
+    fn arquivo_binario_e_pulado_sem_erro() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("bin.dat"), [0u8, 159, 146, 150]).unwrap();
+        std::fs::write(dir.path().join("ok.txt"), "alvo\n").unwrap();
+        let tool = GrepTool {
+            root: dir.path().to_path_buf(),
+        };
+        let out = tool.run(&json!({"pattern": "alvo"})).unwrap();
+        assert!(out.content.contains("ok.txt:1:alvo"));
     }
 }

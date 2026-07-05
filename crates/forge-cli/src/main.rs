@@ -11,10 +11,10 @@ mod session;
 use anyhow::{bail, Context, Result};
 use cache::CachedGenerator;
 use clap::{Parser, Subcommand};
-use forge_core::{AgentLoop, LoopEvent, PermissionResolver, BUILD, PLAN};
+use forge_core::{AgentLoop, DurableSession, LoopEvent, PermissionResolver, BUILD, PLAN};
 use forge_llm::chat::ChatMessage;
 use forge_llm::{tier_from_id, Gateway, Generator, ModelTier};
-use forge_store::PromptCache;
+use forge_store::{EventStore, PromptCache};
 use forge_tools::ToolRegistry;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -44,6 +44,9 @@ struct RunOpts {
     /// Desliga o cache de prompts por hash.
     #[arg(long)]
     no_cache: bool,
+    /// Retoma (ou nomeia) uma sessão durável; sem valor, cria uma nova.
+    #[arg(long)]
+    session: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -148,6 +151,34 @@ fn build_loop<'a, G: Generator>(
     })
 }
 
+/// Abre a sessão durável (nova ou retomada) em `.forge/sessions.db`.
+fn open_durable(root: &std::path::Path, opts: &RunOpts, task_hint: &str) -> Result<DurableSession> {
+    let store = EventStore::open(
+        root.join(".forge")
+            .join("sessions.db")
+            .to_str()
+            .unwrap_or(".forge/sessions.db"),
+    )?;
+    let session_id = opts.session.clone().unwrap_or_else(|| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("s{:x}", nanos & 0xffff_ffff_ffff)
+    });
+    let durable = DurableSession::open(store, &session_id, task_hint, &opts.model)?;
+    if durable.resumed_messages() > 0 {
+        eprintln!(
+            "sessão {session_id} retomada — {} mensagem(ns) no histórico",
+            durable.resumed_messages()
+        );
+    } else {
+        eprintln!("sessão {session_id} (retome com --session {session_id})");
+    }
+    Ok(durable)
+}
+
 async fn run_once<G: Generator>(
     generator: &G,
     opts: &RunOpts,
@@ -157,18 +188,30 @@ async fn run_once<G: Generator>(
     let tools = ToolRegistry::default_set(root);
     let agent_loop = build_loop(generator, opts, &tools)?;
     let mut session = session::Session::open(root, &task, &opts.model)?;
+    let mut durable = open_durable(root, opts, &task)?;
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
-    let mut on_event = |event: LoopEvent| {
-        print_event(&event);
-        session.record(&event);
+    durable.messages.push(ChatMessage::user_text(&task));
+    let result = {
+        let mut on_event = |event: LoopEvent| {
+            print_event(&event);
+            session.record(&event);
+        };
+        agent_loop
+            .continue_run(&mut durable.messages, &mut resolver, &mut on_event)
+            .await
     };
-    match agent_loop.run(&task, &mut resolver, &mut on_event).await {
-        Ok(outcome) => {
-            session.finish(true, outcome.steps)?;
+    let persisted = durable.persist_new().unwrap_or_else(|e| {
+        eprintln!("  [sessão] falha ao persistir: {e}");
+        0
+    });
+    match result {
+        Ok(summary) => {
+            session.finish(true, summary.steps)?;
             eprintln!(
-                "\nconcluído em {} passo(s) · ledger íntegro: {} entrada(s)",
-                outcome.steps,
+                "\nconcluído em {} passo(s) · {} mensagem(ns) persistida(s) · ledger íntegro: {} entrada(s)",
+                summary.steps,
+                persisted,
                 session.verify()?
             );
             Ok(())
@@ -190,9 +233,9 @@ async fn chat_repl<G: Generator>(
     let mut session = session::Session::open(root, "<chat>", &opts.model)?;
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
+    let mut durable = open_durable(root, opts, "<chat>")?;
     eprintln!("forge chat — digite a mensagem (vazio, \"sair\" ou Ctrl-D encerra)\n");
     let stdin = std::io::stdin();
-    let mut history: Vec<ChatMessage> = Vec::new();
     let mut turns = 0usize;
 
     loop {
@@ -208,15 +251,20 @@ async fn chat_repl<G: Generator>(
         }
 
         session.note("user.turn", serde_json::json!({"chars": input.len()}));
-        history.push(ChatMessage::user_text(input));
-        let mut on_event = |event: LoopEvent| {
-            print_event(&event);
-            session.record(&event);
+        durable.messages.push(ChatMessage::user_text(input));
+        let result = {
+            let mut on_event = |event: LoopEvent| {
+                print_event(&event);
+                session.record(&event);
+            };
+            agent_loop
+                .continue_run(&mut durable.messages, &mut resolver, &mut on_event)
+                .await
         };
-        match agent_loop
-            .continue_run(&mut history, &mut resolver, &mut on_event)
-            .await
-        {
+        if let Err(e) = durable.persist_new() {
+            eprintln!("  [sessão] falha ao persistir: {e}");
+        }
+        match result {
             Ok(_) => turns += 1,
             Err(e) => {
                 eprintln!("\nerro: {e}");

@@ -8,6 +8,7 @@ description = "Runtime de sessão da plataforma Forge: contexto, agentes, permis
 [dependencies]
 forge-schemas.workspace = true
 forge-llm.workspace = true
+forge-store.workspace = true
 forge-tools.workspace = true
 serde.workspace = true
 serde_json.workspace = true

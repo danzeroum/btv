@@ -113,3 +113,24 @@ borda HTTP está coberta por testes.
 
 Fase 2 na sequência: sessões duráveis (System Context/Epochs/compaction),
 TUI ratatui, tier-gating completo.
+
+## Porte seletivo da branch rust-migration (2026-07-05)
+
+Avaliada a `rust-migration` do opencode (~40k linhas Rust em 14 crates,
+migração strangler-fig do backend TS): **decidido não copiar integralmente**
+— traria o monorepo TS e a maquinaria de coexistência TS↔Rust que o Forge
+não precisa. Portados os módulos coerentes (detalhes no ADR 0002):
+
+- **EventStore** (`opencode-db`/`opencode-events`) → `forge-store::events`
+  (rusqlite, WAL, concorrência otimista por `(aggregate_id, seq)`).
+- **Sessões duráveis** → `forge-core::session::DurableSession`: conversa
+  como agregado de eventos `message.1`, replay reconstrói o histórico,
+  conflito detecta escritores concorrentes. CLI: `--session <id>` retoma;
+  toda execução é persistida em `.forge/sessions.db` (primeiro marco da
+  **Fase 2**).
+- **grep com libs do ripgrep** → `forge-tools::grep` (Searcher + ignore).
+- **edit `replace_all`** → `forge-tools::edit`.
+- **deny.toml + cargo-deny** → gate de supply-chain no CI.
+
+Não portados: proxy reverso/`openapi-diff` (contrato legado), verificador
+de journal de migrations, crates acoplados ao opencode.

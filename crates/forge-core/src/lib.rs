@@ -8,9 +8,11 @@
 pub mod agent;
 pub mod agent_loop;
 pub mod permission;
+pub mod session;
 
 pub use agent::{AgentProfile, BUILD, GENERAL, PLAN};
 pub use agent_loop::{
     AgentLoop, DenyAll, LoopError, LoopEvent, LoopOutcome, PermissionResolver, TurnSummary,
 };
 pub use permission::{Decision, PermissionEngine, Rule};
+pub use session::{DurableSession, SessionError};
