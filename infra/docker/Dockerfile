@@ -20,13 +20,26 @@
 # sandbox de skills de terceiro exige o socket do Docker (DinD), e a key só
 # existe no processo Rust (ADR 0001).
 
-# ---------- build ----------
+# ---------- build (Rust) ----------
 FROM rust:1-bookworm AS build
 WORKDIR /src
 # protoc é vendorizado (protoc-bin-vendored), TLS é rustls e SQLite é bundled:
 # o build NÃO precisa de protobuf-compiler / libssl-dev / libsqlite3-dev.
 COPY . .
 RUN cargo build --release -p forge-cli
+
+# ---------- build (frontend do dashboard) ----------
+# web/dist NÃO é commitado (web/.gitignore) — precisa ser buildado. Sem este
+# estágio, `forge dashboard` sobe mas não tem SPA pra servir (404 no `/`).
+FROM node:22-bookworm-slim AS web-build
+WORKDIR /web
+# web/package.json não pina `packageManager` — instala o major confirmado
+# (pnpm 10.x) direto, em vez de depender da resolução implícita do corepack.
+RUN npm install -g pnpm@10
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim AS runtime
@@ -50,6 +63,14 @@ COPY python /app/python
 RUN cd /app/python && uv sync
 ENV FORGE_PYTHON_DIR=/app/python
 
+# SPA do dashboard, já buildada no estágio web-build.
+COPY --from=web-build /web/dist /app/web/dist
+ENV FORGE_WEB_DIR=/app/web/dist
+
 # Diretório onde o agente atua — monte o SEU projeto aqui (-v "$PWD":/work).
 WORKDIR /work
-ENTRYPOINT ["/bin/bash"]
+# CMD (não ENTRYPOINT): `docker run forge:test` cai num shell interativo, mas
+# `docker run forge:test forge dashboard --port 7878` SUBSTITUI o CMD inteiro e
+# roda o binário direto — sem isso, um ENTRYPOINT fixo prefixaria "/bin/bash" na
+# frente do comando e quebraria esse uso.
+CMD ["/bin/bash"]

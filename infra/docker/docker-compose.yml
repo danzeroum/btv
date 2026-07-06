@@ -33,9 +33,27 @@ services:
       # Atenção à path-translation: os caminhos que o forge passa ao daemon são
       # internos ao container; o daemon do host os interpreta como do host.
       # - /var/run/docker.sock:/var/run/docker.sock
-  # --- DASHBOARD (opcional) ---
-  # `forge dashboard` amarra em 127.0.0.1 (loopback do CONTAINER) e serve a SPA
-  # de web/dist (que esta imagem não builda). Para testá-lo: adicione
-  # `network_mode: host` acima, garanta web/dist buildado + FORGE_WEB_DIR, e faça
-  # um túnel SSH da sua máquina (ssh -L 7878:127.0.0.1:7878 user@vps). Nunca
-  # exponha a porta direto na internet — não foi projetada para isso.
+
+  # --- DASHBOARD (telemetria via web) ---
+  # `forge dashboard` amarra em 127.0.0.1 por design (loopback), então um
+  # `ports: - "7878:7878"` normal NÃO funciona (o publish do Docker mapeia pro IP
+  # do container, não pro 127.0.0.1 interno). `network_mode: host` faz o
+  # container compartilhar o network namespace da VPS — aí o 127.0.0.1 do
+  # processo É o 127.0.0.1 da VPS, alcançável por túnel SSH.
+  #
+  #   docker compose -f infra/docker/docker-compose.yml run --rm dashboard
+  #   # na SUA máquina local (não na VPS):
+  #   ssh -L 7878:127.0.0.1:7878 usuario@ip-da-vps
+  #   # abra http://127.0.0.1:7878 no navegador local
+  #
+  # Nunca exponha a porta direto na internet (sem `ports:` nem firewall aberto)
+  # — o dashboard não foi projetado/testado para acesso público.
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    image: forge:test
+    network_mode: host
+    volumes:
+      - ../../:/work:rw
+    command: ["forge", "dashboard", "--port", "7878"]

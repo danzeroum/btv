@@ -74,6 +74,35 @@ estourar o limite real da API antes do Forge perceber.
 a chamada falhar. Para testar **só** a DeepSeek, não defina `ANTHROPIC_API_KEY`
 no ambiente do container.
 
+## Acessando via web (o dashboard de telemetria)
+
+**Antes de tudo: "acessar via web" hoje = o dashboard de telemetria, não o
+agente.** Não há como rodar `forge run/chat/squad` pelo navegador — isso só
+existe via CLI/TUI. O dashboard mostra telemetria e status de vetting de skills
+(dados reais); a maioria das outras telas do frontend (sessão, squad, prompts...)
+são vitrines com dado mock, documentadas em `docs/LEVANTAMENTO-UI-DESIGNER.md`.
+
+A imagem já builda a SPA (`web/dist`) e aponta `FORGE_WEB_DIR` — falta só a rede:
+o `forge dashboard` amarra em `127.0.0.1`, e um `-p 7878:7878` normal **não
+alcança** isso (o publish do Docker mapeia pro IP do container, não pro
+`127.0.0.1` interno). Use `--network host` pra o loopback do container virar o
+loopback da própria VPS:
+
+```sh
+# na VPS:
+docker run --rm --network host -v "$PWD":/work forge:test forge dashboard --port 7878
+# (ou: docker compose -f infra/docker/docker-compose.yml run --rm dashboard)
+
+# na SUA máquina local (não na VPS) — túnel SSH:
+ssh -L 7878:127.0.0.1:7878 usuario@ip-da-vps
+
+# abra no navegador LOCAL:
+http://127.0.0.1:7878
+```
+
+**Nunca** publique a porta direto (`-p 7878:7878` + firewall aberto) — o
+dashboard não foi projetado nem testado para acesso público na internet.
+
 ## As 4 pegadinhas de container (o que muda vs. rodar na máquina)
 
 1. **`FORGE_PYTHON_DIR` é obrigatório** — e a imagem já o define
@@ -97,14 +126,9 @@ no ambiente do container.
    são internos ao *container* — então o sandbox de terceiro via DinD é a parte
    mais frágil; deixe-a por último no seu teste.
 
-4. **Dashboard em `127.0.0.1` = loopback do container.** Um `-p 7878:7878` **não**
-   alcança um app amarrado em `127.0.0.1` (o publish mapeia para `0.0.0.0` do
-   container). Para ver o dashboard: use `--network host` (Linux) e um túnel SSH
-   da sua máquina — `ssh -L 7878:127.0.0.1:7878 usuario@vps` — e abra
-   `http://127.0.0.1:7878` local. Além disso, o dashboard serve a SPA de
-   `web/dist`, que esta imagem **não** builda (foco no CLI); para tê-lo, builde o
-   frontend (`cd web && pnpm i && pnpm build`) e aponte `FORGE_WEB_DIR`. **Nunca**
-   exponha a porta direto na internet.
+4. **Dashboard em `127.0.0.1` = loopback do container.** Ver a seção "Acessando
+   via web" acima — precisa de `--network host` + túnel SSH; nunca publicar a
+   porta direto na internet.
 
 ## Quando você quiser expor de verdade (multiusuário, na internet)
 
@@ -115,8 +139,9 @@ que existe. Esta imagem é para teste seu, não para produção exposta.
 
 ## Nota
 
-Esta imagem foi escrita a partir de passos **verificados** (o `cargo build
---release -p forge-cli` e o `uv sync` rodam limpos no repo), mas **não foi
-buildada num daemon Docker** durante a autoria (o ambiente de dev não tinha um).
-Buildе-a na sua VPS; se algo faltar no runtime slim, o ajuste típico é uma lib de
+Esta imagem foi escrita a partir de passos **verificados individualmente fora do
+Docker** (`cargo build --release -p forge-cli`, `uv sync` e `pnpm install &&
+pnpm build` do frontend rodam limpos no repo), mas o **Dockerfile em si não foi
+buildado num daemon Docker** durante a autoria (o ambiente de dev não tinha um).
+Builde-o na sua VPS; se algo faltar no runtime slim, o ajuste típico é uma lib de
 sistema a mais no `apt-get install` do estágio `runtime`.
