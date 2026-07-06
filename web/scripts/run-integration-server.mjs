@@ -43,11 +43,17 @@ run('cargo', [
 // 4. sobe o dashboard real apontando pro build da SPA, servindo o evento semeado.
 // --manifest-path resolve o workspace a partir de workDir (cargo não muda o
 // cwd do processo filho); run_dashboard lê `.forge/telemetry.db` relativo ao
-// cwd real do binário, por isso `cwd: workDir` aqui.
+// cwd real do binário, por isso `cwd: workDir` aqui. `--web-agent` liga as
+// rotas de sessão/permissão/matriz (Fase 7 Ondas 1-2) por cima do dashboard
+// padrão — puramente aditivo, não muda `/api/summary`/`/api/events`/
+// `/api/skills` que o teste de telemetria já usa.
 const manifestPath = join(repoRoot, 'Cargo.toml')
 const child = spawn(
   'cargo',
-  ['run', '-q', '--manifest-path', manifestPath, '-p', 'forge-cli', '--', 'dashboard', '--port', port],
+  [
+    'run', '-q', '--manifest-path', manifestPath, '-p', 'forge-cli', '--',
+    'dashboard', '--port', port, '--web-agent',
+  ],
   {
     cwd: workDir,
     env: { ...process.env, FORGE_WEB_DIR: webDist },

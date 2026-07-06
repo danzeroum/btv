@@ -314,3 +314,60 @@ preferir um ADR para o LSP ou para o k6/infra, é rápido de adicionar.
 
 Nada aqui bloqueia declarar o roadmap concluído — são refinamentos e um exercício,
 não lacunas de código.
+
+# Fase 7 — frontend como forma primária de uso (Ondas 1-2)
+
+## Onda 2 — remanescente (matriz de permissão persistida + trilha de auditoria)
+
+- **[decisão] Onda 2 não estava fechada quando cheguei nela.** A PR #25 (mergeada)
+  entregou a sessão real via SSE + a ponte de permissão ao vivo, mas deixou de fora
+  o resto do escopo da própria Onda 2 do PLANO: matriz build/plan×tool persistida,
+  trilha de auditoria no ledger, o terceiro estado "sempre" do `Permissao.tsx`, e o
+  fallback silencioso do `fetchSkills`. Fechei esse resto nesta entrega antes de
+  seguir para a Onda 3 — a Onda 7 (Console MCP) depende explicitamente do MESMO
+  `RuleStore` para o preview de política, então deixar essa base pela metade
+  quebraria uma onda futura, não só um item isolado.
+- **[decisão] `RuleStore` mora em `forge-store`, mas com um `RuleDecision` PRÓPRIO**
+  (não o `Decision` de `forge-core`). `forge-core` já depende de `forge-store`
+  (aresta pré-existente) — se `forge-store` dependesse de `forge-core` de volta,
+  seria um ciclo. A conversão `RuleRecord → forge_core::Rule` mora em `forge-cli`,
+  que já depende dos dois.
+- **[decisão] `PermissionEngine::overlay` combina overrides persistidos com o
+  default do perfil (`BUILD`/`PLAN`), overrides checados primeiro.** Achei e
+  documentei uma inconsistência real entre o mock antigo e o perfil de verdade: o
+  mock (`PERMISSION_MATRIX` em `skills.ts`) mostrava `plan`+`bash` como "deny"; o
+  perfil real (`PermissionEngine::read_only()`) é "ask". A matriz nova reflete o
+  perfil REAL (fonte única em `forge_core::{BUILD,PLAN}`), não o valor fabricado —
+  a UI muda de "deny" para "ask" nessa célula, o que é uma correção, não uma
+  regressão.
+- **[decisão] "sempre" grava um override com `scope_prefix` = o escopo EXATO do
+  pedido pendente, não um "allow" genérico para o tool inteiro.** A matriz (tela
+  Skills) já cobre o caso "qualquer escopo"; misturar os dois mecanismos no mesmo
+  botão pareceu mais confuso que dois botões com contratos distintos e explícitos.
+  Se você preferir que "sempre" também ofereça um modo "qualquer escopo deste
+  tool", é uma extensão pequena (chamar `setRule` sem `scopePrefix`).
+- **[decisão] Modal de confirmação nos cliques da matriz.** O PLANO pede
+  explicitamente "o escopo da rule (tool + scope_prefix) aparece explícito no
+  modal antes de confirmar — nunca um clique único e opaco". Isso muda a UX
+  anterior (clique único cicla a decisão) para clique → modal → confirmar. Achei
+  que vale a pena dado que é a mutação mais sensível do plano (afrouxar permissão
+  pelo navegador), mas é uma fricção a mais que você pode preferir remover se achar
+  exagero para a matriz coarse (a "sempre" já mostra o escopo no PRÓPRIO modal do
+  pedido de permissão, sem precisar de um segundo modal).
+- **[dúvida] Cobertura Playwright da Onda 2 original (PR #25) ficou incompleta.**
+  A fronteira do PLANO para a Onda 2 pede 4 testes Playwright: (1) pedido de
+  `bash` real → tela Permissão → Permitir → ledger íntegro; (2) duas abas
+  concorrentes → 409 claro; (3) editar matriz → ledger → revogar; (4) skills fora
+  do ar → erro explícito. A PR #25 só entregou (1) e (2) como testes Rust
+  (`reqwest` contra um servidor axum efêmero), não como Playwright de navegador —
+  prova real, mas não a MESMA prova que o PLANO pede. Nesta entrega eu fechei (3) e
+  (4) como Playwright de verdade (`web/tests/e2e-integration/permissions-real-backend.spec.ts`,
+  rodando contra `--web-agent` real). **Não voltei** para escrever Playwright de
+  navegador para (1)/(2) — é trabalho já revisado e mergeado, e reabri-lo pareceu
+  fora do escopo desta entrega (que é fechar a Onda 2, não auditar a cobertura de
+  teste da Onda 1). Se você quiser essa cobertura de navegador para (1)/(2)
+  também, é um item pontual e localizado — me avise.
+- **[nota] `web/scripts/run-integration-server.mjs` ganhou `--web-agent`** (a
+  suíte de integração de telemetria e a nova de permissões agora sobem o MESMO
+  servidor com o agente web ligado; puramente aditivo, não mudei nenhuma rota
+  existente).

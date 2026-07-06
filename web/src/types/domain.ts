@@ -120,6 +120,16 @@ export interface PermissionMatrixRow {
   plan: PermissionMatrixDecision
 }
 
+/** Override persistido (Fase 7 Onda 2) — espelha `forge_store::RuleRecord`. */
+export interface PermissionRuleRecord {
+  id: number
+  profile: AgentProfile
+  tool: string
+  scope_prefix?: string
+  decision: PermissionMatrixDecision
+  created_at: string
+}
+
 // --- Squad Designer ---
 
 export type DesignerNodeKind = 'card' | 'pill'
