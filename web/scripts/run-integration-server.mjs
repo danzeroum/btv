@@ -111,6 +111,23 @@ writeFileSync(
   `{"timestamp":"2026-01-01T00:00:00Z","agent":"e2e-memory-agent","decision":{"summary":"plano de arquitetura do gateway aprovado"},"confidence":0.9}\n`,
 )
 
+// 3f. semeia um experimento A/B real (Fase 7 Onda 9, A2): 2 variantes, 20
+// amostras cada — o piso de `MIN_SAMPLES` em `forge_schemas::experiment`
+// abaixo do qual o veredito vira `InsufficientData` em vez de decidir por
+// significância. "controle" com 18/20 sucessos vs "tratamento" com 6/20 —
+// diferença grande o bastante pro teste z ser `Significant` por construção,
+// não por sorte. Nome dedicado (e2e-experiment) para o teste de UI buscar
+// por ele sem depender de nenhum outro evento desta suíte.
+function seedExperimentEvent(variant, success) {
+  run('cargo', [
+    'run', '-q', '-p', 'forge-store', '--example', 'seed_telemetry', '--',
+    dbPath, 'llm.call', 'e2e-experiment',
+    JSON.stringify({ experiment: 'e2e-experiment', variant, success }),
+  ])
+}
+for (let i = 0; i < 20; i++) seedExperimentEvent('controle', i < 18)
+for (let i = 0; i < 20; i++) seedExperimentEvent('tratamento', i < 6)
+
 // 4. sobe o dashboard real apontando pro build da SPA, servindo o evento semeado.
 // --manifest-path resolve o workspace a partir de workDir (cargo não muda o
 // cwd do processo filho); run_dashboard lê `.forge/telemetry.db` relativo ao

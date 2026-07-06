@@ -15,6 +15,7 @@ export type AdminScreenId =
   | 'mcp'
   | 'modelos'
   | 'memoria'
+  | 'experimentos'
   | 'ledger'
   | 'verify'
   | 'providers'

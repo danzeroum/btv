@@ -12,6 +12,7 @@ const ADMIN_SURFACE_SCREENS = new Set([
   'mcp',
   'modelos',
   'memoria',
+  'experimentos',
   'ledger',
   'verify',
   'providers',

@@ -725,3 +725,71 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   `writeFileSync` (não `appendFileSync`) no seed é idempotente por execução,
   o que basta para a asserção (que procura só o agente dedicado, nunca uma
   contagem global).
+
+## Onda 9 — Experimentos A/B (A2)
+
+- **[decisão] `GET /api/experiment/:nome` foi direto em `forge-server`, não no
+  router mesclado de `forge-cli`.** Mesma classe de posicionamento que A5
+  (Uso por modelo): só precisa do que `forge-server` já depende
+  (`forge-store` para `experiment_variants`, `forge-schemas` para
+  `ExperimentReport`/`VariantStats`) — nenhuma dependência de
+  `forge-tools`/`forge-core`/`forge-sidecar`. `forge-schemas` virou
+  dependência REAL do crate (antes só `dev-dependencies`, usada só para
+  montar `LedgerEntry` nos testes) — o handler constrói `VariantStats`/
+  `ExperimentReport` em código de produção, não só em teste.
+- **[decisão] 404 vs 422 — dois jeitos distintos de "não dá pra responder",
+  não um genérico.** `experiment_variants` devolve `Vec<(variante, n,
+  sucessos)>`; `0` variantes (nome sem nenhum evento) é `404` (o experimento
+  não existe); `1` ou `3+` variantes é `422` (o experimento existe — tem
+  eventos reais — mas não está no formato de A/B estrito de 2 lados que
+  `ExperimentReport::from_two_variants` exige). A wording do plano ("422 se
+  alguma variante tem 0 amostras") não é literalmente alcançável: o `GROUP BY`
+  da consulta só devolve grupos que already têm ≥1 linha, então uma variante
+  com `n=0` não pode aparecer no resultado — reli o `Fronteira` (a fonte mais
+  concreta: "seed com 1 variante só → 422; nome inexistente → 404") e segui
+  essa leitura operacional, não a prosa da onda.
+- **[decisão] `>2` variantes cai no mesmo `422` que `1` variante.** Não
+  testado explicitamente no fronteira do plano, mas é a extensão óbvia: um
+  A/B estrito (`from_two_variants`) não sabe o que fazer com 3+ lados, e
+  escolher 2 arbitrariamente para "salvar" a resposta seria fabricar um
+  recorte que o usuário não pediu — a régua Nada Fake também vale para
+  "silenciosamente ignorar dado real".
+- **[decisão] Nenhuma instrumentação de produção nesta onda — decisão
+  explícita, não esquecimento.** Confirmado de novo (grep) antes de
+  implementar: nenhum caminho de produção grava `props.experiment`/`variant`/
+  `success` hoje, só `examples/seed_telemetry.rs` e os testes. A tela carrega
+  um banner permanente dizendo isso — os relatórios que ela mostra hoje são
+  sempre sobre dados semeados, nunca tráfego real, até uma fase futura
+  instrumentar de verdade um ponto de decisão (ex.: variantes de prompt do
+  PromptForge, squad vs. agente único).
+- **[decisão] `Sugestoes.tsx`: card "A/B de prompts" retargetado para
+  `experimentos`, `delivered: true`.** Existia desde antes desta fase
+  apontando para `relatedScreen: 'prompts'` (a biblioteca de prompts, que não
+  tem nada de A/B) — claramente um placeholder que citava o módulo errado
+  (`forge_promptforge.hashing`, sem relação com `experiment.v1`). Corrigido
+  para apontar pro módulo real (`forge_schemas::experiment`, ADR 0014) e
+  marcado entregue, mesmo padrão visual (`Badge` "✓ entregue") que a Onda 8
+  já usou pro card de memória.
+- **[nota] Onda 9 foi implementada e commitada numa branch nova
+  (`claude/fase-7-onda-9`) a partir de `origin/main` recém-atualizado — NÃO
+  em cima da branch da Onda 8 (`claude/fase-7-onda-8`, PR #32 ainda aberta no
+  momento em que esta onda começou).** Cheguei a escrever as mudanças desta
+  onda em cima do checkout local da Onda 8 por hábito (a mesma armadilha já
+  registrada duas vezes nas notas da Fase 7 anterior) — pego ANTES de
+  commitar desta vez, via `git stash` + `checkout -b` a partir de
+  `origin/main` + `stash pop` + resolução manual dos conflitos nos arquivos
+  de registro de tela compartilhados (`nav.ts`/`screenMeta.ts`/
+  `screenComponents.tsx`/`Shell.tsx`/`types/domain.ts`/`Sugestoes.tsx`/
+  `run-integration-server.mjs`), mantendo só os trechos da Onda 9 e
+  descartando os da Onda 8 (que voltam sozinhos quando a Onda 8 mergear e
+  esta branch rebasear). Zero dependência funcional real entre as duas
+  ondas — só compartilhavam linhas nos mesmos arquivos de registro.
+- **[nota] Seed de experimento no Playwright: 40 chamadas a
+  `seed_telemetry`, não uma flag de lote nova.** `MIN_SAMPLES = 20` em
+  `forge_schemas::experiment` é um piso real (abaixo dele o veredito vira
+  `InsufficientData`), então provar `Significant` por execução exige ≥20
+  eventos por variante — sem atalho. Preferi 40 invocações simples do
+  exemplo genérico já existente (mesmo padrão de todo o resto do script) a
+  inventar um modo de lote no `seed_telemetry.rs` só para este caso; custo
+  medido: suíte inteira (9 specs, incluindo o build do fixture MCP) ainda
+  roda em ~30s.
