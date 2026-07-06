@@ -768,6 +768,7 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "clap",
  "crossterm",
  "forge-core",
@@ -782,13 +783,17 @@ dependencies = [
  "forge-verify",
  "jsonschema",
  "ratatui",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "time",
  "tokio",
+ "tokio-stream",
  "toml",
  "tonic",
+ "tower",
 ]
 
 [[package]]
@@ -3142,6 +3147,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

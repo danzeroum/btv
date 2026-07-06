@@ -12,6 +12,7 @@ mod sidecar;
 mod skills;
 mod squad;
 mod tui_app;
+mod web_agent;
 
 use anyhow::{bail, Context, Result};
 use cache::CachedGenerator;
@@ -113,6 +114,11 @@ enum Commands {
         /// Porta local do dashboard.
         #[arg(long, default_value_t = 7878)]
         port: u16,
+        /// Fase 7 Onda 1 (opt-in até o fecho da fase): habilita as rotas do
+        /// agente web (sessão/permissão via SSE) por trás da guarda de
+        /// Origin/Host — sem isso, o dashboard segue só leitura como hoje.
+        #[arg(long)]
+        web_agent: bool,
     },
     /// Gera o relatório de A/B testing de um experimento a partir da telemetria
     /// local: compara a taxa de sucesso das duas variantes com teste de
@@ -163,7 +169,7 @@ async fn main() -> Result<()> {
             let (generator, root) = prepare(&opts)?;
             squad::run_squad(generator, &opts, &root, task).await
         }
-        Commands::Dashboard { port } => run_dashboard(port).await,
+        Commands::Dashboard { port, web_agent } => run_dashboard(port, web_agent).await,
         Commands::Experiment {
             experiment,
             db,
@@ -234,7 +240,7 @@ fn print_experiment_human(report: &ExperimentReport) {
 
 /// Sobe o dashboard de telemetria lendo `.forge/telemetry.db` do diretório
 /// atual (criado, se ausente, por `run`/`chat`).
-async fn run_dashboard(port: u16) -> Result<()> {
+async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
     let root = std::env::current_dir().context("diretório atual")?;
     let forge_dir = root.join(".forge");
     std::fs::create_dir_all(&forge_dir)?;
@@ -246,11 +252,20 @@ async fn run_dashboard(port: u16) -> Result<()> {
     )?;
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let web_dir = forge_server::default_web_dir();
-    eprintln!(
-        "forge dashboard — http://{addr} (assets: {})",
-        web_dir.display()
-    );
-    forge_server::serve(telemetry, &root, addr, web_dir).await?;
+    if web_agent {
+        eprintln!(
+            "forge dashboard (--web-agent) — http://{addr} (assets: {})",
+            web_dir.display()
+        );
+        let hub = web_agent::default_hub();
+        web_agent::serve_with_agent(telemetry, &root, addr, web_dir, hub).await?;
+    } else {
+        eprintln!(
+            "forge dashboard — http://{addr} (assets: {})",
+            web_dir.display()
+        );
+        forge_server::serve(telemetry, &root, addr, web_dir).await?;
+    }
     Ok(())
 }
 
