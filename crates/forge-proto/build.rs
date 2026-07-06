@@ -25,6 +25,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_client(true)
         .build_server(true)
+        // Fase 7 Onda 4: `SquadEvent` (e os tipos aninhados do `oneof payload`)
+        // vai direto pro SSE do agente web — "sem DTO espelho", serde direto
+        // no tipo gerado. Escopado ao pacote `forge.squad.v1` só (os outros
+        // 3 protos não precisam virar JSON).
+        .type_attribute(".forge.squad.v1", "#[derive(serde::Serialize)]")
         .compile_protos(&protos.map(|p| format!("{proto_dir}/{p}")), &[proto_dir])?;
     Ok(())
 }

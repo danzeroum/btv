@@ -31,27 +31,6 @@ export interface ModelTier {
   label: string
 }
 
-export interface SquadAgentId {
-  id: 'architect' | 'developer' | 'auditor' | 'designer' | 'ops'
-}
-
-export type SquadAgentState = 'concluido' | 'executando' | 'aguardando' | 'ocioso'
-
-export interface SquadAgent {
-  id: string
-  name: string
-  state: SquadAgentState
-  /** null quando o agente está ocioso e ainda não votou nesta rodada. */
-  confidence: number | null
-  task: string
-}
-
-export interface ConsensusResult {
-  strength: number
-  decisionMaker: string
-  dissent: { agent: string; score: number }[]
-}
-
 export interface PromptGenerator {
   id: string
   name: string

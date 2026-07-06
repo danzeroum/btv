@@ -44,9 +44,14 @@ run('cargo', [
 // --manifest-path resolve o workspace a partir de workDir (cargo não muda o
 // cwd do processo filho); run_dashboard lê `.forge/telemetry.db` relativo ao
 // cwd real do binário, por isso `cwd: workDir` aqui. `--web-agent` liga as
-// rotas de sessão/permissão/matriz (Fase 7 Ondas 1-2) por cima do dashboard
-// padrão — puramente aditivo, não muda `/api/summary`/`/api/events`/
-// `/api/skills` que o teste de telemetria já usa.
+// rotas de sessão/permissão/matriz/squad (Fase 7 Ondas 1-4) por cima do
+// dashboard padrão — puramente aditivo, não muda `/api/summary`/`/api/events`/
+// `/api/skills` que o teste de telemetria já usa. `FORGE_SCRIPTED=1` troca o
+// gerador por respostas determinísticas (sem API key) tanto na sessão de chat
+// quanto no squad (`ScriptedSquadCoreBackend`, mesma confiança 0.5 uniforme
+// do teste Rust — consenso fraco de propósito, exercita o gate HITL real);
+// nenhum teste de integração hoje envia mensagem de chat, então isso não
+// muda o comportamento observado pelos specs existentes.
 const manifestPath = join(repoRoot, 'Cargo.toml')
 const child = spawn(
   'cargo',
@@ -56,7 +61,7 @@ const child = spawn(
   ],
   {
     cwd: workDir,
-    env: { ...process.env, FORGE_WEB_DIR: webDist },
+    env: { ...process.env, FORGE_WEB_DIR: webDist, FORGE_SCRIPTED: '1' },
     stdio: 'inherit',
   },
 )

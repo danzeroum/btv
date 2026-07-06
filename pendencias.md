@@ -371,3 +371,60 @@ não lacunas de código.
   suíte de integração de telemetria e a nova de permissões agora sobem o MESMO
   servidor com o agente web ligado; puramente aditivo, não mudei nenhuma rota
   existente).
+
+## Onda 3 — sidecar Python como serviço de longa duração
+
+Sem pendência nova aqui — o desenho (singleton para PromptForge, pool pequeno
+para squad, restart-on-crash via health-check) está integralmente registrado no
+ADR 0019, sem decisão em aberto que precisasse deste arquivo.
+
+## Onda 4 — squad ao vivo
+
+- **[dúvida] Capacidade 1 do `SquadPool` no agente web bloqueia silenciosamente
+  uma segunda tarefa concorrente, sem aviso claro na UI.** `SquadTask`/
+  `PermissionRequest` não carregam identificador de tarefa no proto atual —
+  rodar >1 squad concorrente pelo mesmo `CoreService` compartilhado não teria
+  como demultiplexar de qual tarefa uma chamada `Generate`/`RequestPermission`
+  veio (comentário de módulo em `squad_agent.rs`). Capacidade 1 evita fingir uma
+  concorrência insegura, mas tem um efeito colateral real: `POST /api/squad/run`
+  sempre devolve `202` com um `task_id` novo na hora (não enfileira a
+  aceitação), mas a tarefa em si fica presa em `pool.acquire()` até o slot
+  único liberar — quem abrir uma segunda aba durante uma execução vê a tela
+  "task_id sqN · ao vivo" sem NENHUMA proposta aparecer por um tempo
+  indeterminado, sem indicação de "na fila". Resolver de verdade (correlação de
+  tarefa no proto + `core_socket` por slot) é escopo maior, fora desta onda. Se
+  quiser, o remendo barato para a próxima iteração é a UI mostrar "aguardando
+  slot livre" quando nenhum evento chegar depois de N segundos do `202`.
+- **[decisão] Frontend fecha o `EventSource` no primeiro `onerror`, não deixa o
+  navegador reconectar sozinho.** Diferente de `connectSessionEvents` (sessão de
+  chat, vida útil da aba inteira, reconectar faz sentido), uma tarefa de squad é
+  finita — o stream termina sozinho quando a tarefa acaba. Sem fechar
+  explicitamente, o `EventSource` nativo reconectaria para sempre contra uma
+  tarefa já terminada (replay do snapshot a cada retry, na prática inofensivo
+  mas um loop sem propósito). Não dá para distinguir, pela API do
+  `EventSource`, "terminou de verdade" de "conexão caiu de verdade" — tratei os
+  dois igual (rótulo neutro "stream encerrado"), em vez de arriscar uma
+  mensagem "concluído com sucesso" que a API não sustenta.
+- **[nota] Preview do `content_json` de cada proposta é JSON bruto
+  reformatado (`JSON.stringify(JSON.parse(...), null, 2)`), não campos
+  estruturados por tipo de agente.** O schema varia por agente (architect vs.
+  developer vs. auditor vs. designer vs. ops) — parsear campos específicos
+  seria uma tela por agente. Achei prematuro para esta onda; se quiser um
+  resumo mais rico por agente (ex.: só `recommendation`/`architecture` do
+  architect), é uma extensão pontual depois que os campos reais de cada agente
+  estiverem estáveis.
+- **[nota] Achado de depuração, já resolvido — registrado para não confundir
+  quem olhar o histórico:** durante o desenvolvimento desta onda, o processo
+  bugado do stream SSE que nunca terminava (`SquadTaskState.tx` sem
+  `Option`/`finish_task`) foi corrigido; junto com isso, encontrei dezenas de
+  processos `uv`/`forge_squad.server` órfãos rodando no ambiente. Investiguei a
+  fundo (reprodução isolada, fora do workspace) antes de concluir: o mecanismo
+  de limpeza (`Drop` com `libc::kill` no grupo de processos, ADR 0019) funciona
+  corretamente — confirmado com um processo `uv run python -m
+  forge_squad.server` real, dentro de uma task `axum::serve` detached, dropado
+  ao fim de um `#[tokio::test]`: tanto o `uv` quanto o `python` forkado morrem.
+  Os órfãos encontrados eram resíduo de tentativas ANTERIORES desta mesma
+  sessão de depuração, quando o teste ainda travava e precisou ser morto via
+  `timeout ... ` (SIGKILL no processo Rust, que pula TODOS os destructors,
+  inclusive o `Drop` que mata o grupo) — não um bug novo, não uma lacuna no
+  desenho da Onda 3.

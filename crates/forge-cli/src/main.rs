@@ -11,6 +11,9 @@ mod session;
 mod sidecar;
 mod skills;
 mod squad;
+mod squad_agent;
+#[cfg(test)]
+mod test_support;
 mod tui_app;
 mod web_agent;
 
@@ -258,7 +261,10 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
             web_dir.display()
         );
         let hub = web_agent::default_hub();
-        web_agent::serve_with_agent(telemetry, &root, addr, web_dir, hub).await?;
+        let squad_hub = squad_agent::default_hub();
+        let squad_pool = squad_agent::default_squad_pool(&root);
+        let squad_router = squad_agent::router(squad_hub, squad_pool);
+        web_agent::serve_with_agent(telemetry, &root, addr, web_dir, hub, squad_router).await?;
     } else {
         eprintln!(
             "forge dashboard — http://{addr} (assets: {})",
