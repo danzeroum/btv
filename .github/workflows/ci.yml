@@ -79,14 +79,19 @@ jobs:
           name: verification-evidence
           path: verification-evidence.json
 
-  # Contenção do sandbox Docker (Fase 6 Onda 2): os quatro vetores (escrita
-  # fora do mount, rede proibida, timeout, memória) exigem um daemon Docker (o
-  # runner ubuntu tem) e são `#[ignore]` no `cargo test` normal — aparecem como
-  # "ignored", nunca verdes por engano. Aqui rodam DE VERDADE com
-  # `--include-ignored`. O helper `daemon_obrigatorio` FALHA se o daemon não
-  # responder — um teste de contenção que "passa" sem containerizar nada seria
-  # um falso positivo catastrófico. Job separado (precisa do daemon + pull da
-  # imagem), não arrisca o gate `rust`.
+  # Testes de integração pesada do forge-tools (`#[ignore]` no `cargo test`
+  # normal — aparecem como "ignored", nunca verdes por engano; aqui rodam DE
+  # VERDADE com `--include-ignored`). Job separado porque exigem dependências
+  # externas que o gate `rust` não deve arriscar:
+  #  - Contenção do sandbox Docker (Fase 6 Onda 2): os quatro vetores (escrita
+  #    fora do mount, rede proibida, timeout, memória) exigem um daemon Docker (o
+  #    runner ubuntu tem). O helper `daemon_obrigatorio` FALHA se o daemon não
+  #    responder — um teste de contenção que "passa" sem containerizar nada seria
+  #    um falso positivo catastrófico.
+  #  - Cliente LSP real (Fase 6 Onda 5): dirige o rust-analyzer DE VERDADE contra
+  #    um fixture cargo e assere a definição semântica por igualdade. A componente
+  #    `rust-analyzer` é instalada abaixo; a guarda no teste FALHA se ela faltar
+  #    (mesma postura anti-falso-positivo do sandbox).
   sandbox:
     runs-on: ubuntu-latest
     steps:
@@ -95,4 +100,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Confirma que o daemon responde antes — o teste depende dele de propósito.
       - run: docker version
+      # O cliente LSP real precisa da componente rust-analyzer (a guarda do teste
+      # falha se ela não estiver disponível).
+      - run: rustup component add rust-analyzer
       - run: cargo test -p forge-tools -- --include-ignored
