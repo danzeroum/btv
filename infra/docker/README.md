@@ -1,0 +1,85 @@
+# Forge no Docker — imagem de TESTE / homologação
+
+> **Enquadramento honesto (leia primeiro).** O Forge é **local-first**: o produto
+> é um CLI/TUI de desenvolvedor, e o `forge dashboard` amarra em `127.0.0.1` por
+> **decisão de arquitetura** (`crates/forge-server/src/lib.rs:6`,
+> `crates/forge-cli/src/main.rs:247`), não config. Não existe caminho de deploy
+> hospedado (`infra/README.md`). Esta imagem **não** transforma o Forge num
+> serviço web multiusuário — ela empacota o CLI + o sidecar Python para você
+> **rodar o Forge como ferramenta, dentro de um container, na sua VPS via SSH**.
+> É homologação legítima do produto no modo em que ele foi projetado — só não é
+> "subir um serviço exposto na internet".
+
+## Build & uso
+
+A partir da **raiz do repositório** (o contexto precisa da árvore toda):
+
+```sh
+docker build -f infra/docker/Dockerfile -t forge:test .
+
+# shell interativo com o `forge` no PATH e o seu projeto montado em /work:
+docker run --rm -it -e ANTHROPIC_API_KEY=sk-ant-... -v "$PWD":/work forge:test
+```
+
+Ou via compose:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+docker compose -f infra/docker/docker-compose.yml run --rm forge
+```
+
+Dentro do container, na ordem recomendada de teste:
+
+```sh
+forge verify                 # 1. self-teste (mesmo comando do CI) — valida o ambiente
+forge run "descreva este repo"   # 2. tarefa única (caminho mais simples)
+forge chat                   # 3. sessão interativa
+forge squad "tarefa multi-agente"# 4. exercita o sidecar Python (squad)
+```
+
+## As 4 pegadinhas de container (o que muda vs. rodar na máquina)
+
+1. **`FORGE_PYTHON_DIR` é obrigatório** — e a imagem já o define
+   (`/app/python`). Sem essa env var, o sidecar procura um caminho de
+   compile-time inexistente na imagem e o **squad/promptforge degrada em
+   silêncio** para agente-único (`crates/forge-cli/src/sidecar.rs:20`). Se você
+   montar/rebuild de outro jeito, mantenha `FORGE_PYTHON_DIR` apontando para o
+   `python/` com `uv sync` já rodado.
+
+2. **A key só no ambiente** (`-e ANTHROPIC_API_KEY=...`), nunca num arquivo
+   commitado. A arquitetura garante que a key só existe no processo Rust
+   (ADR 0001) — o lado Python nunca a vê.
+
+3. **Sandbox de skills de terceiro = Docker-in-Docker.** O sandbox conecta ao
+   daemon local (`bollard::Docker::connect_with_local_defaults()`,
+   `crates/forge-tools/src/sandbox.rs:99`). Rodando *dentro* de um container, você
+   precisa expor o socket do host: `-v /var/run/docker.sock:/var/run/docker.sock`.
+   Sem isso, skills de terceiro **fail-close** (recusam rodar — é o design, não
+   um bug). **Caveat de path:** com o socket montado, os contêineres do sandbox
+   sobem no daemon do *host*, mas os caminhos que o forge passa (o mount da skill)
+   são internos ao *container* — então o sandbox de terceiro via DinD é a parte
+   mais frágil; deixe-a por último no seu teste.
+
+4. **Dashboard em `127.0.0.1` = loopback do container.** Um `-p 7878:7878` **não**
+   alcança um app amarrado em `127.0.0.1` (o publish mapeia para `0.0.0.0` do
+   container). Para ver o dashboard: use `--network host` (Linux) e um túnel SSH
+   da sua máquina — `ssh -L 7878:127.0.0.1:7878 usuario@vps` — e abra
+   `http://127.0.0.1:7878` local. Além disso, o dashboard serve a SPA de
+   `web/dist`, que esta imagem **não** builda (foco no CLI); para tê-lo, builde o
+   frontend (`cd web && pnpm i && pnpm build`) e aponte `FORGE_WEB_DIR`. **Nunca**
+   exponha a porta direto na internet.
+
+## Quando você quiser expor de verdade (multiusuário, na internet)
+
+Isso **não** é "seguir um passo a passo" — é engenharia ainda não feita neste
+repo: bind público (trocar o `127.0.0.1`), TLS + proxy reverso, autenticação,
+hardening. Trate como uma **fase nova a planejar**, não como config residual do
+que existe. Esta imagem é para teste seu, não para produção exposta.
+
+## Nota
+
+Esta imagem foi escrita a partir de passos **verificados** (o `cargo build
+--release -p forge-cli` e o `uv sync` rodam limpos no repo), mas **não foi
+buildada num daemon Docker** durante a autoria (o ambiente de dev não tinha um).
+Buildе-a na sua VPS; se algo faltar no runtime slim, o ajuste típico é uma lib de
+sistema a mais no `apt-get install` do estágio `runtime`.

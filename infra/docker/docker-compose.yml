@@ -1,0 +1,33 @@
+# Compose de TESTE do Forge — NÃO é deploy de produção (ver infra/README.md).
+# Conveniência para subir um container onde você usa o `forge` como ferramenta.
+#
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   docker compose -f infra/docker/docker-compose.yml run --rm forge
+#   # dentro do container: forge verify | forge run "..." | forge chat | forge squad "..."
+services:
+  forge:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    image: forge:test
+    stdin_open: true # -i
+    tty: true # -t — necessário para forge chat/squad interativos
+    environment:
+      # A key vive SÓ no processo Rust (ADR 0001). Passe pelo ambiente, nunca
+      # commitada. Herda do host se você exportou ANTHROPIC_API_KEY antes.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # O projeto que o agente vai ler/editar, montado em /work.
+      - ../../:/work:rw
+      # --- SANDBOX (skills de terceiro, critério nº 1 da Fase 6) ---
+      # Descomente para dar ao forge acesso ao daemon Docker do host (DinD).
+      # Sem isto, skills de terceiro fail-CLOSE (por design, não é bug).
+      # Atenção à path-translation: os caminhos que o forge passa ao daemon são
+      # internos ao container; o daemon do host os interpreta como do host.
+      # - /var/run/docker.sock:/var/run/docker.sock
+  # --- DASHBOARD (opcional) ---
+  # `forge dashboard` amarra em 127.0.0.1 (loopback do CONTAINER) e serve a SPA
+  # de web/dist (que esta imagem não builda). Para testá-lo: adicione
+  # `network_mode: host` acima, garanta web/dist buildado + FORGE_WEB_DIR, e faça
+  # um túnel SSH da sua máquina (ssh -L 7878:127.0.0.1:7878 user@vps). Nunca
+  # exponha a porta direto na internet — não foi projetada para isso.
