@@ -10,10 +10,12 @@ pub mod edit;
 pub mod grep;
 pub mod read;
 pub mod registry;
+pub mod sandbox;
 pub mod skill;
 
 pub use diff::{format_diff, line_diff, DiffLine};
 pub use registry::ToolRegistry;
+pub use sandbox::{Sandbox, SandboxError, SandboxOutput};
 pub use skill::SkillTool;
 
 use serde::{Deserialize, Serialize};

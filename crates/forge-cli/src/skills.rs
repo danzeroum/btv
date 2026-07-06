@@ -197,9 +197,7 @@ permissions = ["read"]
     /// quebrado (manifesto inválido, padrão perigoso) entrar no repo.
     #[test]
     fn built_ins_do_repo_vetam_e_carregam() {
-        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..");
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
         let skills_dir = repo_root.join("skills");
         if !skills_dir.is_dir() {
             eprintln!(
@@ -210,8 +208,14 @@ permissions = ["read"]
         }
         let mut reg = ToolRegistry::default_set(&repo_root);
         let n = load_skills(&mut reg, &skills_dir);
-        assert!(n >= 2, "esperava >=2 built-ins vetados e carregados, veio {n}");
-        assert!(reg.get("word-count").is_some(), "word-count deveria carregar");
+        assert!(
+            n >= 2,
+            "esperava >=2 built-ins vetados e carregados, veio {n}"
+        );
+        assert!(
+            reg.get("word-count").is_some(),
+            "word-count deveria carregar"
+        );
         assert!(reg.get("uppercase").is_some(), "uppercase deveria carregar");
     }
 }
