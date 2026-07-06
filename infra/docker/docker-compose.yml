@@ -1,9 +1,12 @@
 # Compose de TESTE do Forge — NÃO é deploy de produção (ver infra/README.md).
 # Conveniência para subir um container onde você usa o `forge` como ferramenta.
 #
-#   export ANTHROPIC_API_KEY=sk-ant-...
+#   export DEEPSEEK_API_KEY=sk-...      # ou ANTHROPIC_API_KEY / OPENAI_API_KEY
 #   docker compose -f infra/docker/docker-compose.yml run --rm forge
-#   # dentro do container: forge verify | forge run "..." | forge chat | forge squad "..."
+#   # dentro do container: forge verify | forge run --model deepseek-chat "..." | ...
+#
+# Com DeepSeek, o --model deepseek-chat é OBRIGATÓRIO em run/chat/squad — o
+# gateway não troca o modelo por você (ver "Usando a API da DeepSeek" no README).
 services:
   forge:
     build:
@@ -13,9 +16,14 @@ services:
     stdin_open: true # -i
     tty: true # -t — necessário para forge chat/squad interativos
     environment:
-      # A key vive SÓ no processo Rust (ADR 0001). Passe pelo ambiente, nunca
-      # commitada. Herda do host se você exportou ANTHROPIC_API_KEY antes.
+      # A(s) key(s) vivem SÓ no processo Rust (ADR 0001). Passe pelo ambiente,
+      # nunca commitada. Cada uma herda do host se você a exportou antes; deixe
+      # vazia a(s) que não for usar — só ANTHROPIC_API_KEY tem prioridade na
+      # cadeia de fallback (Anthropic → DeepSeek → OpenAI, gateway.rs:44-45), então
+      # para testar só a DeepSeek não defina ANTHROPIC_API_KEY.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       # O projeto que o agente vai ler/editar, montado em /work.
       - ../../:/work:rw

@@ -37,6 +37,43 @@ forge chat                   # 3. sessão interativa
 forge squad "tarefa multi-agente"# 4. exercita o sidecar Python (squad)
 ```
 
+## Usando a API da DeepSeek (em vez da Anthropic)
+
+O gateway (`crates/forge-llm/src/gateway.rs`) já reconhece DeepSeek nativamente —
+mesma cadeia de fallback, mesmo protocolo (compatível com OpenAI):
+
+```sh
+docker run --rm -it -e DEEPSEEK_API_KEY=sk-... -v "$PWD":/work forge:test
+```
+
+**⚠️ Passo obrigatório: sempre passe `--model deepseek-chat`.** O gateway **não**
+escolhe o provider pelo nome do modelo — ele manda o texto de `--model` **como
+está** no corpo da requisição, para qualquer provider configurado
+(`openai.rs:22: "model": req.model`). O default do CLI é `claude-sonnet-5`
+(`forge-cli/src/main.rs`); sem sobrescrever, o Forge mandaria `"claude-sonnet-5"`
+para a API da DeepSeek, que rejeita (400 — modelo desconhecido). Então:
+
+```sh
+forge run --model deepseek-chat "descreva este repo"
+forge chat --model deepseek-chat
+forge squad --model deepseek-chat "tarefa multi-agente"
+```
+
+Modelos disponíveis na DeepSeek hoje: `deepseek-chat` (V3, uso geral) e
+`deepseek-reasoner` (R1, raciocínio — mais lento). Confirme na doc oficial da
+DeepSeek o nome exato vigente e a janela de contexto real do modelo escolhido;
+`deepseek-chat` sem sufixo classifica como tier **Medium** no Forge
+(`model_tier.rs`, compaction a 90% da janela). Se a janela real do seu modelo for
+menor que os 200k-tokens padrão do CLI, passe `--context-window` com o valor
+correto — senão a compaction dispara tarde demais e uma conversa longa pode
+estourar o limite real da API antes do Forge perceber.
+
+**Fallback em cadeia:** se você setar `ANTHROPIC_API_KEY` **e**
+`DEEPSEEK_API_KEY` juntas, a ordem é Anthropic → DeepSeek → OpenAI
+(`gateway.rs:44-45`) — o Forge tenta Anthropic primeiro e só cai para DeepSeek se
+a chamada falhar. Para testar **só** a DeepSeek, não defina `ANTHROPIC_API_KEY`
+no ambiente do container.
+
 ## As 4 pegadinhas de container (o que muda vs. rodar na máquina)
 
 1. **`FORGE_PYTHON_DIR` é obrigatório** — e a imagem já o define

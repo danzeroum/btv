@@ -9,12 +9,12 @@
 # Build (a partir da RAIZ do repositório):
 #   docker build -f infra/docker/Dockerfile -t forge:test .
 # Uso (shell interativo com o `forge` no PATH):
-#   docker run --rm -it -e ANTHROPIC_API_KEY=sk-ant-... -v "$PWD":/work forge:test
-#   # dentro do container:
-#   forge verify        # self-teste (mesmo comando do CI)
-#   forge run "..."     # tarefa única
-#   forge chat          # sessão interativa
-#   forge squad "..."   # squad multi-agente (usa o sidecar Python)
+#   docker run --rm -it -e DEEPSEEK_API_KEY=sk-... -v "$PWD":/work forge:test
+#   # dentro do container (com DeepSeek, --model é OBRIGATÓRIO — ver docker/README.md):
+#   forge verify                                   # self-teste (mesmo comando do CI)
+#   forge run --model deepseek-chat "..."          # tarefa única
+#   forge chat --model deepseek-chat               # sessão interativa
+#   forge squad --model deepseek-chat "..."        # squad multi-agente (usa o sidecar Python)
 #
 # Pegadinhas (detalhe em infra/docker/README.md): dashboard em 127.0.0.1,
 # sandbox de skills de terceiro exige o socket do Docker (DinD), e a key só
