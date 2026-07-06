@@ -8,6 +8,7 @@ description = "Stubs gRPC gerados de schemas/proto (tonic) — ativado na Fase 3
 [dependencies]
 tonic.workspace = true
 prost.workspace = true
+serde.workspace = true
 
 [build-dependencies]
 tonic-build.workspace = true
