@@ -40,7 +40,55 @@ pub fn build_registry(root: &Path) -> ToolRegistry {
     // Servidores MCP declarados em `.forge/mcp.toml` (Fase 6 Onda 4): tools
     // externas expostas no registry, sob o mesmo motor de permissões.
     load_mcp_servers(&mut registry, root);
+    // Language servers declarados em `.forge/lsp.toml` (Fase 6 Onda 5): consultas
+    // semânticas (definição/referências/diagnósticos) expostas como tools.
+    load_lsp_servers(&mut registry, root);
     registry
+}
+
+/// Carrega language servers declarados em `<root>/.forge/lsp.toml` (Fase 6 Onda
+/// 5) e registra suas consultas (`lsp__<server>__{definition,references,
+/// diagnostics}`) no registry, sob o permission-engine. **Fail-soft:** sem
+/// config ou config inválida → loga e segue. O server em si **não** é subido
+/// aqui (é caro — indexa o workspace); sobe preguiçosamente no primeiro uso, e
+/// um comando inválido só falha ali (não derruba o CLI). A raiz analisada é o
+/// próprio workspace do Forge.
+fn load_lsp_servers(registry: &mut ToolRegistry, root: &Path) {
+    let config_path = root.join(".forge").join("lsp.toml");
+    let Ok(raw) = std::fs::read_to_string(&config_path) else {
+        return;
+    };
+    #[derive(serde::Deserialize)]
+    struct LspConfigFile {
+        #[serde(default)]
+        server: Vec<ServerEntry>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ServerEntry {
+        id: String,
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+    }
+    let cfg: LspConfigFile = match toml::from_str(&raw) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  lsp: .forge/lsp.toml inválido ({e}) — ignorado");
+            return;
+        }
+    };
+    for s in cfg.server {
+        let config = forge_tools::LspServerConfig {
+            id: s.id.clone(),
+            command: s.command,
+            args: s.args,
+            root: root.to_path_buf(),
+        };
+        let n = forge_tools::lsp::register_lsp_server(registry, &config);
+        if n > 0 {
+            eprintln!("  lsp '{}': {n} consulta(s) registrada(s)", s.id);
+        }
+    }
 }
 
 /// Carrega servidores MCP declarados em `<root>/.forge/mcp.toml` (Fase 6 Onda 4)
@@ -397,5 +445,36 @@ permissions = ["read"]
             4,
             "nenhuma tool de um servidor MCP que não sobe"
         );
+    }
+
+    /// Onda 5 — sem `.forge/lsp.toml`, o registry fica só com os built-in.
+    #[test]
+    fn lsp_sem_config_nao_altera_o_registry() {
+        let root = tempfile::tempdir().unwrap();
+        let reg = build_registry(root.path());
+        assert_eq!(reg.iter().count(), 4, "sem .forge/lsp.toml, só os built-in");
+    }
+
+    /// Onda 5 — um language server declarado registra suas 3 consultas
+    /// (definition/references/diagnostics) **sem subir o processo** (é
+    /// preguiçoso): as tools existem no registry mesmo que o comando não exista
+    /// (só falharia no primeiro uso).
+    #[test]
+    fn lsp_server_declarado_registra_tres_consultas_lazy() {
+        let root = tempfile::tempdir().unwrap();
+        let forge = root.path().join(".forge");
+        fs::create_dir_all(&forge).unwrap();
+        fs::write(
+            forge.join("lsp.toml"),
+            "[[server]]\nid = \"rust\"\ncommand = \"comando-lsp-inexistente-xyz\"\n",
+        )
+        .unwrap();
+        let reg = build_registry(root.path());
+        // 4 built-in + 3 consultas LSP, sem ter subido processo nenhum.
+        assert_eq!(reg.iter().count(), 7, "4 built-in + 3 consultas LSP");
+        assert!(reg.get("lsp__rust__definition").is_some());
+        assert!(reg.get("lsp__rust__references").is_some());
+        assert!(reg.get("lsp__rust__diagnostics").is_some());
+        assert!(reg.get("bash").is_some());
     }
 }

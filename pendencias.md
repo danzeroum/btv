@@ -51,4 +51,54 @@
 - **[nota] `rmcp` v2.1.0** entrou como dep direta de `forge-tools` (features
   `client,server,transport-child-process,transport-io`), não em
   `[workspace.dependencies]`. Dep pesada, mas é a lib nomeada pelo PLANO. Passou
-  no `cargo deny` local? — verificar no CI (job `deny`).
+  no `cargo deny` local? — verificar no CI (job `deny`). **Resolvido:** passou no
+  job `deny` da PR #14 (merge 83a61c4).
+
+## Onda 5 — LSP (rust-analyzer/pyright)
+
+- **[decisão] Zero dependência nova — framing LSP hand-rolled.** O protocolo LSP
+  é JSON-RPC com framing `Content-Length` sobre stdio, simples o bastante para
+  escrever à mão (só `serde_json`, que já é dep). **Não** puxei `lsp-types`/
+  `lsp-server`/`async-lsp` — mantém o `cargo deny` leve e nos dá controle total.
+  Provado por um probe contra o rust-analyzer REAL antes de escrever o módulo (o
+  framing bate exatamente; a definição de um símbolo volta na posição certa).
+- **[decisão] Sessão persistente preguiçosa (≠ connect-per-call do MCP).** O
+  language server é caro de subir (rust-analyzer indexa o workspace, ~1-3s). Ao
+  contrário do MCP (conecta por chamada), a sessão LSP sobe **uma vez** no
+  primeiro uso e as consultas seguintes reusam o processo já indexado
+  (`Arc<LspSession>` compartilhada pelas 3 tools do server). Processo morto no
+  `Drop` (lição do process-group da Fase 4 — nada de órfão).
+- **[decisão] Registro é lazy — não sobe o server no load.** `register_lsp_server`
+  só registra as 3 tools (`lsp__<id>__{definition,references,diagnostics}`); o
+  processo sobe no primeiro `run`. Então um comando LSP inválido em `.forge/
+  lsp.toml` **não** derruba nem trava o `build_registry` (fail-soft): só falha na
+  primeira invocação daquela tool. As posições são **0-indexed** (convenção LSP),
+  documentado no schema/descrição das tools.
+- **[decisão] Prova em duas camadas.** (1) Teste **hermético** com server fixture
+  (`forge_lsp_fixture`, sempre roda, sem depender do rust-analyzer instalado) —
+  prova framing/handshake/ida-e-volta do cliente. (2) Teste contra o
+  **rust-analyzer REAL** (`#[ignore]`, roda no job `sandbox` do CI que instala a
+  componente; guarda que FALHA se ela faltar) — prova a semântica: a definição de
+  `alvo` volta em `lib.rs:0:7` por igualdade, referências incluem o call-site,
+  diagnósticos pegam um erro de sintaxe. Mesma postura anti-falso-positivo do
+  sandbox (Onda 2).
+- **[dúvida/limitação] Leitura síncrona sob o lock (sem reader de fundo).** Entre
+  consultas, notificações do server (`$/progress`, `publishDiagnostics`) ficam no
+  buffer do pipe do SO até a próxima consulta drená-las. Para o fixture e uso
+  típico é seguro (buffer de 64KB); um projeto gigante com enxurrada de
+  notificações poderia, em teoria, encher o buffer entre consultas. **Futuro
+  (endurecimento):** thread de fundo drenando stdout num canal. Aceitei a versão
+  simples porque a consulta drena tudo ao ler até o próprio id.
+- **[dúvida/limitação] Diagnósticos são best-effort/assíncronos.** O LSP empurra
+  `publishDiagnostics` após o `didOpen`, sem sinal claro de "assentou". Bombeio
+  round-trips baratos (`documentSymbol`) até aparecer um diagnóstico ou estourar
+  o orçamento (`DIAG_BUDGET` 12s; sai em ~3s após a 1ª notificação se vier
+  vazio). Arquivo limpo → devolve "sem diagnósticos" (honesto). Testei com erro
+  de **sintaxe** (reportado nativamente, rápido) e não de tipo (que dependeria de
+  `cargo check`/flycheck, mais lento e flaky).
+- **[dúvida/defer] Frontend LSP não ligado.** Não há mock de LSP no frontend a
+  ligar (diferente do MCP/skills); as consultas LSP são tools que o agente usa no
+  loop, não um painel. Sem trabalho de UI nesta onda.
+- **[nota] rust-analyzer é uma componente do rustup**, não vem por padrão. O job
+  `sandbox` do CI roda `rustup component add rust-analyzer` antes do
+  `--include-ignored`. Local: idem para exercitar o caminho real.
