@@ -67,6 +67,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # `forge verify` roda `cargo test --workspace` como parte dos
+      # default_steps() — precisa de uv pelo mesmo motivo que o job `rust`
+      # precisa (ver comentário lá).
+      - uses: astral-sh/setup-uv@v5
+      - run: cd python && uv sync
       - run: cargo run -p forge-cli -- verify --out verification-evidence.json
       - uses: actions/upload-artifact@v4
         if: always()

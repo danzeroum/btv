@@ -79,6 +79,19 @@ mod tests {
 
     #[tokio::test]
     async fn processo_inexistente_falha_rapido_com_unavailable() {
+        // Mesmo padrão de pulo gracioso de `python_sidecar.rs`/`squad_e2e.rs`:
+        // sem "uv" no ambiente, `spawn()` já falha no `Command::spawn()` (erro
+        // de processo inexistente, não o que este teste quer exercitar), então
+        // pular é mais correto que um unwrap ambíguo.
+        if std::process::Command::new("uv")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("uv ausente no ambiente — pulando teste");
+            return;
+        }
+
         let dir = tempfile::tempdir().unwrap();
         let sock = dir.path().join("s.sock");
         // "uv" existe no ambiente de dev, mas sem o pacote forge_promptforge
