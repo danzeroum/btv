@@ -65,7 +65,12 @@ pub enum SessionEvent {
         scope: String,
     },
     /// Fim do turno — a task de `spawn_blocking` terminou sem erro.
-    Done,
+    /// `ledger_verified` é a contagem real de `Session::verify()` (a mesma
+    /// cadeia de hash que `.forge/forge.db` guarda) — nunca um número
+    /// fabricado, mesmo no modo roteirizado (`FORGE_SCRIPTED=1`).
+    Done {
+        ledger_verified: u64,
+    },
     Error {
         message: String,
     },
@@ -325,6 +330,30 @@ pub struct SessionTaskSpec {
     pub model: String,
     pub system: String,
     pub task: String,
+    /// Raiz do workspace — abre o MESMO ledger (`.forge/forge.db`) que o CLI
+    /// usa, para que `Done.ledger_verified` seja uma contagem real, mesmo no
+    /// modo roteirizado.
+    pub root: std::path::PathBuf,
+}
+
+/// Publica `Done` com a contagem real do ledger (`Session::verify()`) e
+/// libera a sessão para a próxima mensagem — chamado só no caminho de
+/// sucesso; erro é publicado inline no chamador (que tem o contexto do `e`).
+fn finish_task_ok(
+    hub: &SessionHub,
+    session_id: &str,
+    ledger_session: &mut crate::session::Session,
+    steps: usize,
+) {
+    let _ = ledger_session.finish(true, steps);
+    let verified = ledger_session.verify().unwrap_or(0);
+    hub.publish(
+        session_id,
+        SessionEvent::Done {
+            ledger_verified: verified,
+        },
+    );
+    hub.finish_busy(session_id);
 }
 
 /// Roda uma tarefa do agent loop numa sessão, publicando `SessionEvent`s no
@@ -332,6 +361,9 @@ pub struct SessionTaskSpec {
 /// `spawn_blocking` (nunca `tokio::spawn` comum, ADR 0020) — o resolver
 /// bloqueia a thread até a UI responder ou o timeout expirar; um
 /// `tokio::spawn` comum esgotaria uma worker-thread do reactor sob N sessões.
+/// Grava no MESMO ledger que `forge run` usa — inclusive no modo
+/// roteirizado, para que a fronteira "ledger íntegro: N" nunca seja de
+/// fachada.
 pub fn spawn_session_task<G>(
     hub: SessionHub,
     session_id: String,
@@ -346,36 +378,52 @@ pub fn spawn_session_task<G>(
         model,
         system,
         task,
+        root,
     } = spec;
     tokio::task::spawn_blocking(move || {
         let rt_handle = tokio::runtime::Handle::current();
-        let agent_loop = AgentLoop {
-            generator: generator.as_ref(),
-            tools: &tools,
-            permissions,
-            model,
-            system,
-            max_steps: 30,
-            max_tokens: 4096,
-        };
-        let mut resolver = WebPermissionResolver {
-            hub: hub.clone(),
-            session_id: session_id.clone(),
-        };
-        let hub_events = hub.clone();
-        let session_id_events = session_id.clone();
-        let mut on_event = move |e: LoopEvent| {
-            hub_events.publish(&session_id_events, SessionEvent::from(e));
-        };
-        let result = rt_handle.block_on(agent_loop.run(&task, &mut resolver, &mut on_event));
-        match result {
-            Ok(_outcome) => hub.publish(&session_id, SessionEvent::Done),
-            Err(e) => hub.publish(
-                &session_id,
-                SessionEvent::Error {
-                    message: e.to_string(),
-                },
-            ),
+        let outcome: anyhow::Result<(usize, crate::session::Session)> = (|| {
+            let mut ledger_session = crate::session::Session::open(&root, &task, &model)?;
+            let agent_loop = AgentLoop {
+                generator: generator.as_ref(),
+                tools: &tools,
+                permissions,
+                model,
+                system,
+                max_steps: 30,
+                max_tokens: 4096,
+            };
+            let mut resolver = WebPermissionResolver {
+                hub: hub.clone(),
+                session_id: session_id.clone(),
+            };
+            let hub_events = hub.clone();
+            let session_id_events = session_id.clone();
+            // Sem `move`: `ledger_session` é só emprestada (capturada por
+            // `&mut`) — precisamos dela de volta depois do `run` para
+            // `finish`/`verify` (ver comentário no tipo de retorno acima).
+            let mut on_event = |e: LoopEvent| {
+                ledger_session.record(&e);
+                hub_events.publish(&session_id_events, SessionEvent::from(e));
+            };
+            let result = rt_handle.block_on(agent_loop.run(&task, &mut resolver, &mut on_event));
+            Ok((result?.steps, ledger_session))
+        })();
+        match outcome {
+            Ok((steps, mut ledger_session)) => {
+                finish_task_ok(&hub, &session_id, &mut ledger_session, steps)
+            }
+            Err(e) => {
+                // Falha antes/durante a abertura do ledger — sem sessão para
+                // registrar `finish`, mas ainda libera a sessão e avisa.
+                hub.publish(
+                    &session_id,
+                    SessionEvent::Error {
+                        message: e.to_string(),
+                    },
+                );
+                hub.finish_busy(&session_id);
+            }
         }
     });
 }
@@ -394,7 +442,7 @@ fn spawn_message_task(
 ) {
     tokio::task::spawn_blocking(move || {
         let rt_handle = tokio::runtime::Handle::current();
-        let outcome: anyhow::Result<forge_core::TurnSummary> = (|| {
+        let outcome: anyhow::Result<(usize, crate::session::Session)> = (|| {
             let tools = crate::skills::build_registry(&root);
             let agent_loop = crate::build_loop(generator.as_ref(), &opts, &tools)?;
             let mut ledger_session = crate::session::Session::open(&root, &message, &opts.model)?;
@@ -417,7 +465,8 @@ fn spawn_message_task(
             };
             let hub_events = hub.clone();
             let session_id_events = session_id.clone();
-            let mut on_event = move |event: LoopEvent| {
+            // Sem `move` — mesma razão do `spawn_session_task`.
+            let mut on_event = |event: LoopEvent| {
                 ledger_session.record(&event);
                 hub_events.publish(&session_id_events, SessionEvent::from(event));
             };
@@ -426,21 +475,23 @@ fn spawn_message_task(
                 &mut resolver,
                 &mut on_event,
             ));
-            let persisted = durable.persist_new().unwrap_or(0);
-            let _ = persisted;
-            let summary = result?;
-            Ok(summary)
+            let _persisted = durable.persist_new().unwrap_or(0);
+            Ok((result?.steps, ledger_session))
         })();
         match outcome {
-            Ok(_) => hub.publish(&session_id, SessionEvent::Done),
-            Err(e) => hub.publish(
-                &session_id,
-                SessionEvent::Error {
-                    message: e.to_string(),
-                },
-            ),
+            Ok((steps, mut ledger_session)) => {
+                finish_task_ok(&hub, &session_id, &mut ledger_session, steps)
+            }
+            Err(e) => {
+                hub.publish(
+                    &session_id,
+                    SessionEvent::Error {
+                        message: e.to_string(),
+                    },
+                );
+                hub.finish_busy(&session_id);
+            }
         }
-        hub.finish_busy(&session_id);
     });
 }
 
@@ -518,6 +569,7 @@ async fn send_message_handler(
                 model: opts.model.clone(),
                 system: "modo roteirizado (FORGE_SCRIPTED=1) — sem provider real".into(),
                 task: body.message,
+                root,
             },
         );
         return StatusCode::ACCEPTED.into_response();
@@ -884,6 +936,7 @@ mod tests {
                 model: "scripted-model".into(),
                 system: "sistema de teste".into(),
                 task: "faça algo".into(),
+                root: dir.path().to_path_buf(),
             },
         );
 
@@ -994,6 +1047,7 @@ mod tests {
                 model: "scripted-model".into(),
                 system: "sistema de teste".into(),
                 task: "faça algo".into(),
+                root: dir.path().to_path_buf(),
             },
         );
 
@@ -1073,6 +1127,7 @@ mod tests {
                 model: "scripted-model".into(),
                 system: "sistema de teste".into(),
                 task: "faça algo".into(),
+                root: dir.path().to_path_buf(),
             },
         );
         // Espera o pedido ser publicado no hub antes de "abrir o navegador".
@@ -1241,6 +1296,36 @@ mod tests {
             e.get("type").map(|t| t == "tool_finished").unwrap_or(false)
                 && e.get("ok").map(|ok| ok == true).unwrap_or(false)
         }));
+
+        // `Done.ledger_verified` bate, por igualdade, com uma leitura
+        // independente do MESMO `.forge/forge.db` — nunca um número
+        // fabricado, nem no modo roteirizado.
+        let reported = events
+            .iter()
+            .find_map(|e| {
+                if e.get("type")? == "done" {
+                    e.get("ledger_verified")?.as_u64()
+                } else {
+                    None
+                }
+            })
+            .expect("evento done com ledger_verified");
+        let ledger = forge_store::LedgerStore::open(
+            dir.path().join(".forge").join("forge.db").to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reported, ledger.verify_chain().unwrap());
+        assert!(reported > 0);
+
+        // A sessão não fica presa em "busy" depois do `done` — uma segunda
+        // mensagem na mesma sessão é aceita normalmente.
+        let second_resp = client
+            .post(format!("http://{addr}/api/session/s1/message"))
+            .json(&serde_json::json!({"message": "de novo"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(second_resp.status(), reqwest::StatusCode::ACCEPTED);
 
         std::env::set_current_dir(orig_cwd).unwrap();
     }

@@ -1,16 +1,9 @@
 import { useState } from 'react'
 import { useAppDispatch, useAppState } from '../../../state/AppContext'
-import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { useSession } from '../../../state/SessionContext'
 import { useToast } from '../../primitives/Toast'
 import { primaryModelName } from '../../../api/models'
-import {
-  INITIAL_TRANSCRIPT,
-  SESSION_HEADER,
-  TOOL_POLICIES,
-  streamAgent,
-  toggleToolPolicy,
-  type TranscriptTurn,
-} from '../../../api/session'
+import { SESSION_HEADER, TOOL_POLICIES, toggleToolPolicy, type TranscriptTurn } from '../../../api/session'
 
 const PREFIX_COLOR: Record<TranscriptTurn['kind'], string> = {
   user: 'var(--py)',
@@ -62,20 +55,18 @@ export function Sessao() {
   const dispatch = useAppDispatch()
   const toast = useToast()
   const { modelTier, agentProfile } = useAppState()
-  const [transcript, setTranscript] = useState(INITIAL_TRANSCRIPT)
+  const { sessionId, transcript, streamingText, busy, ledgerVerified, lastError, sendMessage } = useSession()
   const [input, setInput] = useState('')
   const [policies, setPolicies] = useState(TOOL_POLICIES)
-  const send = useAsyncAction(streamAgent)
 
   async function handleSend() {
-    if (!input.trim()) return
+    if (!input.trim() || busy) return
     const text = input
     setInput('')
     try {
-      const newTurns = await send.run(text)
-      setTranscript((prev) => [...prev, ...newTurns])
+      await sendMessage(text)
     } catch {
-      toast.push('error', 'falha ao enviar mensagem (mock)')
+      toast.push('error', 'falha ao enviar mensagem')
     }
   }
 
@@ -93,16 +84,16 @@ export function Sessao() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--faint)', marginBottom: 8 }}>
           {primaryModelName(modelTier)} · agente {agentProfile} · {SESSION_HEADER.provider} · cache{' '}
-          {SESSION_HEADER.cacheOn ? 'on' : 'off'} · sessão {SESSION_HEADER.sessionId}
+          {SESSION_HEADER.cacheOn ? 'on' : 'off'} · sessão {sessionId.slice(0, 8)}
         </div>
 
         <div className="stack" style={{ flex: 1, overflow: 'auto', paddingRight: 8 }}>
           {transcript.map((t) => (
             <TurnView key={t.id} turn={t} />
           ))}
-          {send.state.status === 'loading' && (
+          {busy && (
             <div className="mono cursor-blink" style={{ color: 'var(--amber)', fontSize: 13 }}>
-              forge ▸ …
+              forge ▸ {streamingText || '…'}
             </div>
           )}
         </div>
@@ -111,7 +102,11 @@ export function Sessao() {
           className="mono"
           style={{ borderTop: '1px solid var(--line)', padding: '8px 0', fontSize: 11.5, color: 'var(--faint)' }}
         >
-          ⋯ concluído em 6 passos · 8 mensagens persistidas · ledger íntegro: 12 entradas ✓ · cache hit 41%
+          {lastError
+            ? `✗ erro: ${lastError}`
+            : ledgerVerified != null
+              ? `⋯ ledger íntegro: ${ledgerVerified} entrada(s) ✓`
+              : '⋯ nenhum turno concluído ainda nesta sessão'}
         </div>
 
         <div className="row" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>

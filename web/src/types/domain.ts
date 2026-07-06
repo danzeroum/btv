@@ -31,14 +31,6 @@ export interface ModelTier {
   label: string
 }
 
-export type PermissionDecision = 'allow' | 'deny' | 'always'
-
-export interface PermissionRequest {
-  id: string
-  tool: string
-  scope: string
-}
-
 export interface SquadAgentId {
   id: 'architect' | 'developer' | 'auditor' | 'designer' | 'ops'
 }
