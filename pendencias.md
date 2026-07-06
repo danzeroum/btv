@@ -186,3 +186,31 @@
   telemetria. A/B multivariante (>2, com correção de comparações múltiplas) é onda
   futura. A métrica hoje é `success_rate` (taxa de sucesso binária); outras
   métricas (latência P95, custo) são extensão futura.
+
+## Onda 8 — bench criterion + k6 + infra (critério nº 3) — parte 1 (benches)
+
+> Dividi a Onda 8 em duas PRs estratégicas: **8a** (esta) = benches criterion +
+> `ScriptedGenerator` (Rust puro, baixo risco); **8b** = endpoint de carga + k6 +
+> `infra/` (encanamento de CI, risco isolado). O `ScriptedGenerator` é a fundação
+> compartilhada (o "generator sem key" que o k6 também usará).
+
+- **[decisão] `ScriptedGenerator` promovido a tipo público de `forge-llm`.** Antes
+  o gerador roteirizado só existia como test double em `#[cfg(test)]`
+  (`agent_loop.rs`). Promovi um `ScriptedGenerator::echo(text)` — implementa o
+  `Generator` **real**, sem provider, sem key, determinístico e reusável (imutável;
+  clona o turno por chamada, então aguenta carga concorrente sem esgotar). É o
+  "generator scripted, sem key real" que o PLANO pede para bench e k6.
+- **[decisão] 3 benches nos caminhos quentes nomeados pelo PLANO.** `request_hash`
+  (hash canônico de cache, ~2.2µs), `estimate_tokens`/`needs_compaction` (épocas de
+  contexto, ~300ns), `scripted_generate` (overhead do gateway sem rede, ~390ns).
+  `criterion` entrou como dev-dep de workspace; cada crate ganhou um `[[bench]]`
+  com `harness = false`. Rodam e produzem baseline (provado local).
+- **[decisão] Job `bench` de CI separado, tempos reduzidos.** Roda `cargo bench`
+  de verdade (não só compila) com `--measurement-time 1` para provar que os benches
+  RODAM sem bit-rot e produzem baseline — **não** crava regressão (não há baseline
+  armazenado entre runs; comparação histórica é trabalho futuro, ex.: bencher.dev
+  ou o critcmp com artefato). Job separado porque o profile `bench` é caro e não
+  deve arriscar o gate `rust` (mesma lógica do `sandbox`).
+- **[nota] `criterion` é dep pesada** (traz plotters p/ html_reports), mas só como
+  **dev-dependency** — não entra no binário `forge`. Verifiquei que passa no
+  `cargo deny` local? — a conferir no CI (job `deny`) como as outras deps pesadas.

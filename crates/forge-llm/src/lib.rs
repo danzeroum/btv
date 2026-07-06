@@ -12,6 +12,7 @@ pub mod model_tier;
 pub mod openai;
 pub mod provider;
 pub mod rate_limit;
+pub mod scripted;
 pub mod sse;
 
 pub use chat::{
@@ -21,3 +22,4 @@ pub use gateway::{Gateway, GatewayError, Generator};
 pub use model_tier::{tier_from_id, ModelTier};
 pub use provider::{FallbackChain, LlmRequest, ProviderId};
 pub use rate_limit::{RateLimitError, RateLimiter};
+pub use scripted::ScriptedGenerator;
