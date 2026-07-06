@@ -22,6 +22,7 @@ use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use forge_llm::model_tier::{tier_from_id, ModelTier};
+use forge_llm::rate_limit::RateLimiter;
 use forge_schemas::experiment::{ExperimentReport, VariantStats};
 use forge_store::{LedgerStore, PromptLibrary, Telemetry};
 use serde::{Deserialize, Serialize};
@@ -89,6 +90,7 @@ pub fn router(
         .route("/api/ledger/verify", post(verify_ledger))
         .route("/api/models/usage", get(model_usage))
         .route("/api/experiment/{nome}", get(get_experiment))
+        .route("/api/ratelimit", get(rate_limits))
         .fallback_service(serve_dir)
         .with_state(AppState {
             telemetry,
@@ -244,6 +246,38 @@ async fn get_experiment(
     let b = VariantStats::new(variants[1].0.clone(), variants[1].1, variants[1].2);
     let report = ExperimentReport::from_two_variants(nome, "success_rate", a, b, now_rfc3339());
     Json(report).into_response()
+}
+
+#[derive(Serialize)]
+struct RateLimitTierEntry {
+    tier: ModelTier,
+    cap: usize,
+    window_secs: u64,
+}
+
+/// `GET /api/ratelimit` (Fase 7 Onda 10, A4) — os TETOS configurados
+/// (`RateLimiter::for_tier`), um por tier. **Não é uso ao vivo**: cada
+/// requisição constrói um `RateLimiter` novo e vazio — o limitador que
+/// realmente governa uma sessão vive dentro do processo `forge run`/`chat`/
+/// `tui` daquela sessão (`RateLimitedGenerator`), um processo diferente do
+/// `forge dashboard` que serve esta rota; não há estado compartilhado para
+/// ler. A tela mostra isso explicitamente, não finge um "usado" que não
+/// existe. Sem campo "models": `ModelTier` classifica por regex, não por uma
+/// lista enumerável de ids — inventar uma lista de exemplo seria fabricar
+/// dado (régua Nada Fake).
+async fn rate_limits() -> impl IntoResponse {
+    let entries: Vec<RateLimitTierEntry> = [ModelTier::Small, ModelTier::Medium, ModelTier::Large]
+        .into_iter()
+        .map(|tier| {
+            let limiter = RateLimiter::for_tier(tier);
+            RateLimitTierEntry {
+                tier,
+                cap: limiter.max_requests(),
+                window_secs: limiter.window().as_secs(),
+            }
+        })
+        .collect();
+    Json(entries)
 }
 
 /// Lista as skills (built-in de `skills/` + terceiro de `.forge/skills/`) com o
@@ -1247,5 +1281,47 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["code"], "experiment_not_found");
+    }
+
+    /// Fronteira da Onda 10 (A4): os 3 tetos batem por igualdade com
+    /// `RateLimiter::for_tier` chamado à parte — a rota não reimplementa a
+    /// config, só a expõe.
+    #[tokio::test]
+    async fn ratelimit_bate_com_for_tier_para_os_3_tiers() {
+        let web_dir = fixture_web_dir();
+        let app = router(
+            Telemetry::open_in_memory().unwrap(),
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/ratelimit")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let arr: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(arr.len(), 3);
+
+        for (tier_name, tier) in [
+            ("small", ModelTier::Small),
+            ("medium", ModelTier::Medium),
+            ("large", ModelTier::Large),
+        ] {
+            let expected = RateLimiter::for_tier(tier);
+            let entry = arr.iter().find(|e| e["tier"] == tier_name).unwrap();
+            assert_eq!(entry["cap"], expected.max_requests());
+            assert_eq!(entry["window_secs"], expected.window().as_secs());
+        }
     }
 }

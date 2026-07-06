@@ -793,3 +793,74 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   inventar um modo de lote no `seed_telemetry.rs` só para este caso; custo
   medido: suíte inteira (9 specs, incluindo o build do fixture MCP) ainda
   roda em ~30s.
+
+## Onda 10 — Rate limits (A4) + Sandbox & skills de terceiro (A6) + Language servers (A7)
+
+- **[decisão] DTO de `/api/ratelimit` é `{tier,cap,window_secs}`, sem
+  "models".** O texto original da onda no plano-mestre sugeria um campo
+  "models" no DTO — mas `ModelTier` classifica por REGEX
+  (`forge_llm::model_tier::rules()`), não por uma lista enumerável de ids.
+  Inventar uma lista de exemplo (ex.: "haiku, gpt-4o-mini") pra preencher
+  "models" seria fabricar dado que o backend não tem — a régua Nada Fake
+  também cobre "completar um campo do DTO com algo plausível". Removido do
+  DTO; a tela mostra só tier/cap/window, que são 100% reais.
+- **[achado real, mais fundamental que só o efeito colateral do `poll()`]
+  `/api/ratelimit` não pode mostrar USO ao vivo em NENHUMA hipótese —
+  não é só que `poll()` muta ao checar.** O `forge dashboard` é um processo
+  SEPARADO de qualquer `forge run`/`chat`/`tui` que realmente consome vagas
+  de rate limit — não existe `RateLimiter` compartilhado entre os dois
+  processos para ler. Cada requisição à rota constrói um `RateLimiter` novo
+  e vazio via `for_tier()`; o "uso" só existiria se o MESMO processo tivesse
+  o limitador vivo. O getter não-mutante (`max_requests()`/`window()`) que a
+  onda pedia foi construído (é barato e correto), mas ele só expõe a
+  CONFIGURAÇÃO, nunca um contador real de uso — documentado explicitamente
+  na doc do handler e no banner da tela, não deixado implícito.
+- **[decisão] `Sandbox::ping()` é função associada (`Sandbox::ping()`, não
+  `&self`), com `ping_with(docker: &bollard::Docker)` companheiro — mesmo
+  padrão de `run`/`run_with`.** Reachability do daemon não depende de
+  nenhum campo do perfil (image/mount/limites); a versão `_with` existe só
+  pra testabilidade determinística (endpoint morto), mesmo motivo de
+  `run_with` já existir do jeito que existe.
+- **[decisão] Teste de `/api/sandbox` não afirma um valor fixo para
+  `ping`.** Confirmado empiricamente: este container de dev NÃO tem
+  `/var/run/docker.sock` (nenhum daemon), mas o runner `ubuntu-latest` do
+  GitHub Actions tipicamente TEM Docker rodando por padrão — os dois jobs
+  que tocam este código (`rust`/`verify` e `web`) não instalam Docker
+  explicitamente (só o job dedicado `sandbox` faz isso, com
+  `--include-ignored`), então o resultado real de `Sandbox::ping()` nesses
+  jobs é genuinely ambíguo. Hard-codar `assert_eq!(ping, false)` seria
+  flaky-por-ambiente. A propriedade fail-closed determinística (daemon
+  inalcançável → `false`, nunca panic) já está provada isoladamente em
+  `forge_tools::sandbox`'s `ping_com_daemon_inalcancavel_e_false` (aponta
+  pra um endpoint deliberadamente morto, `http://127.0.0.1:1`) — o teste da
+  rota HTTP e o do Playwright checam só que `ping` é um bool bem-formado e
+  que o perfil bate com as constantes reais.
+- **[decisão] `SkillStatus` ganhou o campo `source` (não só como sufixo de
+  `detail`).** A tela de sandbox precisa filtrar "só as de terceiro" sem
+  fazer parsing de string sobre `detail` (frágil, ex.: quebraria se a
+  descrição da skill contivesse a palavra "third-party"). Mudança aditiva:
+  `detail` não mudou de conteúdo, `Skills.tsx` (tela existente) não
+  precisou de nenhuma alteração.
+- **[decisão] `/api/lsp` não tem NENHUM campo de status/liveness — todo
+  servidor é sempre "declarado, não iniciado".** Considerei se "status
+  refletem só uso real já ocorrido na sessão" (texto do plano) significava
+  introspectar se a MESMA sessão do dashboard já usou aquele language
+  server via `LspSession` cacheada — mas nada no `ToolRegistry`/`lsp.rs`
+  hoje expõe "quais sessões LSP já foram usadas" como estado consultável, e
+  construir isso não estava no orçamento desta onda (seria uma peça de
+  wiring nova, não mecânica). Ficou como visualizador de config puro: zero
+  probe (a onda também proíbe isso explicitamente), zero liveness
+  fabricada. Registrado como possível trabalho futuro, não como esquecimento.
+- **[decisão] `read_lsp_server_configs` extraído de `skills.rs::
+  load_lsp_servers`** — mesmo padrão de `read_mcp_server_configs` (Onda 7):
+  a função de carregamento real (`load_lsp_servers`) e o console de exibição
+  (`lsp_console.rs`) compartilham o parsing puro; `load_lsp_servers` virou
+  um loop fino sobre o que a nova função devolve. `LspServerConfig` ganhou
+  `#[derive(Serialize)]` (mesmo achado de derive faltando que
+  `McpServerConfig`/`ModelTier` tiveram na Onda 7).
+- **[nota] as 3 telas (`ratelimit`, `sandbox`, `lsp`) entraram como itens de
+  nav PRÓPRIOS**, não cartões embutidos em `providers`/`skills` — mesma
+  decisão da Onda 7 (A1/A5) de reverter o encolhimento original do plano.
+  `providers.ts`'s `RATE_LIMITS` fabricado **não foi tocado** nesta onda —
+  aposentá-lo é trabalho explícito da Onda 12 (Providers), que reusa a
+  mesma leitura de tetos por tier que esta onda construiu.
