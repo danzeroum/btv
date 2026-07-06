@@ -12,6 +12,7 @@ import { Telemetria } from '../components/screens/admin/Telemetria'
 import { Mcp } from '../components/screens/admin/Mcp'
 import { Modelos } from '../components/screens/admin/Modelos'
 import { Memoria } from '../components/screens/admin/Memoria'
+import { Experimentos } from '../components/screens/admin/Experimentos'
 import { Ledger } from '../components/screens/admin/Ledger'
 import { Verify } from '../components/screens/admin/Verify'
 import { Providers } from '../components/screens/admin/Providers'
@@ -30,6 +31,7 @@ export const SCREEN_COMPONENTS: Record<ScreenId, ComponentType> = {
   mcp: Mcp,
   modelos: Modelos,
   memoria: Memoria,
+  experimentos: Experimentos,
   ledger: Ledger,
   verify: Verify,
   providers: Providers,

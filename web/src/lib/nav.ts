@@ -16,6 +16,7 @@ export const ADMIN_NAV: NavItem[] = [
   { id: 'mcp', icon: '⎈', label: 'Console MCP', hint: 'servidores · tools · política' },
   { id: 'modelos', icon: '◈', label: 'Uso por modelo', hint: 'chamadas · cache · tier' },
   { id: 'memoria', icon: '⌗', label: 'Memória do squad', hint: 'mapa · busca léxica' },
+  { id: 'experimentos', icon: '⚗', label: 'Experimentos A/B', hint: 'teste z · veredito honesto' },
   { id: 'ledger', icon: '⛓', label: 'Ledger / Auditoria', hint: 'hash-chain append-only' },
   { id: 'verify', icon: '✓', label: 'Verificação & Review', hint: '/verify · value_score' },
   { id: 'providers', icon: '⇄', label: 'Providers & Limites', hint: 'fallback · rate limit' },

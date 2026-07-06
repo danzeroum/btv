@@ -16,7 +16,14 @@ const PROPOSALS: {
   { title: 'Replay de sessão', tag: 'auditoria', desc: 'reproduz uma sessão a partir do ledger.', anchor: 'ancora: ledger hash-chain + sessions.db', relatedScreen: 'ledger' },
   { title: 'Aprovação em lote', tag: 'permissão', desc: 'aprova várias permissões pendentes de uma vez.', anchor: 'ancora: forge-core PermissionClient', relatedScreen: 'permissao' },
   { title: 'Modo watch', tag: 'sessão', desc: 'observa arquivos e sugere ações automaticamente.', anchor: 'ancora: forge-cli watch (futuro)', relatedScreen: 'sessao' },
-  { title: 'A/B de prompts', tag: 'promptforge', desc: 'compara variações de prompt lado a lado.', anchor: 'ancora: forge_promptforge.hashing', relatedScreen: 'prompts' },
+  {
+    title: 'A/B de prompts',
+    tag: 'promptforge',
+    desc: 'compara variações de prompt lado a lado.',
+    anchor: 'ancora: forge_schemas::experiment (teste z, ADR 0014)',
+    relatedScreen: 'experimentos',
+    delivered: true,
+  },
   {
     title: 'Mapa de memória do squad',
     tag: 'squad',

@@ -22,6 +22,7 @@ use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use forge_llm::model_tier::{tier_from_id, ModelTier};
+use forge_schemas::experiment::{ExperimentReport, VariantStats};
 use forge_store::{LedgerStore, PromptLibrary, Telemetry};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -87,6 +88,7 @@ pub fn router(
         .route("/api/ledger", get(list_ledger))
         .route("/api/ledger/verify", post(verify_ledger))
         .route("/api/models/usage", get(model_usage))
+        .route("/api/experiment/{nome}", get(get_experiment))
         .fallback_service(serve_dir)
         .with_state(AppState {
             telemetry,
@@ -200,6 +202,48 @@ async fn model_usage(State(state): State<AppState>) -> impl IntoResponse {
         })
         .collect();
     Json(entries)
+}
+
+/// `GET /api/experiment/:nome` (Fase 7 Onda 9, A2) — relatório de A/B sobre a
+/// telemetria real. Mesma validação que `run_experiment` já aplica na CLI
+/// (`main.rs`): exige exatamente 2 variantes. `404` quando o experimento não
+/// tem nenhum evento (`props.experiment` nunca bateu); `422` quando tem
+/// eventos mas não exatamente 2 variantes distintas (não dá pra fazer um A/B
+/// com 1 ou com 3+ lados) — a requisição em si é válida, é o experimento que
+/// não está no formato certo. Nenhum DTO novo: `ExperimentReport` já deriva
+/// `Serialize`+`JsonSchema` (`experiment.v1`).
+async fn get_experiment(
+    State(state): State<AppState>,
+    AxumPath(nome): AxumPath<String>,
+) -> Response {
+    let variants = state.telemetry.experiment_variants(&nome);
+    if variants.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new(
+                "experiment_not_found",
+                format!("nenhum evento com props.experiment='{nome}' na telemetria"),
+            )),
+        )
+            .into_response();
+    }
+    if variants.len() != 2 {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new(
+                "experiment_needs_two_variants",
+                format!(
+                    "A/B exige exatamente 2 variantes; '{nome}' tem {}",
+                    variants.len()
+                ),
+            )),
+        )
+            .into_response();
+    }
+    let a = VariantStats::new(variants[0].0.clone(), variants[0].1, variants[0].2);
+    let b = VariantStats::new(variants[1].0.clone(), variants[1].1, variants[1].2);
+    let report = ExperimentReport::from_two_variants(nome, "success_rate", a, b, now_rfc3339());
+    Json(report).into_response()
 }
 
 /// Lista as skills (built-in de `skills/` + terceiro de `.forge/skills/`) com o
@@ -1060,5 +1104,148 @@ mod tests {
         assert_eq!(sonnet["calls"], 2);
         assert_eq!(sonnet["cache_hits"], 1);
         assert_eq!(sonnet["cache_misses"], 0);
+    }
+
+    /// Fronteira da Onda 9 (A2): 2 variantes com >= `MIN_SAMPLES` cada batem
+    /// por igualdade com `two_proportion_p_value` calculado à parte sobre os
+    /// MESMOS números — prova que a rota só orquestra a consulta real +
+    /// `ExperimentReport::from_two_variants` já testado isoladamente, não
+    /// reimplementa a estatística.
+    #[tokio::test]
+    async fn experiment_bate_com_calculo_manual_sobre_os_mesmos_numeros() {
+        use forge_schemas::experiment::{two_proportion_p_value, ExperimentVerdict};
+
+        let telemetry = Telemetry::open_in_memory().unwrap();
+        // "controle": 18/20 sucessos. "tratamento": 6/20 — diferença grande o
+        // bastante pro teste z ser significativo por construção.
+        for i in 0..20 {
+            telemetry.record(
+                "llm.call",
+                "s",
+                serde_json::json!({"experiment": "onboarding-copy", "variant": "controle", "success": i < 18}),
+                "t",
+            );
+        }
+        for i in 0..20 {
+            telemetry.record(
+                "llm.call",
+                "s",
+                serde_json::json!({"experiment": "onboarding-copy", "variant": "tratamento", "success": i < 6}),
+                "t",
+            );
+        }
+
+        let web_dir = fixture_web_dir();
+        let app = router(
+            telemetry,
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/experiment/onboarding-copy")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let report: forge_schemas::experiment::ExperimentReport =
+            serde_json::from_slice(&body).unwrap();
+
+        let expected_p = two_proportion_p_value(18, 20, 6, 20);
+        assert!((report.p_value - expected_p).abs() < 1e-9);
+        assert_eq!(report.verdict, ExperimentVerdict::Significant);
+        assert_eq!(report.winner.as_deref(), Some("controle"));
+        let controle = report
+            .variants
+            .iter()
+            .find(|v| v.variant == "controle")
+            .unwrap();
+        assert_eq!(controle.n, 20);
+        assert_eq!(controle.successes, 18);
+        let tratamento = report
+            .variants
+            .iter()
+            .find(|v| v.variant == "tratamento")
+            .unwrap();
+        assert_eq!(tratamento.n, 20);
+        assert_eq!(tratamento.successes, 6);
+    }
+
+    /// Uma variante só (sem par pra comparar) é `422`, não `200` com relatório
+    /// capenga nem `404` (o experimento existe — tem eventos reais).
+    #[tokio::test]
+    async fn experiment_com_uma_variante_so_e_422() {
+        let telemetry = Telemetry::open_in_memory().unwrap();
+        for _ in 0..25 {
+            telemetry.record(
+                "llm.call",
+                "s",
+                serde_json::json!({"experiment": "unico-lado", "variant": "so-uma", "success": true}),
+                "t",
+            );
+        }
+        let web_dir = fixture_web_dir();
+        let app = router(
+            telemetry,
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/experiment/unico-lado")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "experiment_needs_two_variants");
+    }
+
+    /// Nome sem nenhum evento correspondente é `404` — distinto do `422` de
+    /// cima (aqui o experimento não existe; lá, existe mas não serve pra A/B).
+    #[tokio::test]
+    async fn experiment_inexistente_e_404() {
+        let web_dir = fixture_web_dir();
+        let app = router(
+            Telemetry::open_in_memory().unwrap(),
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/experiment/nao-existe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "experiment_not_found");
     }
 }
