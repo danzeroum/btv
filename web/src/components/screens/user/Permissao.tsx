@@ -1,12 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Modal } from '../../primitives/Modal'
 import { Button } from '../../primitives/Button'
 import { useToast } from '../../primitives/Toast'
 import { useSession } from '../../../state/SessionContext'
+import { useAppState } from '../../../state/AppContext'
+import { setRule } from '../../../api/permissions'
 
 export function Permissao() {
   const toast = useToast()
   const { pending, resolvePermission } = useSession()
+  const { agentProfile } = useAppState()
+  const [grantingAlways, setGrantingAlways] = useState(false)
 
   async function handleDecision(allow: boolean) {
     try {
@@ -14,6 +18,27 @@ export function Permissao() {
       toast.push('success', allow ? 'permitido' : 'negado')
     } catch {
       toast.push('error', 'falha ao resolver permissão')
+    }
+  }
+
+  /** "sempre": grava um override persistido (Rule) restrito ao MESMO escopo
+   * já mostrado nesta tela — não é um "allow" genérico para o tool inteiro,
+   * é a repetição deste pedido específico que passa a ser auto-aprovada.
+   * A matriz build/plan×tool (tela Skills) é quem cobre o caso "qualquer
+   * escopo". Gravar primeiro, resolver depois: se a gravação falhar, o
+   * pedido atual continua pendente em vez de ser aprovado sem rastro.
+   */
+  async function handleAlways() {
+    if (!pending) return
+    setGrantingAlways(true)
+    try {
+      await setRule(agentProfile, pending.tool, 'allow', pending.scope)
+      await resolvePermission(true)
+      toast.push('success', `"sempre" gravado para ${pending.tool} · ${agentProfile}`)
+    } catch {
+      toast.push('error', 'falha ao gravar permissão "sempre"')
+    } finally {
+      setGrantingAlways(false)
     }
   }
 
@@ -79,6 +104,13 @@ export function Permissao() {
               onClick={() => void handleDecision(true)}
             >
               [s] Permitir
+            </Button>
+            <Button
+              onClick={() => void handleAlways()}
+              disabled={grantingAlways}
+              title={`grava um override persistido para ${pending.tool} · ${agentProfile} restrito a este escopo`}
+            >
+              {grantingAlways ? 'gravando…' : 'sempre'}
             </Button>
             <Button onClick={() => void handleDecision(false)}>[n] Negar</Button>
           </div>

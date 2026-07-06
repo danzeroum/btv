@@ -15,7 +15,9 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use forge_core::{AgentLoop, LoopEvent, PermissionEngine, PermissionResolver};
+use forge_core::{
+    AgentLoop, Decision, LoopEvent, PermissionEngine, PermissionResolver, Rule, BUILD, PLAN,
+};
 use forge_llm::gateway::Generator;
 use forge_llm::scripted::ScriptedGenerator;
 use forge_tools::{DiffLine, ToolRegistry};
@@ -439,12 +441,18 @@ fn spawn_message_task(
     opts: crate::RunOpts,
     root: std::path::PathBuf,
     message: String,
+    overrides: Vec<Rule>,
 ) {
     tokio::task::spawn_blocking(move || {
         let rt_handle = tokio::runtime::Handle::current();
         let outcome: anyhow::Result<(usize, crate::session::Session)> = (|| {
             let tools = crate::skills::build_registry(&root);
-            let agent_loop = crate::build_loop(generator.as_ref(), &opts, &tools)?;
+            let mut agent_loop = crate::build_loop(generator.as_ref(), &opts, &tools)?;
+            // Onda 2: as regras persistidas (matriz build/plan×tool + "sempre"
+            // da ponte de permissão) sempre vencem o default do perfil —
+            // nunca o contrário, senão afrouxar a matriz na UI não teria
+            // efeito nenhum na sessão real.
+            agent_loop.permissions = agent_loop.permissions.overlay(&overrides);
             let mut ledger_session = crate::session::Session::open(&root, &message, &opts.model)?;
             let mut durable = crate::open_durable(&root, &opts, &message)?;
 
@@ -549,6 +557,10 @@ async fn send_message_handler(
                 .into_response();
         }
     };
+    // Overrides persistidos (matriz + "sempre") do perfil desta mensagem —
+    // sempre carregado, mesmo no modo roteirizado, para que a fronteira
+    // "override afeta sessão real" nunca seja de fachada.
+    let overrides = load_rule_overrides(&root, &opts.agent);
 
     // Modo roteirizado (e2e sem API key, mesmo truque do `loadgen`/k6/squad
     // e2e): pede um `bash` real (exercita a ponte de permissão de verdade) e
@@ -565,7 +577,7 @@ async fn send_message_handler(
             generator,
             SessionTaskSpec {
                 tools,
-                permissions: PermissionEngine::default(),
+                permissions: PermissionEngine::default().overlay(&overrides),
                 model: opts.model.clone(),
                 system: "modo roteirizado (FORGE_SCRIPTED=1) — sem provider real".into(),
                 task: body.message,
@@ -593,8 +605,236 @@ async fn send_message_handler(
         opts,
         root,
         body.message,
+        overrides,
     );
     StatusCode::ACCEPTED.into_response()
+}
+
+/// Caminho do storage de regras persistidas — mesma raiz do workspace que o
+/// ledger (`.forge/`), arquivo próprio (`rules.db`).
+fn rules_db_path(root: &std::path::Path) -> std::path::PathBuf {
+    root.join(".forge").join("rules.db")
+}
+
+fn open_rule_store(root: &std::path::Path) -> anyhow::Result<forge_store::RuleStore> {
+    let path = rules_db_path(root);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    Ok(forge_store::RuleStore::open(
+        path.to_str().unwrap_or(".forge/rules.db"),
+    )?)
+}
+
+fn rule_record_to_core(record: forge_store::RuleRecord) -> Rule {
+    Rule {
+        tool: record.tool,
+        scope_prefix: record.scope_prefix,
+        decision: match record.decision {
+            forge_store::RuleDecision::Allow => Decision::Allow,
+            forge_store::RuleDecision::Ask => Decision::Ask,
+            forge_store::RuleDecision::Deny => Decision::Deny,
+        },
+    }
+}
+
+/// Carrega os overrides persistidos de um perfil — fail-open (vazio) se o
+/// storage não puder ser aberto, mesmo padrão de outros stores opcionais
+/// (telemetria): uma `rules.db` corrompida nunca deve impedir uma sessão de
+/// rodar, só faz o perfil se comportar como se não tivesse override nenhum.
+fn load_rule_overrides(root: &std::path::Path, profile: &str) -> Vec<Rule> {
+    let Ok(store) = open_rule_store(root) else {
+        return Vec::new();
+    };
+    store
+        .list_for_profile(profile)
+        .map(|records| records.into_iter().map(rule_record_to_core).collect())
+        .unwrap_or_default()
+}
+
+fn decision_from_wire(s: &str) -> Option<forge_store::RuleDecision> {
+    match s {
+        "allow" => Some(forge_store::RuleDecision::Allow),
+        "ask" => Some(forge_store::RuleDecision::Ask),
+        "deny" => Some(forge_store::RuleDecision::Deny),
+        _ => None,
+    }
+}
+
+#[derive(Deserialize)]
+struct SetRuleBody {
+    profile: String,
+    tool: String,
+    #[serde(default)]
+    scope_prefix: Option<String>,
+    decision: String,
+}
+
+/// `POST /api/permissions/rules` — grava um override (matriz ou "sempre") e
+/// deixa rastro no ledger (ADR: mutação de política de permissão nunca passa
+/// em silêncio). Mutação mais sensível deste plano — por isso sempre
+/// auditada, nunca um clique único e opaco.
+async fn set_rule_handler(Json(body): Json<SetRuleBody>) -> Response {
+    let Some(decision) = decision_from_wire(&body.decision) else {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new(
+                "invalid_decision",
+                format!("decisão inválida: {} (use allow/ask/deny)", body.decision),
+            )),
+        )
+            .into_response();
+    };
+    let root = match std::env::current_dir() {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("cwd_error", e.to_string())),
+            )
+                .into_response()
+        }
+    };
+    let result: anyhow::Result<forge_store::RuleRecord> = (|| {
+        let mut store = open_rule_store(&root)?;
+        let record = store.set(
+            &body.profile,
+            &body.tool,
+            body.scope_prefix.as_deref(),
+            decision,
+            &crate::session::now_rfc3339(),
+        )?;
+        crate::session::append_override_entry(
+            &root,
+            "web:permissions",
+            "permission_rule.set",
+            serde_json::json!({
+                "profile": record.profile,
+                "tool": record.tool,
+                "scope_prefix": record.scope_prefix,
+                "decision": body.decision,
+            }),
+        )?;
+        Ok(record)
+    })();
+    match result {
+        Ok(record) => Json(record).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("storage_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /api/permissions/rules` — lista todos os overrides ativos, para a UI
+/// mostrar (e permitir revogar) o que está persistido.
+async fn list_rules_handler() -> Response {
+    let root = match std::env::current_dir() {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("cwd_error", e.to_string())),
+            )
+                .into_response()
+        }
+    };
+    match open_rule_store(&root).and_then(|s| s.list_all().map_err(Into::into)) {
+        Ok(rules) => Json(rules).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("storage_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+/// `DELETE /api/permissions/rules/:id` — revoga um override; a partir daí o
+/// perfil volta a valer sem ele. Também auditado no ledger.
+async fn revoke_rule_handler(Path(id): Path<i64>) -> Response {
+    let root = match std::env::current_dir() {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("cwd_error", e.to_string())),
+            )
+                .into_response()
+        }
+    };
+    let result: anyhow::Result<bool> = (|| {
+        let mut store = open_rule_store(&root)?;
+        let existing = store.get(id)?;
+        let removed = store.remove(id)?;
+        if removed {
+            if let Some(rec) = existing {
+                crate::session::append_override_entry(
+                    &root,
+                    "web:permissions",
+                    "permission_rule.revoke",
+                    serde_json::json!({
+                        "id": rec.id,
+                        "profile": rec.profile,
+                        "tool": rec.tool,
+                        "scope_prefix": rec.scope_prefix,
+                    }),
+                )?;
+            }
+        }
+        Ok(removed)
+    })();
+    match result {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("rule_not_found", "regra não encontrada")),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("storage_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+/// Tools cobertas pela matriz build/plan — mesmo conjunto que
+/// `web/src/api/session.ts`'s `TOOL_POLICIES` já mostrava como mock.
+const MATRIX_TOOLS: [&str; 5] = ["read", "grep", "edit", "bash", "webfetch"];
+
+#[derive(Serialize)]
+struct MatrixRow {
+    tool: String,
+    build: Decision,
+    plan: Decision,
+}
+
+/// `GET /api/permissions/matrix` — decisão EFETIVA (default do perfil +
+/// overrides persistidos) para cada tool × {build,plan}; fonte única de
+/// verdade é `forge_core::{BUILD,PLAN}`, nunca uma cópia fabricada em TS.
+async fn get_matrix_handler() -> Response {
+    let root = match std::env::current_dir() {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("cwd_error", e.to_string())),
+            )
+                .into_response()
+        }
+    };
+    let build_engine = (BUILD.permissions)().overlay(&load_rule_overrides(&root, "build"));
+    let plan_engine = (PLAN.permissions)().overlay(&load_rule_overrides(&root, "plan"));
+    let rows: Vec<MatrixRow> = MATRIX_TOOLS
+        .iter()
+        .map(|tool| MatrixRow {
+            tool: tool.to_string(),
+            build: build_engine.evaluate(tool, ""),
+            plan: plan_engine.evaluate(tool, ""),
+        })
+        .collect();
+    Json(rows).into_response()
 }
 
 fn scripted_turns_for(message: &str) -> Vec<forge_llm::chat::AssistantTurn> {
@@ -642,6 +882,15 @@ pub fn router(hub: SessionHub) -> Router {
         .route(
             "/api/session/{id}/permission",
             post(resolve_permission_handler),
+        )
+        .route("/api/permissions/matrix", get(get_matrix_handler))
+        .route(
+            "/api/permissions/rules",
+            get(list_rules_handler).post(set_rule_handler),
+        )
+        .route(
+            "/api/permissions/rules/{id}",
+            axum::routing::delete(revoke_rule_handler),
         )
         .with_state(WebAgentState { hub })
 }
@@ -771,6 +1020,21 @@ fn is_local_origin(origin: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `std::env::current_dir`/`set_current_dir` são estado global do
+    /// processo — testes que trocam o diretório atual (para controlar onde
+    /// `send_message_handler`/os handlers de `/api/permissions/*` procuram
+    /// `.forge/`) precisam rodar mutuamente exclusivos entre si, senão um
+    /// teste lê o CWD trocado por outro rodando em paralelo (`cargo test`
+    /// roda testes em threads do MESMO processo por padrão). `tokio::sync`
+    /// (não `std::sync`) porque o guard fica retido através de `.await` —
+    /// um `std::sync::MutexGuard` preso assim é um lint duro do clippy
+    /// (`await_holding_lock`, risco real de travar o executor).
+    static CWD_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    async fn lock_cwd() -> tokio::sync::MutexGuard<'static, ()> {
+        CWD_GUARD.lock().await
+    }
 
     #[test]
     fn origin_localhost_variantes_sao_aceitas() {
@@ -1220,6 +1484,7 @@ mod tests {
     /// permissão é resolvida via HTTP, e o stream termina em `done`.
     #[tokio::test(flavor = "multi_thread")]
     async fn post_message_real_dispara_bash_via_modo_roteirizado() {
+        let _guard = lock_cwd().await;
         std::env::set_var("FORGE_SCRIPTED", "1");
         let dir = tempfile::tempdir().unwrap();
         let hub = SessionHub::new(8, Duration::from_secs(5));
@@ -1358,5 +1623,233 @@ mod tests {
         assert_eq!(hub.ensure_session("s3"), Err(HubError::TooManySessions(2)));
         // Sessão já existente não conta de novo — sempre `Ok`.
         assert!(hub.ensure_session("s1").is_ok());
+    }
+
+    async fn spawn_permissions_app() -> std::net::SocketAddr {
+        let hub = SessionHub::new(8, Duration::from_secs(5));
+        let app = router(hub);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        addr
+    }
+
+    /// Onda 2 (remanescente): sem nenhum override persistido, a matriz
+    /// devolvida é EXATAMENTE o default dos perfis reais
+    /// (`forge_core::{BUILD,PLAN}`) — nunca os valores fabricados que o mock
+    /// TS antigo inventava (ex.: `plan`+`bash` era "deny" no mock; o perfil
+    /// real é "ask").
+    #[tokio::test(flavor = "multi_thread")]
+    async fn matriz_reflete_defaults_reais_do_perfil_sem_overrides() {
+        let _guard = lock_cwd().await;
+        let dir = tempfile::tempdir().unwrap();
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let addr = spawn_permissions_app().await;
+        let client = reqwest::Client::new();
+        let rows: Vec<serde_json::Value> = client
+            .get(format!("http://{addr}/api/permissions/matrix"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let row = |tool: &str| rows.iter().find(|r| r["tool"] == tool).unwrap().clone();
+        assert_eq!(row("read")["build"], "allow");
+        assert_eq!(row("edit")["build"], "ask");
+        assert_eq!(row("edit")["plan"], "deny");
+        // read_only(): bash é "ask", não "deny" — precisão sobre o mock antigo.
+        assert_eq!(row("bash")["plan"], "ask");
+        // Nenhum perfil tem regra para webfetch — Ask por ausência de regra.
+        assert_eq!(row("webfetch")["build"], "ask");
+        assert_eq!(row("webfetch")["plan"], "ask");
+
+        std::env::set_current_dir(orig_cwd).unwrap();
+    }
+
+    /// Gravar uma regra persiste, a matriz passa a refletir o override (só
+    /// no perfil gravado — o outro perfil continua no default), e a
+    /// mutação deixa uma entrada auditada no MESMO ledger que o resto da
+    /// plataforma usa.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn post_rule_persiste_matriz_reflete_e_ledger_audita() {
+        let _guard = lock_cwd().await;
+        let dir = tempfile::tempdir().unwrap();
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let addr = spawn_permissions_app().await;
+        let client = reqwest::Client::new();
+        let set_resp = client
+            .post(format!("http://{addr}/api/permissions/rules"))
+            .json(&serde_json::json!({"profile": "build", "tool": "edit", "decision": "allow"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(set_resp.status(), reqwest::StatusCode::OK);
+        let record: serde_json::Value = set_resp.json().await.unwrap();
+        assert_eq!(record["tool"], "edit");
+        assert_eq!(record["decision"], "allow");
+
+        let rows: Vec<serde_json::Value> = client
+            .get(format!("http://{addr}/api/permissions/matrix"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let edit = rows.iter().find(|r| r["tool"] == "edit").unwrap();
+        assert_eq!(edit["build"], "allow"); // override venceu o default "ask"
+        assert_eq!(edit["plan"], "deny"); // perfil "plan" não foi tocado
+
+        let ledger = forge_store::LedgerStore::open(
+            dir.path().join(".forge").join("forge.db").to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(ledger.verify_chain().unwrap(), 1);
+
+        std::env::set_current_dir(orig_cwd).unwrap();
+    }
+
+    /// A UI "lista as rules ativas com botão de revogar": listar mostra o
+    /// que foi gravado, revogar remove da lista (e do efeito), repetir a
+    /// revogação é idempotente (404, não 500), e a revogação também deixa
+    /// rastro no ledger — 2 entradas ao todo (set + revoke).
+    #[tokio::test(flavor = "multi_thread")]
+    async fn revoke_rule_remove_da_lista_e_ledger_audita_revogacao() {
+        let _guard = lock_cwd().await;
+        let dir = tempfile::tempdir().unwrap();
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let addr = spawn_permissions_app().await;
+        let client = reqwest::Client::new();
+        let record: serde_json::Value = client
+            .post(format!("http://{addr}/api/permissions/rules"))
+            .json(&serde_json::json!({"profile": "plan", "tool": "bash", "decision": "allow"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let id = record["id"].as_i64().unwrap();
+
+        let rules_before: Vec<serde_json::Value> = client
+            .get(format!("http://{addr}/api/permissions/rules"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(rules_before.len(), 1);
+
+        let del_resp = client
+            .delete(format!("http://{addr}/api/permissions/rules/{id}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(del_resp.status(), reqwest::StatusCode::NO_CONTENT);
+
+        let rules_after: Vec<serde_json::Value> = client
+            .get(format!("http://{addr}/api/permissions/rules"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(rules_after.is_empty());
+
+        // Revogar de novo é idempotente: 404, não um 204/500 confuso.
+        let del_again = client
+            .delete(format!("http://{addr}/api/permissions/rules/{id}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(del_again.status(), reqwest::StatusCode::NOT_FOUND);
+
+        let ledger = forge_store::LedgerStore::open(
+            dir.path().join(".forge").join("forge.db").to_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(ledger.verify_chain().unwrap(), 2);
+
+        std::env::set_current_dir(orig_cwd).unwrap();
+    }
+
+    /// A prova que fecha a decisão "não read-only" da Onda 2: um override
+    /// persistido de verdade (não só cosmético na matriz) muda o
+    /// comportamento de uma sessão REAL — com `build`+`bash` sempre
+    /// permitido, o loop nunca publica `permission_requested` (pula
+    /// `resolver.resolve`, `Decision::Allow` de `evaluate` já resolve) e a
+    /// ferramenta roda de verdade.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn override_persistido_faz_sessao_real_pular_pedido_de_permissao() {
+        let _guard = lock_cwd().await;
+        std::env::set_var("FORGE_SCRIPTED", "1");
+        let dir = tempfile::tempdir().unwrap();
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        let addr = spawn_permissions_app().await;
+        let client = reqwest::Client::new();
+        let set_resp = client
+            .post(format!("http://{addr}/api/permissions/rules"))
+            .json(&serde_json::json!({"profile": "build", "tool": "bash", "decision": "allow"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(set_resp.status(), reqwest::StatusCode::OK);
+
+        let sse_resp = client
+            .get(format!("http://{addr}/api/session/s1/events"))
+            .send()
+            .await
+            .unwrap();
+        let mut stream = sse_resp.bytes_stream();
+
+        let post_resp = client
+            .post(format!("http://{addr}/api/session/s1/message"))
+            .json(&serde_json::json!({"message": "diga oi"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(post_resp.status(), reqwest::StatusCode::ACCEPTED);
+
+        let mut buf = String::new();
+        loop {
+            let chunk = stream.next().await.unwrap().unwrap();
+            buf.push_str(std::str::from_utf8(&chunk).unwrap());
+            if extract_events(&buf)
+                .iter()
+                .any(|e| e.get("type").map(|t| t == "done").unwrap_or(false))
+            {
+                break;
+            }
+        }
+        let events = extract_events(&buf);
+        assert!(
+            !events
+                .iter()
+                .any(|e| e.get("type").map(|t| t == "permission_requested").unwrap_or(false)),
+            "bash deveria ter sido auto-aprovado pelo override persistido, sem pedir permissão: {events:?}"
+        );
+        assert!(
+            events.iter().any(|e| {
+                e.get("type").map(|t| t == "tool_finished").unwrap_or(false)
+                    && e.get("ok").map(|ok| ok == true).unwrap_or(false)
+            }),
+            "a ferramenta bash deveria ter rodado de verdade (allow), não só sido pulada: {events:?}"
+        );
+
+        std::env::set_current_dir(orig_cwd).unwrap();
     }
 }
