@@ -216,11 +216,11 @@ como arquivos separados mas sem chamador real (ver ADR 0004).
 | Keys de API vazarem | Keys só no processo Rust; Python conhece só o UDS (princípio do proxy do prompte) |
 | Segurança de bash/skills de terceiros | Permissões no core Rust (não contornáveis), skill-vetter bloqueante, sandbox Docker, gitleaks |
 
-## Estado atual (Fases 1–5 concluídas; Fase 6 não iniciada)
+## Estado atual (Fases 1–6 concluídas — roadmap completo)
 
 Histórico completo, decisão a decisão, em `docs/DECISOES.md`. Resumo do que já
-compila e está testado no workspace (raiz deste repositório): 145 testes Rust +
-135 Python, clippy `-D warnings` e rustfmt limpos.
+compila e está testado no workspace (raiz deste repositório): 194 testes Rust +
+145 Python, clippy `-D warnings` e rustfmt limpos.
 
 - **Fase 1 — fundação executável**: gateway LLM real com streaming SSE
   (Anthropic/OpenAI/DeepSeek, fallback automático), cache de prompt por hash
@@ -299,21 +299,56 @@ compila e está testado no workspace (raiz deste repositório): 145 testes Rust 
   do código (`AgentOrchestrator`/`SafeAgentBase`/`SquadOrchestrator`/
   `continuous_eval.py`/`adaptive_replanner.py`/`hierarchical_planner.py`,
   ADR 0004).
+- **Fase 6 — ecossistema e escala (ADRs 0011–0014), 9 ondas**: a plataforma
+  passa a rodar **código que não é dela**, contido. Skills built-in viram
+  executáveis como `dyn Tool` no `ToolRegistry` (vetadas mesmo assim,
+  dogfooding); o **sandbox Docker real** (bollard, em Rust; contenção provada
+  nos quatro vetores no CI com Docker real) confina os terceiros; e uma **skill
+  de terceiro roda após vetting, dentro da cela** — o gêmeo negativo (maliciosa
+  bloqueada) também provado (ADR 0011, critério nº 1). Um **cliente MCP** (`rmcp`,
+  cross-process fixture real) expõe tools externas sob o mesmo motor de permissões
+  (ADR 0012). Um **cliente LSP** hand-rolled (zero-dep; definição/referências/
+  diagnósticos, provado contra o rust-analyzer REAL no CI, por igualdade de
+  posição) dá contexto semântico aos agentes. O `recall_similar` do squad, antes
+  no-op, vira **recuperação real** por TF-IDF local (ground truth de conjunto,
+  ADR 0013). `forge experiment` gera o **relatório de A/B** da telemetria com teste
+  z hand-rolled e veredito honesto — "sem significância" em vez de vencedor
+  fabricado (ADR 0014, critério nº 2). **Benches criterion** nos caminhos quentes
+  (hash canônico, épocas de contexto, gateway) rodam no CI e produzem baseline; um
+  **load-test k6** valida o **P95 do gateway** sob concorrência (P95≈3.5ms, 20 VUs,
+  sem key real via `ScriptedGenerator`) — critério nº 3. `infra/` entra como
+  esqueleto honesto (produto local-first, sem alvo de deploy real ainda).
+- **Contratos (atualizado)**: 4 protos gRPC + 7 JSON Schemas versionados
+  (`experiment.v1` novo na Fase 6, Rust-only). ADRs 0001–0014.
 - **Operação**: justfile, CI GitHub Actions (cargo/pytest/gitleaks/
-  cargo-deny bloqueantes + job `verify` de self-hosting, Onda 6),
-  ADRs 0001–0010, script de regeneração de fixtures.
+  cargo-deny bloqueantes + jobs `verify` (self-hosting), `sandbox` (Docker +
+  rust-analyzer), `bench` (criterion) e `k6` (P95) separados),
+  ADRs 0001–0014, script de regeneração de fixtures.
 
-**Próximo marco: Fase 6 — ecossistema e escala.** LSP/MCP, plugins de
-terceiros com sandbox Docker, RAG, A/B testing, testes de carga k6. O
-skill-vetter (Fase 5 Onda 5) já existe como mecanismo — a Fase 6 é quem
-constrói o runtime de carregar/executar skills de terceiros por cima
-dele.
+**Roadmap das 6 fases concluído.** O que vier depois é produto novo, não plano
+antigo. A plataforma se verifica com a própria ferramenta, contém código de
+terceiro e escala. Resta a pendência de *exercício* abaixo — de exercício, não de
+código.
 
 **Pendência de exercício da Fase 4** (código pronto e testado por unit;
-falta só rodar com API real): o registro do consenso no ledger
-(`squad.consensus` em `.forge/forge.db`, via `forge-cli/src/squad.rs`)
-foi coberto por unit test do orquestrador e está wireado, mas o smoke de
-`forge squad` com key inválida falhou antes do consenso. Fechar na
-primeira rodada de `forge squad` com API key válida — confirmar que o
-evento `squad.consensus` aparece no ledger com `decision_maker`/`strength`/
-`requires_human` reais. Não é lacuna de código, é lacuna de exercício.
+falta só *exercitar* o caminho ponta-a-ponta): o registro do consenso no
+ledger (`squad.consensus` em `.forge/forge.db`, via
+`forge-cli/src/squad.rs:288`) foi coberto por unit test do orquestrador e
+está wireado, mas o smoke de `forge squad` com key inválida falhou antes
+do consenso. **Não é lacuna de código, é lacuna de exercício** — e por isso
+não impede declarar as 6 fases concluídas (o código existe, compila e é
+testado por unidade).
+
+**Re-declarada explicitamente no fecho da Fase 6 (Onda 9), com um caminho
+de fechamento agora determinístico.** A Fase 6 (Onda 8) promoveu um
+`ScriptedGenerator` sem key (Rust, `forge-llm`) e o lado Python já expõe um
+`ScriptedGatewayClient` (`forge_squad/gateway.py`). Juntos, eles tornam
+**viável um e2e de `forge squad` roteirizado, sem API key**, que dirige o
+squad até um evento `Consensus` e assere que `squad.consensus` aparece no
+ledger com `decision_maker`/`strength`/`requires_human` reais — o que
+converteria esta "lacuna de exercício" num teste de regressão permanente.
+Esse teste **ainda não existe**; deixá-lo para uma próxima iteração é uma
+escolha consciente de escopo do fecho (não arriscar a suíte com um e2e
+cross-process novo no último passo). Alternativa equivalente: uma rodada
+real de `forge squad` com API key válida. Fica registrado aqui, fora do
+código, como a régua manda.

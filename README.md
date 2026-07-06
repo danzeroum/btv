@@ -121,5 +121,23 @@ workspace e falha o build no veredito `Fail` (provado com um teste
 quebrado propositalmente e revertido) — a cobrança de evidência que era
 manual nesta fase passa a morar no pipeline.
 
-Próximo marco: Fase 6 (LSP/MCP, plugins de terceiros com sandbox, RAG,
-A/B testing, k6).
+**Fase 6 concluída** — ecossistema e escala, em 9 ondas (ADRs 0011–0014). A
+plataforma passa a rodar **código que não é dela**, contido: skills built-in
+viram executáveis como `dyn Tool` no `ToolRegistry` (vetadas mesmo assim), o
+sandbox Docker real (bollard, em Rust) confina o que os terceiros exigem, e uma
+skill de terceiro roda **após** vetting, dentro da cela (ADR 0011 — critério de
+conclusão nº 1). Um cliente MCP (`rmcp`) expõe tools de servidores externos sob o
+mesmo motor de permissões (ADR 0012), e um cliente LSP hand-rolled (zero-dep,
+provado contra o rust-analyzer real no CI) dá contexto semântico aos agentes. O
+`recall` do squad deixa de ser no-op e vira recuperação real por TF-IDF local
+(ADR 0013). `forge experiment` gera o relatório de A/B a partir da telemetria, com
+veredito honesto — "sem significância" em vez de vencedor fabricado (ADR 0014 —
+critério nº 2). E benches criterion nos caminhos quentes + um load-test **k6** que
+valida o P95 do gateway sob concorrência (P95≈3.5ms no CI, sem key real) fecham o
+critério nº 3; `infra/` entra como esqueleto honesto (produto local-first, sem
+alvo de deploy real ainda).
+
+**Roadmap das 6 fases concluído.** O que vier depois é produto novo, não plano
+antigo — a plataforma se verifica com a própria ferramenta (o CI roda `forge
+verify` sobre si), contém código de terceiro, e escala. Uma pendência de
+*exercício* (não de código) da Fase 4 segue registrada abaixo.
