@@ -17,3 +17,8 @@ tokio.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+criterion.workspace = true
+
+[[bench]]
+name = "gateway"
+harness = false

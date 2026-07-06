@@ -104,3 +104,17 @@ jobs:
       # falha se ela não estiver disponível).
       - run: rustup component add rust-analyzer
       - run: cargo test -p forge-tools -- --include-ignored
+
+  # Benches criterion (Fase 6 Onda 8): compilam e RODAM de verdade, produzindo o
+  # baseline comparável dos caminhos quentes (hash canônico, épocas de contexto,
+  # gateway sem key via ScriptedGenerator). Job separado porque o profile `bench`
+  # é caro e não deve arriscar o gate `rust`. Tempos de medição reduzidos: o
+  # objetivo aqui é provar que os benches RODAM (não bit-rot) e produzem baseline,
+  # não cravar regressão (não há baseline armazenado a comparar entre runs).
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench -p forge-schemas -p forge-core -p forge-llm -- --warm-up-time 0.5 --measurement-time 1

@@ -17,3 +17,8 @@ thiserror.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 tempfile.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "compaction"
+harness = false
