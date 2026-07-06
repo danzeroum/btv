@@ -16,6 +16,9 @@ export type AdminScreenId =
   | 'modelos'
   | 'memoria'
   | 'experimentos'
+  | 'ratelimit'
+  | 'sandbox'
+  | 'lsp'
   | 'ledger'
   | 'verify'
   | 'providers'
@@ -90,6 +93,9 @@ export interface SkillEntry {
   id: string
   status: 'aprovado' | 'bloqueado' | 'em_analise'
   detail: string
+  /** "builtin"/"third-party" (Fase 7 Onda 10) — a tela de sandbox filtra por
+   * ele em vez de fazer parsing de `detail`. */
+  source: string
 }
 
 export type PermissionMatrixDecision = 'allow' | 'ask' | 'deny'

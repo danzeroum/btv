@@ -128,6 +128,27 @@ function seedExperimentEvent(variant, success) {
 for (let i = 0; i < 20; i++) seedExperimentEvent('controle', i < 18)
 for (let i = 0; i < 20; i++) seedExperimentEvent('tratamento', i < 6)
 
+// 3g. `.forge/lsp.toml` (Fase 7 Onda 10, A7) com um comando INEXISTENTE —
+// prova que a tela enumera o declarado sem nunca tentar subir o processo
+// (mesma prova que `skills.rs`'s teste de registro lazy já faz, agora pela
+// rota HTTP e pelo browser).
+writeFileSync(
+  join(workDir, '.forge', 'lsp.toml'),
+  '[[server]]\nid = "rust"\ncommand = "comando-lsp-inexistente-xyz"\nargs = ["--stdio"]\n',
+)
+
+// 3h. skill de TERCEIRO real (Fase 7 Onda 10, A6) em `.forge/skills/` — vetada
+// e aprovada (sem padrão perigoso), para a tela de sandbox mostrar a lista
+// real via `/api/skills` (filtrando `source === 'third-party'`), não uma
+// lista vazia.
+const thirdPartySkillDir = join(workDir, '.forge', 'skills', 'eco-terceiro')
+mkdirSync(thirdPartySkillDir, { recursive: true })
+writeFileSync(
+  join(thirdPartySkillDir, 'skill.toml'),
+  'name = "eco-terceiro"\ndescription = "eco simples para prova da tela de sandbox"\n' +
+    'entrypoint = \'echo "oi"\'\npermissions = []\n',
+)
+
 // 4. sobe o dashboard real apontando pro build da SPA, servindo o evento semeado.
 // --manifest-path resolve o workspace a partir de workDir (cargo não muda o
 // cwd do processo filho); run_dashboard lê `.forge/telemetry.db` relativo ao

@@ -54,9 +54,24 @@ pub fn build_registry(root: &Path) -> ToolRegistry {
 /// um comando inválido só falha ali (não derruba o CLI). A raiz analisada é o
 /// próprio workspace do Forge.
 fn load_lsp_servers(registry: &mut ToolRegistry, root: &Path) {
+    for config in read_lsp_server_configs(root) {
+        let n = forge_tools::lsp::register_lsp_server(registry, &config);
+        if n > 0 {
+            eprintln!("  lsp '{}': {n} consulta(s) registrada(s)", config.id);
+        }
+    }
+}
+
+/// Lê `<root>/.forge/lsp.toml` e devolve os servidores declarados, sem subir
+/// nenhum processo (só parsing) — compartilhado entre `load_lsp_servers`
+/// (registra as consultas no `ToolRegistry` para uso real do agente) e o
+/// console de LSP da Fase 7 Onda 10 (`lsp_console.rs`, só enumera para
+/// exibição). Mesmo padrão de `read_mcp_server_configs`. Ausente ou inválido
+/// → vazio (fail-soft).
+pub(crate) fn read_lsp_server_configs(root: &Path) -> Vec<forge_tools::LspServerConfig> {
     let config_path = root.join(".forge").join("lsp.toml");
     let Ok(raw) = std::fs::read_to_string(&config_path) else {
-        return;
+        return Vec::new();
     };
     #[derive(serde::Deserialize)]
     struct LspConfigFile {
@@ -74,21 +89,18 @@ fn load_lsp_servers(registry: &mut ToolRegistry, root: &Path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("  lsp: .forge/lsp.toml inválido ({e}) — ignorado");
-            return;
+            return Vec::new();
         }
     };
-    for s in cfg.server {
-        let config = forge_tools::LspServerConfig {
-            id: s.id.clone(),
+    cfg.server
+        .into_iter()
+        .map(|s| forge_tools::LspServerConfig {
+            id: s.id,
             command: s.command,
             args: s.args,
             root: root.to_path_buf(),
-        };
-        let n = forge_tools::lsp::register_lsp_server(registry, &config);
-        if n > 0 {
-            eprintln!("  lsp '{}': {n} consulta(s) registrada(s)", s.id);
-        }
-    }
+        })
+        .collect()
 }
 
 /// Carrega servidores MCP declarados em `<root>/.forge/mcp.toml` (Fase 6 Onda 4)
