@@ -6,13 +6,15 @@
 //! o Auditor do squad consome no lugar de opinião de LLM.
 //!
 //! Fase 5: timeouts com kill de grupo de processos (ver `exec`), findings
-//! estruturados por ferramenta (ver `parsers`) e o comando `forge verify`
-//! (crates/forge-cli) escrevendo a evidência em disco. O skill-vetter
-//! completa a fase em onda separada.
+//! estruturados por ferramenta (ver `parsers`), o comando `forge verify`
+//! (crates/forge-cli) escrevendo a evidência em disco, e o skill-vetter
+//! (ver `vetter`) que aponta esta mesma máquina para o diretório de uma
+//! skill e decide vet/block.
 
 pub mod config;
 pub mod exec;
 pub mod parsers;
+pub mod vetter;
 
 use forge_schemas::verification::{Finding, VerificationEvidence, VerificationStep};
 use std::time::Duration;

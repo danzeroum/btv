@@ -28,7 +28,11 @@ const NEXT_DECISION: Record<PermissionMatrixDecision, PermissionMatrixDecision> 
   deny: 'allow',
 }
 
-/** // TODO: backend Fase 5 — grava decisão de vetting no ledger + na config do skill-vetter real. */
+/**
+ * // TODO: backend Fase 5 — o mecanismo existe (`forge-verify::vetter::vet_skill`,
+ * ADR 0009) e está testado isoladamente em Rust, mas ainda não há endpoint HTTP
+ * que ligue esta tela a ele; continua mock até esse wiring ser feito.
+ */
 export async function vetSkill(id: string, decision: SkillEntry['status']): Promise<SkillEntry> {
   await simulateLatency(250)
   SKILLS = SKILLS.map((s) => (s.id === id ? { ...s, status: decision } : s))
