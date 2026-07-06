@@ -249,3 +249,42 @@
   `ansible/playbook.yml` como **esqueletos marcados** (providers/recursos
   comentados até haver alvo) + o `k6/` que é o único artefato executado. É a "Nota
   honesta" da Onda 8 do PLANO exercida: esqueleto marcado > decoração.
+- **[resolvido] critério nº 3 provado no CI:** o job `k6` da PR #19 rodou o k6 de
+  verdade — `✓ 'p(95)<100' p(95)=3.51ms`, `✓ 'rate<0.01' rate=0.00%`, 107.837
+  requests, 0% falha. Não é número decorativo.
+
+## Onda 9 — fecho (o que fiz e o que fica para o seu olhar)
+
+**Feito (fecho do roadmap):** 4 ADRs novos formalizados — `0011` (skills como
+`dyn Tool` + vetting + sandbox, Ondas 1-3), `0012` (confiança MCP, Onda 4), `0013`
+(embedder do RAG léxico local, Onda 6), `0014` (`experiment.v1`, Onda 7). README ×
+CLAUDE.md × PLANO-PLATAFORMA-FORGE.md × DECISOES.md reconciliados para "6 fases
+concluídas — roadmap completo" (grep confirma a mesma história). Contagens
+atualizadas (194 Rust + 145 Python). LSP (Onda 5) e benches/k6/infra (Onda 8)
+ficaram como prosa no DECISOES/CLAUDE, sem ADR dedicado — são decisões de
+implementação/tooling, não de contrato (não mudam schema nem fronteira); se você
+preferir um ADR para o LSP ou para o k6/infra, é rápido de adicionar.
+
+**Itens abertos para você analisar (as dúvidas que acumulei):**
+
+1. **[dúvida — a maior] Consenso→ledger (pendência de exercício da Fase 4).**
+   Re-declarei no PLANO. O código existe/compila/tem unit test; falta o exercício
+   ponta-a-ponta. **Novidade:** pós-Onda 8, com o `ScriptedGenerator` (Rust, sem
+   key) + o `ScriptedGatewayClient` (Python já existente), dá para escrever um
+   **e2e de `forge squad` roteirizado, SEM key**, que dirige o squad até um evento
+   `Consensus` e assere `squad.consensus` no ledger — virando um teste de regressão
+   permanente. **Não escrevi** esse e2e (cross-process novo, no último passo, risco
+   de flaky no fecho verde). Quer que eu faça numa próxima iteração? É a forma mais
+   honesta de fechar a pendência sem key.
+2. **[dúvida] RAG léxico é suficiente?** Onda 6 entregou TF-IDF léxico (real, zero-
+   dep, offline). Não faz ponte de sinônimo (isso é neural). Se você quer semântica
+   de verdade, é uma onda futura (modelo local ou gateway Rust). Documentado no ADR
+   0013.
+3. **[dúvida/defer] Frontends não ligados:** MCP (`/api/mcp`) e LSP não têm UI; A/B
+   não tem tela. São tools/CLI hoje. Wiring de frontend espelha o que fiz no
+   `/api/skills` — deixei para não inflar as PRs.
+4. **[dúvida] Double-vet no ledger (`skill.vetting`)** e consumo do recall no
+   planejamento do squad: follow-ups registrados nas seções das Ondas 3 e 6 acima.
+
+Nada aqui bloqueia declarar o roadmap concluído — são refinamentos e um exercício,
+não lacunas de código.

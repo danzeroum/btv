@@ -766,3 +766,59 @@ manual (a verificação onda a onda desta própria conversa) passa a morar
 estruturalmente no pipeline: `/verify` gera, o squad e o review a
 consomem, o vetter a aplica a skills, e o CI a exige da própria
 plataforma.
+
+## Fase 6 — Ecossistema e escala, 9 ondas (2026-07-06)
+
+A fase em que a plataforma passa a rodar **código que não é dela** — contido — e
+a escalar. A ordem foi ditada por segurança (runtime → sandbox → terceiros, nunca
+o inverso). PRs estratégicas, uma por onda, cada uma verde no CI antes do merge.
+
+- **Onda 1 — runtime de skill:** `SkillTool` (`forge-tools`) implementa `Tool`; o
+  `build_registry` (ponto único) veta e registra skills built-in de `<root>/skills/`.
+  Uma skill `Block` nunca é registrada. Built-ins são vetados mesmo assim
+  (dogfooding). (ADR 0011.)
+- **Onda 2 — sandbox Docker real (bollard, Rust):** contêiner com limites (mount,
+  rede off, timeout com kill de grupo, memória), imagem puxada se ausente, rodando
+  como o uid dono do mount. Fail-closed para terceiro. Os quatro vetores de
+  contenção são testes que **mordem**, `#[ignore]` local e rodados de verdade no
+  job `sandbox` do CI (Docker real; guarda que falha sem daemon). (ADR 0011.)
+- **Onda 3 — skill de terceiro ponta-a-ponta (critério nº 1):** `<root>/.forge/
+  skills/` untrusted, vetado e registrado como `sandboxed`. Maliciosa bloqueada;
+  vetada roda confinada. Tela `skills` vira read-only (badge do vetter +
+  "re-vetar"); veredito ao ledger (`skill.vetting`). (ADR 0011.)
+- **Onda 4 — cliente MCP (`rmcp`):** conecta a servidores externos, lista tools, as
+  expõe namespaced (`mcp__<server>__<tool>`) sob o motor de permissões. Confiança
+  no servidor declarado; cada chamada pede permissão. Fail-soft. Cross-process
+  fixture real (`ECHO:mundo`). (ADR 0012.)
+- **Onda 5 — cliente LSP:** framing JSON-RPC/`Content-Length` **hand-rolled** (só
+  `serde_json`, zero-dep), sessão persistente preguiçosa. Expõe definição/
+  referências/diagnósticos. Provado contra o **rust-analyzer REAL** no CI (job
+  `sandbox`, componente instalada) por igualdade de posição (`lib.rs:0:7`), além do
+  fixture hermético que sempre roda.
+- **Onda 6 — RAG:** `recall_similar`, antes no-op (`_FallbackCollection` devolvia
+  vazio), vira TF-IDF léxico local em Python puro (zero-dep, offline). Ground truth
+  de dois tópicos disjuntos: recupera **exatamente** os relevantes. Honesto sobre
+  ser léxico, não neural. (ADR 0013.)
+- **Onda 7 — A/B testing (critério nº 2):** `forge experiment` agrega a telemetria
+  por variante (`json_extract`), roda um teste z de duas proporções hand-rolled
+  (sem crate de estatística) e emite veredito derivado dos dados: vencedor só com
+  significância, senão "sem significância". Schema `experiment.v1` (Rust-only).
+  Provado e2e (exp-sig → vencedor; exp-tie → sem significância). (ADR 0014.)
+- **Onda 8 — bench + k6 + infra (critério nº 3):** benches criterion nos caminhos
+  quentes (hash canônico, épocas de contexto, gateway) rodam no CI (job `bench`) e
+  produzem baseline; um `ScriptedGenerator` sem key foi promovido a tipo público.
+  O bin `loadgen` (`forge-server`) embrulha-o num endpoint HTTP; o **k6** martela e
+  valida o **P95** (job `k6`: `p(95)<100` → medido ~3.5ms, 20 VUs, 107k requests,
+  0% falha). `infra/` (terraform/ansible) é esqueleto honesto — produto local-first,
+  sem alvo de deploy real ainda.
+- **Onda 9 — fecho:** ADRs 0011–0014 formalizados; README × PLANO × CLAUDE.md
+  reconciliados para "6 fases concluídas"; a pendência de exercício do
+  consenso→ledger (Fase 4) re-declarada com um caminho de fechamento agora
+  **determinístico** (e2e roteirizado sem key, viável pós-Onda 8).
+
+194 testes Rust + 145 Python, zero falhas, clippy/fmt limpos. **Fase 6 concluída
+— roadmap das 6 fases completo.** A plataforma que começou como um fork do
+opencode agora se verifica com a própria ferramenta, contém código de terceiro
+num sandbox real, enxerga o código por LSP, recupera memória por similaridade,
+compara variantes com estatística honesta e valida a própria latência sob carga.
+O que vier depois é produto novo, não plano antigo.

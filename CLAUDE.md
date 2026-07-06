@@ -40,9 +40,30 @@ just test | just lint | just verify    # atalhos (requer just)
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
-**Fase 5 concluída** (ver histórico completo em `docs/DECISOES.md`;
-próximo marco: Fase 6 — LSP/MCP, plugins de terceiros com sandbox, RAG,
-A/B testing, k6).
+**Fase 6 concluída — roadmap das 6 fases completo** (ver histórico completo
+em `docs/DECISOES.md`). O que vier depois é produto novo, não plano antigo.
+
+**Fase 6 — ecossistema e escala (ADRs 0011–0014), 9 ondas:** a plataforma
+passa a rodar **código que não é dela**, contido. Skills built-in viram
+executáveis como `dyn Tool` no `ToolRegistry` (vetadas mesmo assim); o
+sandbox Docker real (`forge-tools::sandbox`, bollard, em Rust) confina os
+terceiros; uma skill de terceiro roda **após** vetting, dentro da cela, e a
+maliciosa é bloqueada (ADR 0011 — critério nº 1; contenção provada no job
+`sandbox` do CI com Docker real). Um cliente MCP (`forge-tools::mcp`, `rmcp`)
+expõe tools de servidores externos sob o mesmo motor de permissões (ADR 0012),
+e um cliente LSP hand-rolled (`forge-tools::lsp`, zero-dep) dá definição/
+referências/diagnósticos — provado contra o rust-analyzer REAL no CI. O
+`recall_similar` do squad, antes no-op, vira recuperação real por TF-IDF local
+(`forge_squad/recall.py`, ADR 0013). `forge experiment`
+(`forge-schemas::experiment`, `experiment.v1`) gera o relatório de A/B da
+telemetria com teste z hand-rolled e veredito honesto — "sem significância" em
+vez de vencedor fabricado (ADR 0014 — critério nº 2). Benches criterion
+(`forge-schemas`/`forge-core`/`forge-llm`) rodam no CI (job `bench`) e um
+load-test k6 valida o P95 do gateway (job `k6`, `ScriptedGenerator` sem key,
+P95≈3.5ms) — critério nº 3. `infra/` é esqueleto honesto (local-first, sem alvo
+de deploy real). Pendência de *exercício* (não de código) da Fase 4 —
+consenso→ledger — re-declarada no PLANO, agora com caminho de fechamento
+determinístico via `ScriptedGenerator`.
 
 **Fase 5 — verificação, review e governança (ADRs 0008–0010), 6 ondas:**
 `/verify` (`crates/forge-verify`) roda um pipeline configurável
