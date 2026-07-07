@@ -164,10 +164,10 @@ writeFileSync(
 // 4. sobe o dashboard real apontando pro build da SPA, servindo o evento semeado.
 // --manifest-path resolve o workspace a partir de workDir (cargo não muda o
 // cwd do processo filho); run_dashboard lê `.forge/telemetry.db` relativo ao
-// cwd real do binário, por isso `cwd: workDir` aqui. `--web-agent` liga as
-// rotas de sessão/permissão/matriz/squad (Fase 7 Ondas 1-4) por cima do
-// dashboard padrão — puramente aditivo, não muda `/api/summary`/`/api/events`/
-// `/api/skills` que o teste de telemetria já usa. `FORGE_SCRIPTED=1` troca o
+// cwd real do binário, por isso `cwd: workDir` aqui. Fase 7 Onda 15 (fecho):
+// as rotas de sessão/permissão/matriz/squad vêm HABILITADAS por padrão agora
+// (antes exigia `--web-agent` explícito, Ondas 1-4) — nenhuma flag extra
+// necessária aqui. `FORGE_SCRIPTED=1` troca o
 // gerador por respostas determinísticas (sem API key) tanto na sessão de chat
 // quanto no squad (`ScriptedSquadCoreBackend`, mesma confiança 0.5 uniforme
 // do teste Rust — consenso fraco de propósito, exercita o gate HITL real);
@@ -190,7 +190,7 @@ const child = spawn(
   'cargo',
   [
     'run', '-q', '--manifest-path', manifestPath, '-p', 'forge-cli', '--',
-    'dashboard', '--port', port, '--web-agent',
+    'dashboard', '--port', port,
   ],
   {
     cwd: workDir,

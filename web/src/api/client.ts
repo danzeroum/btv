@@ -1,7 +1,4 @@
-/** Utilitários compartilhados pela camada api/*. Todo módulo mock usa
- * `simulateLatency()` para nunca parecer instantâneo/travado, e lança
- * `ApiError` para exercitar o estado `error` de `useAsyncAction`.
- */
+/** Utilitários compartilhados pela camada api/*. */
 
 export class ApiError extends Error {
   code?: string
@@ -9,17 +6,6 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
     this.code = code
-  }
-}
-
-export function simulateLatency(ms = 300 + Math.random() * 400): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/** Lança ApiError com a taxa dada — use em ações que devem, às vezes, exercitar o caminho de erro. */
-export function maybeFail(rate: number, message: string): void {
-  if (Math.random() < rate) {
-    throw new ApiError(message)
   }
 }
 
@@ -54,8 +40,12 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
       body.code ?? `http_${response.status}`,
     )
   }
-  if (response.status === 204) {
-    return undefined as T
-  }
-  return (await response.json()) as T
+  // Corpo vazio (204, ou 202 fire-and-forget como `POST .../message`) nunca
+  // deve chamar `.json()` direto — em conteúdo vazio ele lança `SyntaxError`
+  // (não `ApiError`), que o chamador então confunde com falha de verdade.
+  // Achado real ao escrever a 1ª cobertura de browser da tela Sessão (Onda
+  // 15): sem isso, toda mensagem enviada mostrava "falha ao enviar
+  // mensagem" mesmo quando o servidor respondia 202 com sucesso.
+  const text = await response.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }

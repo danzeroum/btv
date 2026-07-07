@@ -123,11 +123,13 @@ enum Commands {
         /// Porta local do dashboard.
         #[arg(long, default_value_t = 7878)]
         port: u16,
-        /// Fase 7 Onda 1 (opt-in até o fecho da fase): habilita as rotas do
-        /// agente web (sessão/permissão via SSE) por trás da guarda de
-        /// Origin/Host — sem isso, o dashboard segue só leitura como hoje.
-        #[arg(long)]
-        web_agent: bool,
+        /// Fase 7 Onda 15 (fecho): as rotas do agente web (sessão/permissão
+        /// via SSE, squad ao vivo, designer) vêm HABILITADAS por padrão — o
+        /// navegador é a forma primária de uso desta fase, não mais opt-in
+        /// (Onda 1). `--no-web-agent` volta ao dashboard só-leitura de
+        /// antes, por trás da mesma guarda de Origin/Host.
+        #[arg(long, default_value_t = false)]
+        no_web_agent: bool,
     },
     /// Gera o relatório de A/B testing de um experimento a partir da telemetria
     /// local: compara a taxa de sucesso das duas variantes com teste de
@@ -178,7 +180,7 @@ async fn main() -> Result<()> {
             let (generator, root) = prepare(&opts)?;
             squad::run_squad(generator, &opts, &root, task).await
         }
-        Commands::Dashboard { port, web_agent } => run_dashboard(port, web_agent).await,
+        Commands::Dashboard { port, no_web_agent } => run_dashboard(port, !no_web_agent).await,
         Commands::Experiment {
             experiment,
             db,
@@ -283,7 +285,7 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
     let web_dir = forge_server::default_web_dir();
     if web_agent {
         eprintln!(
-            "forge dashboard (--web-agent) — http://{addr} (assets: {})",
+            "forge dashboard — http://{addr} (assets: {}; sessão/permissão/squad ao vivo)",
             web_dir.display()
         );
         let hub = web_agent::default_hub();
@@ -318,7 +320,7 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
         .await?;
     } else {
         eprintln!(
-            "forge dashboard — http://{addr} (assets: {})",
+            "forge dashboard --no-web-agent (somente leitura) — http://{addr} (assets: {})",
             web_dir.display()
         );
         forge_server::serve(telemetry, prompt_library, ledger, &root, addr, web_dir).await?;

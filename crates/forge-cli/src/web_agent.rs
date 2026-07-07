@@ -910,11 +910,12 @@ pub fn merged_router(hub: SessionHub, dashboard: Router, extra: Router) -> Route
         .layer(middleware::from_fn(require_local_origin))
 }
 
-/// Sobe o dashboard com o agente web habilitado (`--web-agent`, opt-in até o
-/// fecho da fase) — mesma SPA/telemetria do dashboard padrão, mais as rotas
-/// desta onda e as de `extra` (squad, Onda 4; prompt-render, Onda 5) por
-/// trás da guarda de `Origin`/`Host`. `forge-server` em si segue intocado
-/// (zero dependência nova) — a composição mora aqui.
+/// Sobe o dashboard com o agente web habilitado — padrão desde a Onda 15
+/// (fecho); `--no-web-agent` volta ao dashboard só-leitura. Mesma
+/// SPA/telemetria do dashboard padrão, mais as rotas desta onda e as de
+/// `extra` (squad, Onda 4; prompt-render, Onda 5) por trás da guarda de
+/// `Origin`/`Host`. `forge-server` em si segue intocado (zero dependência
+/// nova) — a composição mora aqui.
 // 8 argumentos = os handles/config que `main.rs` já mantém abertos (um por
 // storage) + o que a composição de routers pede — função só encaminha, não
 // teria o que uma struct de agrupamento ganhasse em clareza.

@@ -47,3 +47,11 @@ sem forçar `forge-server` a ganhar dependências que sua fronteira nunca teve?
 - O teto de sessões é um limite de RECURSO (threads de `spawn_blocking`), não um
   limite de negócio — se o produto precisar de mais que 8 sessões simultâneas em
   produção, é uma configuração, não uma mudança de código.
+
+## Atualização (Onda 15 — fecho da Fase 7)
+
+O bullet "opt-in via `--web-agent`" mudou: a flag virou `--no-web-agent`
+(opt-**out**), com o agente web habilitado por padrão — o navegador é a
+forma primária de uso desta fase, não mais um extra atrás de flag. As
+outras três decisões desta ADR (código em `forge-cli`, `spawn_blocking`
+sempre, teto configurável de sessões) continuam valendo sem mudança.

@@ -1136,3 +1136,76 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   não deixa construir um grafo inválido por interação normal. Esse caso
   fica só no teste Rust (`salvar_workflow_com_aresta_pendente...`), que
   constrói o corpo HTTP direto, sem passar pela UI.
+
+## Onda 15 — Fecho
+
+- **[achado — bug real de produção] `fetchJson` chamava `.json()` direto num
+  corpo VAZIO de `202 Accepted`, e `SyntaxError` (não `ApiError`) fazia
+  `sendMessage` reportar falha mesmo quando o servidor respondia com
+  sucesso.** Achado escrevendo a 1ª cobertura de browser da tela Sessão
+  (`sessao-real-backend.spec.ts`) — nenhum outro teste (Rust ou Playwright)
+  batia esse caminho, porque `POST /api/session/:id/message` sempre foi
+  fire-and-forget (202 sem corpo, resultado via SSE), e todo teste Rust
+  chama o handler direto, nunca pelo `fetchJson` do browser. Sem o fix,
+  **toda mensagem enviada pela tela Sessão real mostraria "falha ao
+  enviar mensagem"**, apesar do turno completar normalmente por trás —
+  um bug silencioso que só a cobertura de browser (não unit test, não
+  leitura de código) revelava. Fix em `web/src/api/client.ts`: `fetchJson`
+  lê `response.text()` primeiro e só faz `JSON.parse` se não vazio,
+  substituindo o `if (status === 204)` especial-casado por uma checagem
+  geral de corpo vazio (cobre 202 e qualquer outro "sucesso sem corpo"
+  futuro, não só 204).
+- **[decisão] Varredura dos 2 resíduos mock na tela Sessão que nenhuma onda
+  anterior cobriu** (achado de uma auditoria independente contra o estado
+  real do repositório, não contra relato):
+  - `toggleToolPolicy`/`TOOL_POLICIES` (`api/session.ts`) — removidos, não
+    religados. Eram redundantes com a matriz real que a Onda 2 já entrega
+    na tela Skills (`fetchMatrix`, `GET /api/permissions/matrix`) — em vez
+    de duplicar o fluxo de confirmação daquela tela numa segunda tela, a
+    sidebar "FERRAMENTAS" da Sessão agora **lê** a mesma matriz real
+    (read-only, por perfil ativo), com o nome da ferramenta continuando a
+    abrir a tela Skills pra quem quiser mudar a política.
+  - `SESSION_HEADER` (`provider`/`cacheOn` hardcoded) — `provider` passa a
+    vir de `fetchProviders` (Onda 12: primeiro provider com `configured:
+    true`, mesma ordem fixa de fallback). `cacheOn` foi **removido**, não
+    substituído por um valor "real" fabricado: não há hoje um jeito honesto
+    do frontend saber se a sessão atual está em modo roteirizado
+    (`FORGE_SCRIPTED`, sem cache) ou real (com `CachedGenerator`) — inventar
+    um sinal novo só pra preencher esse campo seria escopo além de uma
+    varredura de resíduo; melhor remover a alegação do que fabricar uma
+    nova.
+- **[decisão] `--web-agent` vira `--no-web-agent` (Onda 15 — fecho, conforme
+  o plano-mestre já previa).** Agente web habilitado por padrão agora;
+  `run_dashboard`'s branch antes "padrão" (só leitura) virou o `else`. ADR
+  0020 ganhou uma seção "Atualização" (não reescrita — o resto da decisão
+  original, topologia+spawn_blocking+teto de sessões, continua valendo).
+  `run-integration-server.mjs` parou de passar `--web-agent` explícito
+  (seria um erro de parse agora, já que a flag mudou de nome) — achado
+  ao rodar a suíte de integração depois da mudança, não antes.
+- **[decisão] `simulateLatency`/`maybeFail` (`api/client.ts`) removidos —
+  código morto** depois que a Onda 14 (Designer) migrou o último módulo
+  `api/*.ts` que ainda os chamava. Critério mecânico `grep simulateLatency
+  web/src/api` fecha vazio (só resta uma menção em comentário histórico,
+  `models.ts`).
+- **[decisão] Documentação do fecho**: `README.md`/`CLAUDE.md` ganharam a
+  seção "Fase 7 concluída" (mesmo padrão de densidade das fases
+  anteriores); `docs/DECISOES.md` ganhou uma entrada consolidada de 15
+  ondas (mesmo padrão da entrada da Fase 6 — uma entrada por fase, não
+  mais uma por onda, convenção que já tinha mudado antes desta fase);
+  `docs/PLANO-PLATAFORMA-FORGE.md` ganhou um parágrafo-ponte (não uma
+  reescrita — o documento continua explicitamente escopado às 6 fases
+  originais); `docs/LEVANTAMENTO-UI-DESIGNER.md` ganhou uma nota "✅
+  Fechado pela Fase 7" (mesmo padrão de nota de superseded que
+  `PLANO-INTEGRACAO-FRONTEND.md` já usava), citando os dois descopes
+  (`max_autonomy_level` ADR 0021, `forgetting.py` ADR 0022) como histórico,
+  não escondidos.
+- **[nota] `docs/PLANO-FASE-7-frontend-primario.md` não foi editado** —
+  mesmo padrão já seguido em todas as ondas anteriores: o plano-mestre é
+  registro histórico do que foi planejado, `pendencias.md` é quem registra
+  o que de fato aconteceu onda a onda.
+- **[nota] `squad-real-backend.spec.ts` (pré-existente, não tocada nesta
+  onda) deu timeout uma vez rodando a suíte inteira em paralelo** (2
+  workers, depois de uma sessão longa com muitos builds/testes
+  seguidos) — reconfirmado verde rodando isolado logo em seguida (1.5s
+  até a primeira asserção). Contenção de recurso do ambiente, não
+  regressão: nada nesta onda toca squad/sidecar Python.
