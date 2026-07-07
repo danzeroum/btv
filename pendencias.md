@@ -1209,3 +1209,76 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   seguidos) — reconfirmado verde rodando isolado logo em seguida (1.5s
   até a primeira asserção). Contenção de recurso do ambiente, não
   regressão: nada nesta onda toca squad/sidecar Python.
+
+## Pós-Fase 7 — modelo do squad hardcoded (achado em produção, VPS real)
+
+- **[achado — bug real, sem ADR por trás] O squad do dashboard (navegador)
+  sempre mandava `"claude-sonnet-5"` pros 5 agentes Python, mesmo com
+  `DEEPSEEK_API_KEY` configurada e o usuário selecionando `deepseek-chat` na
+  tela Modelo.** Reportado como "selecionei deepseek na UI, cliquei, e não
+  mudou nada" — confirmado batendo no código, não no relato: `RunSquadBody`
+  (`squad_agent.rs`) só tem `task: String`, o frontend não tinha como mandar
+  modelo pro squad; `default_squad_pool` (que constrói o pool Python de
+  longa duração, capacidade 1, criado uma vez na subida do `forge
+  dashboard`) tinha `"claude-sonnet-5"` literal, que vira o default de
+  `ArchitectAgent`/`DeveloperAgent`/etc. (`orchestrator.py`) pra sempre,
+  até o processo reiniciar.
+  - **Importante: isso é diferente do `max_autonomy_level` (ADR 0021).** Uma
+    investigação externa citou o comentário "Descope explícito da Onda 13
+    (ADR 0021)" pra justificar o hardcode do **modelo** — mas esse
+    comentário (`squad_agent.rs`, perto da construção do `SquadTask`) é
+    sobre `max_autonomy_level`, um campo totalmente diferente. Conferi a
+    ADR 0021 inteira: fala só de autonomia, nunca de modelo. O hardcode do
+    modelo não era uma decisão documentada — era lacuna real, sem dono.
+  - **O `forge squad --model` via CLI (terminal) nunca teve esse bug** —
+    `squad.rs::run_squad` sempre passou `opts.model` de verdade pro
+    `SquadSupervisor::spawn` (processo Python novo a cada chamada, não um
+    pool persistente). O bug é específico do agente web/dashboard
+    (`squad_agent.rs`), que reusa um pool entre tarefas.
+  - **Mecanismo completo do "400 modelo desconhecido"** (pra não repetir o
+    diagnóstico externo que citou a ADR errada e propôs um workaround que
+    ele mesmo reconheceu não funcionar — setar `ANTHROPIC_API_KEY` com uma
+    key falsa "pra forçar" a DeepSeek): `Gateway::from_env()`
+    (`forge-llm/src/gateway.rs:44-81`) escolhe o provider **só por qual env
+    var existe e não é vazia**, em ordem fixa Anthropic → DeepSeek →
+    OpenAI — o nome do modelo nunca decide o provider, só vira o texto
+    dentro do corpo da requisição pro provider que "ganhou" a prioridade
+    (`call_provider`/`build_request_body`). Consequência: mesmo com
+    `ANTHROPIC_API_KEY` falsa, o Gateway tentaria Anthropic primeiro (401),
+    cairia pra DeepSeek (fallback real, o `for` tenta todos), mas o texto do
+    modelo continuaria `"claude-sonnet-5"` — a DeepSeek rejeitaria do mesmo
+    jeito. **E isso também é um risco pra Sessão/chat** (que já manda
+    `body.model` corretamente, Onda 13): se `ANTHROPIC_API_KEY` estiver
+    definida no ambiente (mesmo com valor velho/inválido), ela sempre é
+    tentada primeiro, e uma seleção de `deepseek-chat` na UI mandaria esse
+    texto pra Anthropic antes de cair pro DeepSeek. Vale conferir no
+    ambiente da VPS se `ANTHROPIC_API_KEY` está mesmo ausente.
+- **[decisão] Fix: `FORGE_SQUAD_MODEL` (env var), não trocar o literal por
+  outro literal.** `default_squad_pool` agora lê `FORGE_SQUAD_MODEL` com
+  fallback pra `"claude-sonnet-5"` (comportamento antigo intacto pra quem
+  não configurar nada) via um helper `squad_model()` compartilhado — usado
+  também no `RunOpts.model` de `run_squad_handler` (que antes só afetava o
+  tier de rate-limit, não o texto do modelo — corrigido por consistência,
+  não porque fosse a causa do bug) e no rótulo de `model` da sessão do
+  ledger (antes hardcoded, então o ledger sempre "mentia" `claude-sonnet-5`
+  mesmo quando outro modelo era usado — agora reflete o que o pool está
+  configurado pra usar de verdade).
+- **[dúvida/gap remanescente] Isto NÃO faz a tela Modelo controlar o squad
+  por tarefa** — `FORGE_SQUAD_MODEL` é uma env var fixa no deploy (lida uma
+  vez, na subida do dashboard), não um campo por-request. Fazer a seleção
+  da tela Modelo valer pro squad de verdade exige adicionar `model` ao
+  proto `SquadTask` (`schemas/proto/squad.proto`) e cada agente Python ler
+  por tarefa em vez de herdar do pool na construção — mesma categoria de
+  mudança arquitetural do `max_autonomy_level`/ADR 0021 (campo novo no
+  proto + Python consumindo por chamada), não coube nesta correção pontual.
+  Deixo registrado como trabalho futuro, não como algo que o fix atual já
+  resolve.
+- **[decisão] `docker-compose.yml`: serviço `dashboard` ganhou `environment:`**
+  (`ANTHROPIC_API_KEY`/`DEEPSEEK_API_KEY`/`OPENAI_API_KEY`/`FORGE_SQUAD_MODEL`,
+  mesmo padrão do serviço `forge`) — achado ao revisar o arquivo pra
+  documentar a env var nova: o serviço `dashboard` não passava NENHUMA key
+  pro container via `docker compose run --rm dashboard` (só funcionava se o
+  usuário lembrasse de repetir `-e` na linha de comando). Sem isso, o
+  dashboard subiria sem provider nenhum configurado — bug adjacente, não o
+  reportado, mas bloqueava o mesmo fluxo (squad/sessão pelo navegador) então
+  corrigi junto em vez de deixar half-fixed.
