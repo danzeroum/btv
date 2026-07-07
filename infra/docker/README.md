@@ -59,6 +59,26 @@ forge chat --model deepseek-chat
 forge squad --model deepseek-chat "tarefa multi-agente"
 ```
 
+**Só pelo CLI.** `forge squad --model` (acima) spawna um processo Python novo
+a cada chamada e passa `--model` de verdade (`squad.rs::run_squad` →
+`SquadSupervisor::spawn(..., &opts.model)`) — funciona como os outros dois.
+
+**O botão "Squad" do dashboard (navegador) é diferente.** Ali os 5 agentes
+Python rodam num pool de longa duração com capacidade 1, criado **uma vez**
+quando o `forge dashboard` sobe (não a cada tarefa) — não existe hoje um
+caminho por-tarefa pra escolher modelo (nem a tela "Modelo" do frontend, nem
+nenhum campo do request chegam até o squad; ver `pendencias.md`). Configure
+**antes** de subir o dashboard, via env var:
+
+```sh
+docker run --rm --network host -e DEEPSEEK_API_KEY=sk-... -e FORGE_SQUAD_MODEL=deepseek-chat \
+  -v "$PWD":/work forge:test forge dashboard --port 7878
+```
+
+Sem `FORGE_SQUAD_MODEL`, o squad do dashboard continua mandando
+`claude-sonnet-5` pro provider configurado — que a DeepSeek rejeita (400),
+mesmo com a key certa.
+
 Modelos disponíveis na DeepSeek hoje: `deepseek-chat` (V3, uso geral) e
 `deepseek-reasoner` (R1, raciocínio — mais lento). Confirme na doc oficial da
 DeepSeek o nome exato vigente e a janela de contexto real do modelo escolhido;

@@ -320,10 +320,11 @@ where
 
     // Abre a sessão de ledger ANTES de mover `description` para o
     // `SquadTask` abaixo — mesma sessão/ledger que o resto da plataforma
-    // usa (`.forge/forge.db`), "model" aqui é só rótulo informativo (a
-    // sessão de squad não escolhe modelo por si — cada agente chama
-    // `Generate` com o modelo do próprio request).
-    let mut ledger_session = crate::session::Session::open(&root, &description, "claude-sonnet-5")
+    // usa (`.forge/forge.db`). "model" aqui é rótulo informativo do que o
+    // pool está configurado pra usar (`squad_model()`), não uma escolha
+    // por-tarefa — a sessão de squad não escolhe modelo por si, e cada
+    // agente Python chama `Generate` com o modelo herdado do pool.
+    let mut ledger_session = crate::session::Session::open(&root, &description, &squad_model())
         .map_err(|e| e.to_string())?;
 
     let lease = pool
@@ -430,7 +431,7 @@ async fn run_squad_handler(
         ));
     } else {
         let opts = crate::RunOpts {
-            model: "claude-sonnet-5".into(),
+            model: squad_model(),
             agent: "build".into(),
             yes: false,
             no_cache: false,
@@ -523,6 +524,20 @@ pub fn router(hub: SquadHub, pool: Arc<SquadPool>) -> Router {
         .with_state(SquadAgentState { hub, pool })
 }
 
+/// Modelo do squad — configurável via `FORGE_SQUAD_MODEL` porque o pool é
+/// construído **uma vez só**, na subida do `forge dashboard` (capacidade 1,
+/// reusado sequencialmente entre tarefas — ver comentário de módulo), e vira
+/// o default de todos os 5 agentes Python (`UnifiedOrchestrator`, que passa
+/// este `model` pra cada `ArchitectAgent`/`DeveloperAgent`/etc.). Não existe
+/// hoje um caminho por-tarefa (`RunSquadBody`/`SquadTask` não carregam
+/// `model`) — fazer isso de verdade exigiria o campo no proto, escopo maior
+/// que esta correção. Sem a env var, mantém o default antigo
+/// (`claude-sonnet-5`) — comportamento inalterado pra quem não configurar
+/// nada.
+fn squad_model() -> String {
+    std::env::var("FORGE_SQUAD_MODEL").unwrap_or_else(|_| "claude-sonnet-5".into())
+}
+
 /// Constrói o pool do squad para o agente web — capacidade 1 (ver
 /// comentário de módulo). Workspace Python ausente não impede a
 /// construção (lazy: só falha, com erro claro, no primeiro `acquire()`
@@ -536,7 +551,7 @@ pub fn default_squad_pool(root: &std::path::Path) -> Arc<SquadPool> {
         py_dir,
         socket_dir,
         core_sock,
-        "claude-sonnet-5".into(),
+        squad_model(),
         1,
         Duration::from_secs(30),
     ))
@@ -575,6 +590,21 @@ mod tests {
             })
             .filter_map(|json_str| serde_json::from_str(json_str.trim()).ok())
             .collect()
+    }
+
+    /// Prova as duas pontas do bug real (achado em produção via VPS): sem a
+    /// env var, o comportamento antigo (`claude-sonnet-5`) continua intacto;
+    /// com ela, o squad passa a pedir o modelo configurado — antes desta
+    /// correção não havia NENHUM jeito de mudar isso sem recompilar.
+    #[test]
+    fn squad_model_le_forge_squad_model_com_fallback_pro_claude_sonnet_5() {
+        std::env::remove_var("FORGE_SQUAD_MODEL");
+        assert_eq!(squad_model(), "claude-sonnet-5");
+
+        std::env::set_var("FORGE_SQUAD_MODEL", "deepseek-chat");
+        assert_eq!(squad_model(), "deepseek-chat");
+
+        std::env::remove_var("FORGE_SQUAD_MODEL");
     }
 
     #[test]
