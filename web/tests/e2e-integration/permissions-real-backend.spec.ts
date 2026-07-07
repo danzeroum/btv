@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 /** Fase 7 Onda 2 (remanescente): a matriz de permissão e a lista de regras
  * ativas deixaram de ser mock local — este teste prova a fronteira
- * browser → fetch real → axum (`--web-agent`) → `RuleStore`/`PermissionEngine`
+ * browser → fetch real → axum (router do agente web) → `RuleStore`/`PermissionEngine`
  * → JSON → React, incluindo o modal de confirmação obrigatório ("nunca um
  * clique único e opaco") e a revogação. O rastro no ledger em si já é
  * provado a nível Rust (`web_agent::tests::post_rule_persiste_matriz_reflete_e_ledger_audita`);
