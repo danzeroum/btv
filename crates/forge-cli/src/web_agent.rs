@@ -1602,6 +1602,123 @@ mod tests {
         std::env::set_current_dir(orig_cwd).unwrap();
     }
 
+    /// Onda 13 (Modelo & Onboarding): `model`/`agent` já existiam em
+    /// `SendMessageBody` desde a Onda 1, mas o frontend nunca os populava —
+    /// `unwrap_or_else` sempre caía no default. Esta onda liga o frontend;
+    /// este teste prova que o campo `agent` do corpo HTTP produz
+    /// comportamento OBSERVÁVEL diferente via `load_rule_overrides(&root,
+    /// &opts.agent)` — não só "o campo viajou": um override real (mesmo
+    /// mecanismo persistido da matriz de permissão, Onda 2) para
+    /// `plan`+`bash` = deny faz a MESMA mensagem roteirizada terminar direto
+    /// em `tool_denied` quando `agent: "plan"` é enviado, e pedir
+    /// confirmação (`permission_requested`, o default real de `build`, sem
+    /// override) quando `agent` nem é enviado.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn post_message_respeita_o_agent_do_corpo_via_override_persistido() {
+        let _guard = lock_cwd().await;
+        std::env::set_var("FORGE_SCRIPTED", "1");
+        let dir = tempfile::tempdir().unwrap();
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        open_rule_store(dir.path())
+            .unwrap()
+            .set(
+                "plan",
+                "bash",
+                None,
+                forge_store::RuleDecision::Deny,
+                &crate::session::now_rfc3339(),
+            )
+            .unwrap();
+
+        let hub = SessionHub::new(8, Duration::from_secs(5));
+        let app = router(hub.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = reqwest::Client::new();
+
+        // agent="plan": override deny já decide, nunca pede confirmação.
+        let sse_plan = client
+            .get(format!("http://{addr}/api/session/plan1/events"))
+            .send()
+            .await
+            .unwrap();
+        let mut stream_plan = sse_plan.bytes_stream();
+        client
+            .post(format!("http://{addr}/api/session/plan1/message"))
+            .json(&serde_json::json!({"message": "diga oi", "agent": "plan"}))
+            .send()
+            .await
+            .unwrap();
+        let mut buf_plan = String::new();
+        loop {
+            let chunk = stream_plan.next().await.unwrap().unwrap();
+            buf_plan.push_str(std::str::from_utf8(&chunk).unwrap());
+            if extract_events(&buf_plan)
+                .iter()
+                .any(|e| e.get("type").map(|t| t == "done").unwrap_or(false))
+            {
+                break;
+            }
+        }
+        let events_plan = extract_events(&buf_plan);
+        assert!(
+            events_plan
+                .iter()
+                .any(|e| e.get("type").map(|t| t == "tool_denied").unwrap_or(false)),
+            "agent=plan com override deny deveria negar bash sem perguntar: {events_plan:?}"
+        );
+        assert!(
+            !events_plan.iter().any(|e| e
+                .get("type")
+                .map(|t| t == "permission_requested")
+                .unwrap_or(false)),
+            "não deveria pedir confirmação — o override já decide sozinho"
+        );
+
+        // Sem `agent` no corpo: cai no default "build" (sem override) — bash
+        // pede confirmação de verdade, comportamento diferente do caso acima.
+        let sse_build = client
+            .get(format!("http://{addr}/api/session/build1/events"))
+            .send()
+            .await
+            .unwrap();
+        let mut stream_build = sse_build.bytes_stream();
+        client
+            .post(format!("http://{addr}/api/session/build1/message"))
+            .json(&serde_json::json!({"message": "diga oi"}))
+            .send()
+            .await
+            .unwrap();
+        let mut buf_build = String::new();
+        let request_id = loop {
+            let chunk = stream_build.next().await.unwrap().unwrap();
+            buf_build.push_str(std::str::from_utf8(&chunk).unwrap());
+            let found = extract_events(&buf_build).into_iter().find_map(|e| {
+                if e.get("type")? == "permission_requested" {
+                    Some(e.get("request_id")?.as_str()?.to_string())
+                } else {
+                    None
+                }
+            });
+            if let Some(id) = found {
+                break id;
+            }
+        };
+        client
+            .post(format!("http://{addr}/api/session/build1/permission"))
+            .json(&serde_json::json!({"request_id": request_id, "allow": true}))
+            .send()
+            .await
+            .unwrap();
+
+        std::env::set_current_dir(orig_cwd).unwrap();
+    }
+
     #[tokio::test]
     async fn post_message_alem_do_teto_de_sessoes_recebe_429() {
         let hub = SessionHub::new(1, Duration::from_secs(5));

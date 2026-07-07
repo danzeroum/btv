@@ -26,7 +26,14 @@ interface SessionContextValue {
   lastError: string | null
   /** Contagem real do último `Session::verify()` — `null` antes do 1º turno concluir. */
   ledgerVerified: number | null
-  sendMessage: (message: string) => Promise<void>
+  /**
+   * `opts.model`/`opts.agent` (Fase 7 Onda 13) vão direto no corpo de
+   * `POST .../message` — os mesmos campos que `SendMessageBody` (Rust) já
+   * aceita desde a Onda 1, antes nunca populados pelo cliente. Parâmetro
+   * por chamada, não estado persistido (mirroring do CLI: `--model`/
+   * `--agent` são flags por invocação, não uma preferência salva).
+   */
+  sendMessage: (message: string, opts?: { model?: string; agent?: string }) => Promise<void>
   resolvePermission: (allow: boolean) => Promise<void>
 }
 
@@ -107,7 +114,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [sessionId])
 
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, opts?: { model?: string; agent?: string }) => {
       setLastError(null)
       setBusy(true)
       setTranscript((prev) => [...prev, { id: nextTurnId('u'), kind: 'user', text: message }])
@@ -115,7 +122,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await fetchJson(`/api/session/${encodeURIComponent(sessionId)}/message`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, ...opts }),
         })
       } catch (e) {
         setBusy(false)

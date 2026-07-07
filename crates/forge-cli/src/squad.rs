@@ -224,6 +224,14 @@ async fn try_squad(
     let verification_evidence_json = serde_json::to_string(&evidence)
         .map_err(|e| format!("falha ao serializar evidência: {e}"))?;
 
+    // `max_autonomy_level` hardcoded (não uma flag de CLI, nem lido do
+    // request web): confirmado nesta onda que o campo é ignorado
+    // ponta-a-ponta hoje — `forge_squad/server.py::ExecuteTask` nunca lê
+    // `request.max_autonomy_level`; a autonomia real vem de
+    // `ProgressiveAutonomyManager`/`agent_trust_scores` (`hitl.py`),
+    // desconectado deste campo do proto. Wire-lo até a UI seria só "o campo
+    // viajou" sem efeito nenhum — descope explícito (ADR 0021), não
+    // esquecimento. Ver `pendencias.md` (Onda 13).
     let stream = client
         .execute_task(SquadTask {
             task_id: format!("s{pid:x}", pid = std::process::id()),
