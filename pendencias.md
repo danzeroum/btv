@@ -990,3 +990,108 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   providers vêm antes da legenda), não com um seletor mais específico —
   mesma classe de armadilha já registrada para `getByText('read-only')` na
   Onda 10.
+
+## Onda 13 — Modelo & Onboarding
+
+- **[achado] `model`/`agent` já existiam em `SendMessageBody`
+  (`web_agent.rs`) desde a Onda 1, mas o frontend nunca os populava** —
+  `sendMessage(text)` só mandava `{message}`, então o `unwrap_or_else`
+  sempre caía no default hardcoded (`"claude-sonnet-5"`/`"build"`),
+  independente do que `Modelo.tsx` mostrasse selecionado. Zero mudança de
+  backend foi necessária para o piso desta onda — só `SessionContext.tsx`'s
+  `sendMessage` ganhar um parâmetro opcional `{model, agent}` e
+  `Sessao.tsx`'s call site passar `{model: primaryModelName(modelTier),
+  agent: agentProfile}`. **Fronteira provada, não só "o campo viaja":** um
+  override real (mesmo mecanismo persistido de `RuleStore` que a matriz de
+  permissão da Onda 2 usa) para `plan`+`bash` = deny faz a mensagem
+  roteirizada terminar em `tool_denied` sem perguntar quando `agent: "plan"`
+  é enviado, e em `permission_requested` (ask, default real de `build`, sem
+  override) quando `agent` nem é mandado — dois caminhos HTTP idênticos
+  exceto o campo, comportamento observável diferente
+  (`post_message_respeita_o_agent_do_corpo_via_override_persistido`).
+- **[decisão] `primaryModelName(tier)` (já existente, só usado até agora
+  pra exibir texto no cabeçalho da sessão) virou o valor real enviado no
+  campo `model`.** Não fabriquei um catálogo de model-id novo — reusei a
+  string que o usuário já vê na tela (`MODEL_TIERS[tier].models.split('
+  · ')[0]`). Ressalva honesta: `small`'s entrada (`"haiku"`) não é
+  necessariamente um id de modelo resolvível por um provider real (ao
+  contrário de `"claude-sonnet-5"`, que já aparece como default em 3 outros
+  lugares do código) — isso é uma imprecisão PRÉ-EXISTENTE em `MODEL_TIERS`
+  (Onda 7), não introduzida aqui; corrigir o catálogo de modelos é fora do
+  escopo de "Modelo & Onboarding" (que é sobre telas, não sobre curar a
+  lista de modelos suportados).
+- **[decisão] `selectTier`/`selectAgentProfile`/`selectAutonomy`
+  (`api/models.ts`) removidos — eram `simulateLatency(150); return
+  <mesmo valor>`, uma chamada fake sem efeito.** Tier/agente não são mais
+  "selecionados" via uma chamada à parte: a escolha em `Modelo.tsx` fica só
+  no `AppContext` (dispatch local) e é aplicada de verdade só quando a
+  próxima mensagem é enviada — parâmetro por sessão/tarefa, mirroring do
+  CLI (`--model`/`--agent` são flags por invocação, não uma preferência
+  persistida), não um store de preferência novo. Os toasts refletem isso
+  ("aplica à próxima mensagem enviada"), não mais um "selecionado"/"ativo"
+  que sugeria um round-trip imediato ao backend.
+- **[decisão — ADR 0021] `max_autonomy_level` NÃO foi wireado até a UI —
+  descope explícito, não esquecimento.** Confirmado nesta onda: o campo é
+  ignorado ponta-a-ponta hoje (hardcoded `3` em `squad.rs`+`squad_agent.rs`,
+  nunca lido por `forge_squad/server.py::ExecuteTask`; a autonomia real vem
+  de `ProgressiveAutonomyManager`/`agent_trust_scores`, `hitl.py`,
+  desconectado deste campo do proto). A própria fronteira que o plano exige
+  para "se autonomia entrar" — comportamento observável diferente por
+  nível, não só o campo viajando — não seria alcançável sem mudar o
+  orquestrador Python, uma mudança arquitetural fora do escopo de uma onda
+  de telas. `Modelo.tsx`'s seção de autonomia virou um bloco informativo
+  (sem botões, sem estado local, sem toast de sucesso fake) com nota
+  explícita "não aplicado pelo orquestrador ainda". Os dois hardcodes
+  (`squad.rs`/`squad_agent.rs`) ganharam comentário apontando a ADR, não
+  ficaram silenciosos. Detalhe completo na ADR 0021.
+- **[decisão] `GET /api/doctor` novo (`crates/forge-cli/src/doctor_console.rs`)
+  agrega 4 checagens: providers (reusa o mesmo `Gateway::from_env()
+  .available()` + `KNOWN_PROVIDERS` da Onda 12, duplicado — não importado,
+  mesma convenção de `git_sha`/`now_rfc3339` entre os dois crates), `uv
+  --version` (novo, com PATH injetável pra teste determinístico — ver
+  abaixo), ping Docker (reusa `Sandbox::ping()` da Onda 10 sem mudança), e
+  git (reusa `crate::git_sha()` de `main.rs` DIRETO — mesmo crate que
+  `doctor_console.rs`, então nenhuma duplicação faz sentido aqui, diferente
+  do caso cross-crate forge-server/forge-cli). Mora em `forge-cli` (não
+  `forge-server`) porque a checagem de Docker precisa de
+  `forge_tools::sandbox` — mesma regra de posicionamento de rota das
+  demais telas admin desta fase.
+- **[decisão] `uv_check_with_path` checa `status.success()`, não só se o
+  processo subiu — diferente do guard de teste `uv_missing()` (duplicado em
+  ~7 arquivos `#[cfg(test)]` deste workspace, que só quer saber "existe pra
+  pular o teste").** Este é o doctor mostrado ao usuário real: um `uv`
+  presente mas quebrado (exit ≠0) deve aparecer como ausente, não como
+  presente. PATH é injetável (`Option<&str>`) pro teste simular "uv
+  ausente" apontando pra um PATH vazio, sem depender do PATH real do
+  processo de teste — mesmo espírito de `Sandbox::ping_with` receber um
+  client já configurado em vez de só `ping()`.
+- **[decisão] `onboarding.ts`/`Onboarding.tsx` reescritos: `ENV_KEYS`/
+  `DOCTOR_OUTPUT` (arrays estáticos, sempre "tudo verde" exceto os
+  fallbacks marcados de propósito) saem, `fetchDoctor()` real entra.**
+  Deliberadamente NÃO importei `fetchProviders`/`api/providers.ts` da Onda
+  12 pro card "Chaves de API" — a Onda 12 ainda não tinha mergeado quando
+  esta onda começou (branch aberta direto de `origin/main`, sem
+  sobreposição de arquivo com `claude/fase-7-onda-12`, de propósito, pra
+  não empilhar sem necessidade). O card usa o resumo agregado que o próprio
+  `/api/doctor` já calcula (`"N/3 provider(s) configurado(s)"`) em vez de
+  duplicar a lógica de `KNOWN_PROVIDERS` uma terceira vez só pra ter uma
+  lista por-key aqui também — o detalhe por provider individual mora na
+  tela Providers, não duplicado nesta.
+- **[nota] `AutonomyLevel` (`web/src/types/domain.ts`) ficou sem uso**
+  depois que `Modelo.tsx` trocou pra um union type literal local — deixado
+  no arquivo de propósito (não removido) pra não tocar `domain.ts`, que a
+  Onda 12 (ainda não mergeada) também edita por perto (`ProviderInfo`);
+  remover é cosmético e pode esperar uma onda que já vá mexer nesse
+  arquivo por outro motivo.
+- **[decisão] Fronteira do doctor por Playwright usa 2 gêmeos genuinamente
+  determinísticos, por motivos opostos — nenhum hardcoded por
+  conveniência.** `uv`: gêmeo POSITIVO real (o job `web` do CI instala via
+  `astral-sh/setup-uv@v5`, precondição já existente pro squad e2e — PATH
+  herdado pelo processo do dashboard tem `uv` de verdade). `git`: gêmeo
+  NEGATIVO real (o dashboard roda com `cwd` no `workDir` temporário de
+  `run-integration-server.mjs`, que nunca é um repositório git — `git
+  rev-parse HEAD` falha de verdade ali). `docker`/`providers` ficam sem
+  valor afirmado: docker varia por ambiente (mesma cautela da Onda 10);
+  providers já tem fronteira determinística a nível Rust
+  (`doctor_agrega_as_4_checagens_com_providers_real`, com isolamento de env
+  var) — reafirmar no Playwright seria uma segunda cópia do mesmo teste.

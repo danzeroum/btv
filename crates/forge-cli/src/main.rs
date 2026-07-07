@@ -6,6 +6,7 @@
 //! `squad` ativa o sidecar Python na Fase 4; `verify` completa na Fase 5.
 
 mod cache;
+mod doctor_console;
 mod lsp_console;
 mod mcp_console;
 mod memory_console;
@@ -296,12 +297,14 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
         let memory_router = memory_console::router(memory_service);
         let sandbox_router = sandbox_console::router();
         let lsp_router = lsp_console::router(root.clone());
+        let doctor_router = doctor_console::router();
         let extra_router = squad_router
             .merge(prompt_router)
             .merge(mcp_router)
             .merge(memory_router)
             .merge(sandbox_router)
-            .merge(lsp_router);
+            .merge(lsp_router)
+            .merge(doctor_router);
         web_agent::serve_with_agent(
             telemetry,
             prompt_library,

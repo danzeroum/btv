@@ -64,7 +64,7 @@ export function Sessao() {
     const text = input
     setInput('')
     try {
-      await sendMessage(text)
+      await sendMessage(text, { model: primaryModelName(modelTier), agent: agentProfile })
     } catch {
       toast.push('error', 'falha ao enviar mensagem')
     }

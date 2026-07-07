@@ -332,6 +332,10 @@ where
         .map_err(|e: SidecarError| e.to_string())?;
     let mut client = lease.client().clone();
 
+    // Hardcoded, não lido de `RunSquadBody`: o campo é ignorado
+    // ponta-a-ponta pelo Python hoje (ver mesmo comentário em `squad.rs`) —
+    // wire-lo até a UI seria "o campo viajou" sem efeito real. Descope
+    // explícito da Onda 13 (ADR 0021), não esquecimento.
     let mut stream = client
         .execute_task(SquadTask {
             task_id: task_id.clone(),
