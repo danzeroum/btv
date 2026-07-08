@@ -165,22 +165,40 @@ rápidas, mesmo depois de `--rm` no container.
    são internos ao *container* — então o sandbox de terceiro via DinD é a parte
    mais frágil; deixe-a por último no seu teste.
 
-4. **Dashboard em `127.0.0.1` = loopback do container.** Ver a seção "Acessando
-   via web" acima — precisa de `--network host` + túnel SSH; nunca publicar a
-   porta direto na internet.
+4. **Dashboard em `127.0.0.1` por padrão = loopback do container.** Para uso
+   pessoal, ver "Acessando via web" acima (`--network host` + túnel SSH). Para
+   hospedar atrás de um ingress, use `--host 0.0.0.0` + `BTV_TRUSTED_ORIGINS`
+   (seção abaixo) — **nunca** publicar a porta direto na internet.
 
-## Quando você quiser expor de verdade (multiusuário, na internet)
+## Hospedagem atrás de um ingress (opt-in, COM autenticação)
 
-Isso **não** é "seguir um passo a passo" — é engenharia ainda não feita neste
-repo: bind público (trocar o `127.0.0.1`), TLS + proxy reverso, autenticação,
-hardening. Trate como uma **fase nova a planejar**, não como config residual do
-que existe. Esta imagem é para teste seu, não para produção exposta.
+O caminho existe, mas é **opt-in e default-seguro** — sem os dois passos abaixo,
+o comportamento é idêntico ao local-first (loopback + só-localhost):
+
+1. **Bind:** `btv dashboard --host 0.0.0.0` amarra em todas as interfaces *do
+   container*. Rode-o **na rede bridge `btv-prod-net`, SEM `ports:` publicado**
+   — assim só o gateway nginx (mesma rede) alcança por nome de container; a
+   porta nunca aparece no host/internet.
+2. **Guarda de Origin (ADR 0015):** por padrão toda requisição mutável de uma
+   origin ≠ localhost recebe 403. `BTV_TRUSTED_ORIGINS=squad.exemplo.cloud`
+   (lista separada por vírgula) libera a(s) origin(s) do seu domínio. Isso
+   **afrouxa a proteção de CSRF** — por isso só é aceitável **com autenticação
+   na borda** (basic auth no nginx; o gateway já monta um `.htpasswd`).
+
+> O dashboard **executa código e usa API keys**. Sem basic auth no ingress, não
+> suba: qualquer um na internet teria um shell de agente no seu servidor.
+
+Pronto para usar: `infra/docker/docker-compose.prod.yml` (bridge, sem porta
+publicada, `BTV_TRUSTED_ORIGINS` por env) + um `server {}` no nginx do ingress
+com `auth_basic` apontando para `proxy_pass http://btv-squad-dashboard:7878`.
 
 ## Nota
 
 Esta imagem foi escrita a partir de passos **verificados individualmente fora do
-Docker** (`cargo build --release -p btv-cli`, `uv sync` e `pnpm install &&
-pnpm build` do frontend rodam limpos no repo), mas o **Dockerfile em si não foi
-buildado num daemon Docker** durante a autoria (o ambiente de dev não tinha um).
-Builde-o na sua VPS; se algo faltar no runtime slim, o ajuste típico é uma lib de
-sistema a mais no `apt-get install` do estágio `runtime`.
+Docker** (`cargo build --release -p btv-cli`, `uv sync`, e `pnpm install &&
+pnpm build` de `web/` **e** de `btv-web/` — este com `git submodule update
+--init` do `vendor/bpmn` — rodam limpos no repo), mas o **Dockerfile em si não
+foi buildado num daemon Docker** durante a autoria (o ambiente de dev não tinha
+um). Builde-o na sua VPS **após** `git submodule update --init --recursive` (o
+estágio `btvweb-build` precisa do `vendor/bpmn` no contexto); se algo faltar no
+runtime slim, o ajuste típico é uma lib de sistema a mais no `apt-get install`.

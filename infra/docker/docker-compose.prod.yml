@@ -1,0 +1,59 @@
+# Compose de HOSPEDAGEM do BuildToValue atrás de um ingress (opt-in).
+#
+# ⚠️ LEIA ANTES. O `btv dashboard` habilita o agente web por padrão: ele
+# EXECUTA CÓDIGO no diretório de trabalho e usa as API keys do processo. Expor
+# isto publicamente sem autenticação é perigoso. Este compose foi desenhado
+# para rodar SÓ na rede bridge interna (`btv-prod-net`), SEM publicar porta no
+# host — apenas o gateway nginx (mesma rede) alcança o container por nome. A
+# autenticação é responsabilidade do ingress (basic auth com o .htpasswd que o
+# gateway já monta). Sem isso, não suba.
+#
+# Pré-requisitos na VPS (a partir de /opt/btv):
+#   git submodule update --init --recursive          # vendor/bpmn (build do btv-web)
+#   export ANTHROPIC_API_KEY=sk-ant-...               # ou DEEPSEEK/OPENAI (ADR 0001)
+#   export BTV_TRUSTED_ORIGINS=squad.buildtovalue.cloud
+#   docker compose -f infra/docker/docker-compose.prod.yml up -d --build
+#
+# A rede `btv-prod-net` é criada pelo compose do ingress (global-ingress);
+# aqui ela é referenciada como externa.
+name: btv-squad
+services:
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    image: btv:prod
+    container_name: btv-squad-dashboard
+    restart: always
+    networks: [btv-prod-net]
+    environment:
+      # As keys vivem SÓ no processo Rust (ADR 0001) — herdadas do host.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Modelo dos 5 agentes do squad ao vivo (pool de longa duração).
+      BTV_SQUAD_MODEL: ${BTV_SQUAD_MODEL:-}
+      # Libera a origin pública na guarda de CSRF/DNS-rebinding (ADR 0015).
+      # SÓ funciona combinado com basic auth no ingress. Vazio = só localhost.
+      BTV_TRUSTED_ORIGINS: ${BTV_TRUSTED_ORIGINS:-}
+    # Bind 0.0.0.0 DENTRO da bridge (sem `ports:` publicado no host): só o nginx
+    # da mesma rede alcança via `http://btv-squad-dashboard:7878`. Nunca exposto
+    # direto na internet — a borda pública é o gateway, com auth.
+    command: ["btv", "dashboard", "--host", "0.0.0.0", "--port", "7878"]
+    volumes:
+      # Workspace/persistência do produto: .btv/*.db (runs, entregas, personas,
+      # ledger), sessões do agente web. Volume nomeado para sobreviver a deploys.
+      - btv-squad-data:/work
+    healthcheck:
+      # GET / (a SPA) nunca é bloqueado pela guarda de Origin.
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+networks:
+  btv-prod-net:
+    external: true
+    name: btv-prod-net
+volumes:
+  btv-squad-data:
