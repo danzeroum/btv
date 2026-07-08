@@ -81,8 +81,11 @@ pub fn load_config(path: &Path) -> Result<Option<VerifyConfig>, ConfigError> {
 /// (`.github/workflows/ci.yml`) — mesmos comandos, incluindo `-D warnings`.
 pub fn default_steps() -> Vec<StepSpec> {
     vec![
+        // 900s: o workspace inclui testes cross-process (squad e2e, sidecar
+        // Python via uv) e o passo compila o perfil de teste inteiro — 300s
+        // estouravam no runner do CI (job `verify`, self-hosting).
         StepSpec::new("test", "cargo", vec!["test".into(), "--workspace".into()])
-            .with_timeout(Duration::from_secs(300)),
+            .with_timeout(Duration::from_secs(900)),
         StepSpec::new(
             "lint",
             "cargo",

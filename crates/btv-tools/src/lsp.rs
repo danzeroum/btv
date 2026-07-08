@@ -267,12 +267,19 @@ impl LspSession {
             params["context"] = json!({ "includeDeclaration": true });
         }
 
-        // Enquanto o rust-analyzer indexa, a resposta vem vazia; re-tenta.
+        // Enquanto o rust-analyzer indexa, a resposta vem vazia; re-tenta. O
+        // mesmo vale para ContentModified/ServerCancelled: o server invalidou o
+        // request no meio da indexação e a spec LSP manda o cliente re-tentar.
         let start = Instant::now();
         loop {
-            let res = Self::request(proc, method, params.clone())?;
-            if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
-                return Ok(res);
+            match Self::request(proc, method, params.clone()) {
+                Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
+                Err(e) => return Err(e),
+                Ok(res) => {
+                    if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
+                        return Ok(res);
+                    }
+                }
             }
             std::thread::sleep(Duration::from_millis(300));
         }
@@ -485,6 +492,13 @@ fn respond_server_request(w: &mut impl Write, m: &Value) -> Result<(), String> {
 
 fn is_empty(v: &Value) -> bool {
     v.is_null() || v.as_array().map(|a| a.is_empty()).unwrap_or(false)
+}
+
+/// Erros que a spec LSP define como re-tentáveis: `ContentModified` (-32801,
+/// o server invalidou o request durante análise/indexação) e `ServerCancelled`
+/// (-32802). O rust-analyzer devolve o primeiro enquanto indexa.
+fn is_retryable_lsp_error(e: &str) -> bool {
+    e.contains("-32801") || e.contains("-32802")
 }
 
 fn language_id(uri: &str) -> &'static str {
