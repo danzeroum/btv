@@ -62,7 +62,7 @@ export function Permissoes() {
       </div>
 
       {confirmar && (
-        <div data-testid="confirmar-permissao" style={{ background: 'var(--white)', border: '2px solid var(--gold)', borderRadius: 14, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div data-testid="confirmar-permissao" style={{ background: 'var(--white)', border: '2px solid var(--decision)', borderRadius: 14, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13.5 }}>
             Mudar <strong className="mono">{confirmar.tool}</strong> no perfil{' '}
             <strong className="mono">{confirmar.profile}</strong> para{' '}

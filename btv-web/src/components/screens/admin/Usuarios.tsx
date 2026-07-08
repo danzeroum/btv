@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createUser, fetchUsers, setUserAtivo, type BtvUser } from '../../../api/admin'
 import { ErroBox, NotaHonesta, Pill, Toggle } from './comum'
 
-const CORES = ['var(--brand)', '#b8531f', '#345f9e', '#8d3f6a', '#57702b', '#6b4fae']
+// Avatares em família grafite/taupe — iniciais discretas, sem cores funcionais
+// (regra §5 Usuários: "avatar de iniciais grafite").
+const CORES = ['#2b2b28', '#4a463f', '#6f675a', '#5b5344', '#8b8171', '#3c3934']
 
 /** A6 · Usuários & acessos — perfis LOCAIS persistidos (BtvStore), sem
  *  senha/autenticação (local-first, 127.0.0.1): identidade nomeada para

@@ -58,8 +58,8 @@ export function Sidebar() {
                 className="mono"
                 style={{
                   marginLeft: 'auto',
-                  background: 'var(--warn)',
-                  color: '#fff',
+                  background: 'var(--decision)',
+                  color: 'var(--card)',
                   fontSize: 9.5,
                   borderRadius: 999,
                   padding: '2px 7px',

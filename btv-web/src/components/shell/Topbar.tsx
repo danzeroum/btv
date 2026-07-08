@@ -35,25 +35,11 @@ export function Topbar({ onToggleGear }: { onToggleGear: () => void }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 9,
-            background: 'var(--brand)',
-            color: 'var(--gold)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: 'var(--disp)',
-            fontWeight: 800,
-            fontSize: 16,
-          }}
-        >
-          B
-        </div>
+        {/* Símbolo do logo (aro interrompido com gate). Cores constantes no SVG
+            — grafite + gate terracota; sem transform/filter (regra da marca). */}
+        <img src="/logo-principal.svg" width={28} height={28} alt="BuildToValue" style={{ flex: 'none' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em', lineHeight: 1 }}>
+          <span style={{ fontFamily: 'var(--sans)', fontWeight: 600, fontSize: 16, color: 'var(--ink)', letterSpacing: '-0.01em', lineHeight: 1 }}>
             BuildToValue
           </span>
           <span

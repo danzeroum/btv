@@ -8,10 +8,10 @@ import type { BpmnPlugin, EdgeStyle, ShapeProps } from '@bpmn-react/react'
 
 export const BLOCO_META: Record<string, { cor: string; icon: string; label: string }> = {
   'squad:role': { cor: '#b8531f', icon: '☺', label: 'papel' },
-  'squad:tool': { cor: '#345f9e', icon: '⚒', label: 'ferramenta' },
+  'squad:tool': { cor: '#6f675a', icon: '⚒', label: 'ferramenta' },
   'squad:service': { cor: '#2b7a8c', icon: '⇌', label: 'chamada de API' },
-  'squad:data': { cor: '#345f9e', icon: '⛁', label: 'base de dados' },
-  'squad:approval': { cor: '#c79a1e', icon: '✋', label: 'gate humano' },
+  'squad:data': { cor: '#8b8171', icon: '⛁', label: 'base de dados' },
+  'squad:approval': { cor: '#a85b3f', icon: '✋', label: 'gate humano' },
   'squad:output': { cor: '#14614f', icon: '↧', label: 'exportador' },
   exclusiveGateway: { cor: '#9a6b14', icon: '◇', label: 'gateway · decisão' },
   parallelGateway: { cor: '#6b4fae', icon: '⧓', label: 'gateway · paralelo' },
@@ -25,7 +25,11 @@ export const BLOCO_META: Record<string, { cor: string; icon: string; label: stri
 function cardShape(tipo: string): (props: ShapeProps) => React.JSX.Element {
   const meta = BLOCO_META[tipo]
   return function BtvCardShape({ node, selected }: ShapeProps) {
-    const stroke = selected ? meta.cor : '#d2c7ae'
+    // Nó selecionado: borda de execução (--brand). Gate humano: borda terracota
+    // (--decision) e fundo terracota-claro mesmo sem seleção (regra §5 Designer).
+    const isGate = tipo === 'squad:approval'
+    const stroke = selected ? '#14614f' : isGate ? '#a85b3f' : '#d2c7ae'
+    const fill = isGate ? '#f6ebe4' : '#fbf8f1'
     const doubleBorder = tipo === 'squad:service'
     const cylinder = tipo === 'squad:data'
     return (
@@ -34,7 +38,7 @@ function cardShape(tipo: string): (props: ShapeProps) => React.JSX.Element {
           width={node.width}
           height={node.height}
           rx={11}
-          fill="#fbf8f1"
+          fill={fill}
           stroke={stroke}
           strokeWidth={doubleBorder ? 1.4 : 1.5}
         />
@@ -72,7 +76,7 @@ function cardShape(tipo: string): (props: ShapeProps) => React.JSX.Element {
           y={node.height / 2 - 2}
           fontSize={12}
           fontWeight={600}
-          fill="#221d15"
+          fill="#2b2b28"
           style={{ fontFamily: 'var(--sans, sans-serif)' }}
         >
           {node.label.length > 16 ? `${node.label.slice(0, 15)}…` : node.label}
@@ -106,7 +110,7 @@ export const EDGE_STYLES: Record<string, EdgeStyle> = {
   sequenceFlow: { stroke: '#8b8171', strokeWidth: 1.8, marker: 'filled' },
   sim: { stroke: '#3d8b4f', strokeWidth: 1.8, marker: 'filled' },
   nao: { stroke: '#b8531f', strokeWidth: 1.8, marker: 'filled' },
-  dados: { stroke: '#345f9e', strokeWidth: 1.8, dash: '6,5', marker: 'open' },
+  dados: { stroke: '#6f675a', strokeWidth: 1.8, dash: '6,5', marker: 'open' },
 }
 
 export const btvDesignerPlugin: BpmnPlugin = {

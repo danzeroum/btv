@@ -69,9 +69,10 @@ export function Minhas() {
           : r.status === 'concluida'
             ? 100
             : 0
+        const isGate = isLive && !!view?.gateOpen
         const acao =
           r.status === 'ativa' && isLive
-            ? { label: 'abrir ao vivo', on: () => dispatch({ type: 'SET_SCREEN', screen: 'vivo' }) }
+            ? { label: isGate ? 'Revisar' : 'abrir ao vivo', on: () => dispatch({ type: 'SET_SCREEN', screen: 'vivo' }) }
             : r.status === 'ativa'
               ? { label: 'reconectar', on: () => template && abrirRun(r, template) }
               : r.status === 'concluida'
@@ -104,8 +105,12 @@ export function Minhas() {
             </div>
             <button
               onClick={acao.on}
-              className="mono"
-              style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 14px', fontSize: 10.5, color: 'var(--brand)', fontWeight: 600, whiteSpace: 'nowrap' }}
+              className={isGate ? 'btn-decision' : 'mono'}
+              style={
+                isGate
+                  ? { padding: '7px 14px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', borderRadius: 8 }
+                  : { background: 'none', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 14px', fontSize: 10.5, color: 'var(--brand)', fontWeight: 600, whiteSpace: 'nowrap' }
+              }
             >
               {acao.label}
             </button>

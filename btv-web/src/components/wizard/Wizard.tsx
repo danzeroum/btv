@@ -363,7 +363,7 @@ function WizardInner({ template, onClose }: { template: SquadTemplate; onClose: 
                     key={g}
                     style={{ fontSize: 13, color: 'var(--muted)', display: 'flex', gap: 9, alignItems: 'center' }}
                   >
-                    <span style={{ color: 'var(--gold)', fontSize: 14 }}>✋</span>
+                    <span style={{ color: 'var(--decision)', fontSize: 14 }}>✋</span>
                     {g}
                   </span>
                 ))}
