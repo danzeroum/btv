@@ -35,7 +35,7 @@ export function Toggle({ on, onClick, label }: { on: boolean; onClick: () => voi
       onClick={onClick}
       aria-label={label}
       aria-pressed={on}
-      style={{ width: 40, height: 22, borderRadius: 99, border: 'none', position: 'relative', background: on ? 'var(--ok)' : 'var(--line2)', flex: 'none' }}
+      style={{ width: 40, height: 22, borderRadius: 99, border: 'none', position: 'relative', background: on ? 'var(--brand)' : 'var(--line2)', flex: 'none' }}
     >
       <span style={{ position: 'absolute', top: 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s', left: on ? 21 : 3 }} />
     </button>

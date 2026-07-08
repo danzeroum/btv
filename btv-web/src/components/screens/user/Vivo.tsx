@@ -228,7 +228,8 @@ export function Vivo() {
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => void aprovar()}
-                  style={{ background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 22px', fontSize: 13.5, fontWeight: 600, fontFamily: 'var(--sans)' }}
+                  className="btn-decision"
+                  style={{ padding: '11px 22px', borderRadius: 10, fontSize: 13.5, fontFamily: 'var(--sans)' }}
                 >
                   Aprovar e continuar
                 </button>

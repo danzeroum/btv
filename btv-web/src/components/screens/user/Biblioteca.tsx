@@ -81,7 +81,7 @@ export function Biblioteca() {
                       {a.versao} · {a.created_ts.slice(0, 10)}
                     </span>
                   </div>
-                  <span style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5 }}>{a.trilha}</span>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>{a.trilha}</span>
                   {binario ? (
                     <span
                       className="mono"
