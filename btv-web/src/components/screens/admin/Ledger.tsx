@@ -66,6 +66,12 @@ export function Ledger() {
         </div>
         {entries.map((e) => {
           const squad = squadDe(e)
+          // Ator humano (decisão) vs agente/sistema (execução) — derivado dos
+          // campos reais: kinds de gate são sempre humanos; senão, pelo ator.
+          const humano =
+            e.kind === 'btv.gate_approved' ||
+            e.kind === 'btv.adjust_requested' ||
+            /human|você|voc[eê]|usu[aá]ri|marina/i.test(e.actor)
           return (
             <div key={e.seq} style={{ display: 'grid', gridTemplateColumns: '120px 1.7fr 1fr 1fr 110px', gap: 14, padding: '12px 20px', borderBottom: '1px solid var(--line)', alignItems: 'baseline' }}>
               <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>
@@ -73,7 +79,7 @@ export function Ledger() {
               </span>
               <span style={{ fontSize: 13 }}>{KIND_LABEL[e.kind] ?? e.kind}</span>
               <span style={{ fontSize: 12, color: squad.cor, fontWeight: 500 }}>{squad.nome}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{e.actor}</span>
+              <span className="mono" style={{ fontSize: 11, color: humano ? 'var(--decision)' : 'var(--brand)', fontWeight: 500 }}>{e.actor}</span>
               <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>
                 {e.entry_hash.slice(0, 4)}…{e.entry_hash.slice(-4)}
               </span>

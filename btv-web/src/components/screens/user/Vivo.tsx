@@ -247,7 +247,7 @@ export function Vivo() {
           {!view.gateOpen && !view.done && !view.erro && etapaAtual && (
             <div
               data-testid="papel-ativo"
-              style={{ background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 16, padding: '22px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}
+              style={{ background: 'var(--white)', border: '1px solid var(--brand)', borderRadius: 16, padding: '22px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }}
             >
               <div style={{ width: 44, height: 44, borderRadius: 14, background: cor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--disp)', fontWeight: 800, fontSize: 17, flex: 'none' }}>
                 {etapaAtual.papel[0] ?? 'B'}
