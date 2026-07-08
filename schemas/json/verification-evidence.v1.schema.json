@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/verification-evidence.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/verification-evidence.v1.schema.json",
   "title": "verification-evidence.v1",
   "description": "Evidência do pipeline de verificação determinística (/verify): o LLM orquestra, ferramentas determinísticas verificam. O Auditor do squad consome esta evidência no lugar de opinião de LLM.",
   "type": "object",

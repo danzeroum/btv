@@ -1,4 +1,4 @@
-// Sobe o `forge dashboard` REAL (processo Rust) para os e2e de integração do
+// Sobe o `btv dashboard` REAL (processo Rust) para os e2e de integração do
 // BuildToValue em tests/e2e-integration/. Não é vite dev + proxy — é o
 // binário de produção servindo o build real de btv-web/dist na raiz (os 12
 // modelos de squad vêm embutidos no binário, `GET /api/btv/templates`).
@@ -6,7 +6,7 @@
 // Chamado pelo `webServer.command` de playwright.integration.config.ts;
 // Playwright espera a URL de health check e mata este processo (que repassa
 // o sinal ao `cargo run` filho) ao final da suíte. Mesmo desenho do harness
-// do console Forge (web/scripts/run-integration-server.mjs).
+// do console BuildToValue (web/scripts/run-integration-server.mjs).
 
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url'
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(__dirname, '..', '..')
 const btvDist = resolve(__dirname, '..', 'dist')
-// Porta própria (7998) — a suíte do console Forge usa 7999; podem coexistir.
-const port = process.env.FORGE_E2E_PORT ?? '7998'
+// Porta própria (7998) — a suíte do console BuildToValue usa 7999; podem coexistir.
+const port = process.env.BTV_E2E_PORT ?? '7998'
 
 function run(cmd, args) {
   const result = spawnSync(cmd, args, { cwd: repoRoot, stdio: 'inherit' })
@@ -28,19 +28,19 @@ function run(cmd, args) {
 }
 
 // 1. garante o binário do CLI e o exemplo de seed compilados.
-run('cargo', ['build', '-p', 'forge-cli', '-p', 'forge-store', '--example', 'seed_btv'])
+run('cargo', ['build', '-p', 'btv-cli', '-p', 'btv-store', '--example', 'seed_btv'])
 
-// 2. diretório de trabalho isolado (.forge/ próprio, longe de qualquer outra
+// 2. diretório de trabalho isolado (.btv/ próprio, longe de qualquer outra
 // execução).
 const workDir = mkdtempSync(join(tmpdir(), 'btv-e2e-'))
-mkdirSync(join(workDir, '.forge'), { recursive: true })
+mkdirSync(join(workDir, '.btv'), { recursive: true })
 
-// `forge.toml` com passos curtos e determinísticos: o squad roda /verify
+// `btv.toml` com passos curtos e determinísticos: o squad roda /verify
 // ANTES de cada tarefa (evidência para o auditor, ADR 0008) — sem isto, a
 // ativação tentaria os passos default (cargo test/clippy reais) dentro do
 // tmp dir. Mesma receita do harness do console (web/, Onda 11).
 writeFileSync(
-  join(workDir, 'forge.toml'),
+  join(workDir, 'btv.toml'),
   '[[step]]\nname = "passo-um"\nprogram = "sh"\nargs = ["-c", "sleep 0.1"]\n',
 )
 
@@ -50,19 +50,19 @@ writeFileSync(
 // breve" — sem conversor, sem fingir).
 const artigoPath = join(workDir, 'artigo-seed.md')
 writeFileSync(artigoPath, '# Artigo semeado\n\nconteúdo real do artefato para o download.\n')
-const btvDb = join(workDir, '.forge', 'btv.db')
+const btvDb = join(workDir, '.btv', 'btv.db')
 run('cargo', [
-  'run', '-q', '-p', 'forge-store', '--example', 'seed_btv', '--',
+  'run', '-q', '-p', 'btv-store', '--example', 'seed_btv', '--',
   btvDb, 'editorial', 'Newsletter seed', artigoPath, 'MD',
 ])
 const docxPath = join(workDir, 'minuta-seed.docx')
 writeFileSync(docxPath, 'placeholder binário')
 run('cargo', [
-  'run', '-q', '-p', 'forge-store', '--example', 'seed_btv', '--',
+  'run', '-q', '-p', 'btv-store', '--example', 'seed_btv', '--',
   btvDb, 'juridico', 'Minuta seed', docxPath, 'DOCX',
 ])
 
-// 3. sobe o dashboard real. FORGE_SCRIPTED=1 troca o gerador por respostas
+// 3. sobe o dashboard real. BTV_SCRIPTED=1 troca o gerador por respostas
 // determinísticas (sem API key) — o squad ativado pela UI roda o caminho
 // real com o ScriptedSquadCoreBackend. Keys de provider isoladas do ambiente
 // do runner (mesma razão do harness do console, Fase 7 Onda 12).
@@ -76,13 +76,13 @@ const {
 const manifestPath = join(repoRoot, 'Cargo.toml')
 const child = spawn(
   'cargo',
-  ['run', '-q', '--manifest-path', manifestPath, '-p', 'forge-cli', '--', 'dashboard', '--port', port],
+  ['run', '-q', '--manifest-path', manifestPath, '-p', 'btv-cli', '--', 'dashboard', '--port', port],
   {
     cwd: workDir,
     env: {
       ...envWithoutProviderKeys,
-      FORGE_WEB_DIR: btvDist,
-      FORGE_SCRIPTED: '1',
+      BTV_WEB_DIR: btvDist,
+      BTV_SCRIPTED: '1',
       ANTHROPIC_API_KEY: 'e2e-fake-anthropic-key',
     },
     stdio: 'inherit',

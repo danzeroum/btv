@@ -1,7 +1,7 @@
 // MemoryService — memória do squad (Fase 7 Onda 8, ADR 0022).
 //
 // Direção OPOSTA de CoreService: aqui é o Python quem serve (dono do dado —
-// o corpus episódico JSONL e o índice TF-IDF vivem em forge_squad), o Rust
+// o corpus episódico JSONL e o índice TF-IDF vivem em btv_squad), o Rust
 // quem chama. CoreService.Recall/Remember (core.proto) ficam Unimplemented
 // e não são usados — são a direção errada (Rust servindo, Python chamando),
 // um stub abandonado da Fase 4.
@@ -11,7 +11,7 @@
 
 syntax = "proto3";
 
-package forge.memory.v1;
+package btv.memory.v1;
 
 service MemoryService {
   rpc Health(HealthRequest) returns (HealthResponse);

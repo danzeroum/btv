@@ -143,8 +143,8 @@ export function Inicio() {
           lineHeight: 1.6,
         }}
       >
-        Não consegui carregar os modelos do backend ({templates.error.message}). O `forge dashboard`
-        está rodando?
+        Não consegui carregar os modelos ({templates.error.message}). O servidor local do
+        BuildToValue não respondeu — abra o aplicativo de novo e recarregue esta página.
       </div>
     )
   }

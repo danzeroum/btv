@@ -3,8 +3,8 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e-integration',
   timeout: 60_000,
-  // O dashboard real compartilha um único .forge/ — specs em série, como na
-  // suíte do console Forge.
+  // O dashboard real compartilha um único .btv/ — specs em série, como na
+  // suíte do console BuildToValue.
   fullyParallel: false,
   reporter: 'list',
   use: {

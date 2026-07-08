@@ -203,7 +203,7 @@ export function Skills() {
           <Card>
             <strong>Saúde do sidecar</strong>
             <div className="row" style={{ fontSize: 13, color: 'var(--ok)', marginTop: 8 }}>
-              <span className="pulse-dot" /> forge-squadd saudável · gRPC/UDS · fallback squad
+              <span className="pulse-dot" /> btv-squadd saudável · gRPC/UDS · fallback squad
             </div>
           </Card>
         </div>

@@ -1,6 +1,6 @@
 /**
- * Fase 7 Onda 6: cliente do ledger append-only. `forge-server` só repassa
- * o que `forge_store::LedgerStore` já gravou (`.forge/forge.db`) — nenhuma
+ * Fase 7 Onda 6: cliente do ledger append-only. `btv-server` só repassa
+ * o que `btv_store::LedgerStore` já gravou (`.btv/btv.db`) — nenhuma
  * entrada é fabricada aqui.
  */
 import { fetchJson } from './client'

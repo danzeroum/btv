@@ -10,7 +10,7 @@ const TOOL_DESC: Record<string, string> = {
   webfetch: 'Busca e captura de conteúdo da rede.',
 }
 
-/** A4 · Permissões — matriz EFETIVA real (`forge_core::{BUILD,PLAN}` +
+/** A4 · Permissões — matriz EFETIVA real (`btv_core::{BUILD,PLAN}` +
  *  overrides persistidos no RuleStore, auditados no ledger). Negar aqui vale
  *  imediatamente para as squads (o RunTool avalia o mesmo motor). */
 export function Permissoes() {
@@ -110,9 +110,9 @@ export function Permissoes() {
         </div>
       )}
       <NotaHonesta>
-        A matriz é a decisão efetiva de <span className="mono">forge_core::&#123;BUILD,PLAN&#125;</span> +
-        overrides do RuleStore — o MESMO motor que o RunTool das squads avalia. Allow-list por
-        template de squad é extensão futura.
+        A matriz é a decisão efetiva dos perfis de permissão da plataforma (build/plan) +
+        os overrides gravados acima — o MESMO motor que as ferramentas das squads consultam.
+        Allow-list por modelo de squad é extensão futura.
       </NotaHonesta>
     </>
   )

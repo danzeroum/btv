@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 async function cssVar(page: import('@playwright/test').Page, name: string) {
   return page.evaluate((n) => {
-    const el = document.getElementById('forge-root')
+    const el = document.getElementById('btv-root')
     return el ? getComputedStyle(el).getPropertyValue(n).trim() : ''
   }, name)
 }

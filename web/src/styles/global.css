@@ -35,29 +35,29 @@ a {
   color: var(--rust);
 }
 
-#forge-root {
+#btv-root {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.forge-body {
+.btv-body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-.forge-stage {
+.btv-stage {
   flex: 1;
   overflow: auto;
   padding: 24px 28px;
 }
 
-.forge-stage.surf {
+.btv-stage.surf {
   background: var(--surf);
 }
 
-.forge-stage.term {
+.btv-stage.term {
   background: var(--term);
 }
 

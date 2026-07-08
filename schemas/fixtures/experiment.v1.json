@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato experiment.v1 (A/B testing, Fase 6 Onda 7). Valida contra schemas/json/experiment.v1.schema.json e desserializa em forge_schemas::experiment::ExperimentReport (Rust, tests/schema_fixtures.rs). Tipo só do lado Rust — o relatório é agregação determinística sobre a telemetria SQLite (Rust-owned), sem consumidor Python, então não há paridade cross-language a comparar. O caso valid é um experimento SIGNIFICATIVO (com vencedor); o invalid remove 'verdict' (campo obrigatório).",
+  "$comment": "Fixture golden do contrato experiment.v1 (A/B testing, Fase 6 Onda 7). Valida contra schemas/json/experiment.v1.schema.json e desserializa em btv_schemas::experiment::ExperimentReport (Rust, tests/schema_fixtures.rs). Tipo só do lado Rust — o relatório é agregação determinística sobre a telemetria SQLite (Rust-owned), sem consumidor Python, então não há paridade cross-language a comparar. O caso valid é um experimento SIGNIFICATIVO (com vencedor); o invalid remove 'verdict' (campo obrigatório).",
   "valid": {
     "experiment": "prompt-tone",
     "metric": "success_rate",

@@ -26,8 +26,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Aponta para o `forge dashboard` real rodando localmente — mesmo
-      // padrão do console Forge (`web/`): toda rota /api é backend real.
+      // Aponta para o `btv dashboard` real rodando localmente — mesmo
+      // padrão do console BuildToValue (`web/`): toda rota /api é backend real.
       '/api': 'http://127.0.0.1:7878',
     },
   },

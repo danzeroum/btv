@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/telemetry-event.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/telemetry-event.v1.schema.json",
   "title": "telemetry-event.v1",
-  "description": "Evento de telemetria offline-first (origem: prompte). Enfileirado localmente no SQLite e descarregado em lote; agregado no dashboard do forge-server.",
+  "description": "Evento de telemetria offline-first (origem: prompte). Enfileirado localmente no SQLite e descarregado em lote; agregado no dashboard do btv-server.",
   "type": "object",
   "required": ["name", "session_id", "ts"],
   "properties": {

@@ -1,10 +1,10 @@
 /**
  * Fase 7 Onda 4: cliente do squad ao vivo — `POST /api/squad/run` dispara
  * `SquadService.ExecuteTask` (via `SquadPool`, capacidade 1 nesta entrega —
- * ver `crates/forge-cli/src/squad_agent.rs`) e `GET /api/squad/:id/events`
+ * ver `crates/btv-cli/src/squad_agent.rs`) e `GET /api/squad/:id/events`
  * transmite `SquadEvent` cru como SSE, **sem DTO espelho**: o formato aqui é
- * exatamente o que `forge_proto::squad::SquadEvent` produz via
- * `#[derive(serde::Serialize)]` (ver `forge-proto/build.rs`) — union
+ * exatamente o que `btv_proto::squad::SquadEvent` produz via
+ * `#[derive(serde::Serialize)]` (ver `btv-proto/build.rs`) — union
  * externally-tagged pelo nome da variante Rust (`Proposal`/`Consensus`/
  * `Handoff`/`Hitl`/`Step`/`Error`), não um envelope autoral como o de
  * `stream.ts` (sessão).
@@ -25,7 +25,7 @@ export interface SquadConsensus {
   requires_human: boolean
 }
 
-/** Espelha `forge.squad.v1.Handoff.Phase` — `phase` chega como i32 cru (enum proto3, sem rename). */
+/** Espelha `btv.squad.v1.Handoff.Phase` — `phase` chega como i32 cru (enum proto3, sem rename). */
 export const HANDOFF_PHASE_LABELS = ['desconhecido', 'iniciado', 'confirmado', 'concluído', 'erro'] as const
 
 export interface SquadHandoff {

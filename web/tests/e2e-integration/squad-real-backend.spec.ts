@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 /** Fase 7 Onda 4: prova a fronteira browser → `POST /api/squad/run` → SSE
  * real → `SquadService.ExecuteTask` (squad Python real, sem API key via
- * `FORGE_SCRIPTED=1` — ver `run-integration-server.mjs`). O consenso
+ * `BTV_SCRIPTED=1` — ver `run-integration-server.mjs`). O consenso
  * roteirizado usa confiança 0.5 uniforme de propósito (mesma receita do
  * teste Rust `run_squad_via_http_com_gate_hitl_real_e_ledger`) — fraco o
  * bastante para exigir HITL de verdade. O registro no ledger em si já é

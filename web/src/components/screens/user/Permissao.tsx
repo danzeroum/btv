@@ -78,7 +78,7 @@ export function Permissao() {
             />
             Permissão solicitada
           </div>
-          <div style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 12 }}>forge-core · não contornável</div>
+          <div style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 12 }}>btv-core · não contornável</div>
 
           <div className="mono" style={{ fontSize: 13, marginBottom: 6 }}>
             ⚒ {pending.tool}

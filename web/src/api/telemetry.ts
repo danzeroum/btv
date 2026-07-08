@@ -1,4 +1,4 @@
-/** Único módulo que fala com um backend REAL: forge-server (crates/forge-server/src/lib.rs). */
+/** Único módulo que fala com um backend REAL: btv-server (crates/btv-server/src/lib.rs). */
 
 export interface Summary {
   total_events: number

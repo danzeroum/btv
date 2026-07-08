@@ -16,7 +16,7 @@ test('tela de providers mostra quais providers têm key configurada de verdade',
 
   // Ordem fixa de fallback (anthropic -> deepseek -> openai): os 3 primeiros
   // `.mono` da tela são os ids dos providers (a legenda do rodapé, que
-  // também usa `.mono` para "forge run"/"chat", vem depois no DOM).
+  // também usa `.mono` para "btv run"/"chat", vem depois no DOM).
   const monoSpans = page.locator('span.mono')
   await expect(monoSpans.nth(0)).toHaveText('anthropic')
   await expect(monoSpans.nth(1)).toHaveText('deepseek')

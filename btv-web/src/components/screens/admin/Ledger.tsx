@@ -17,7 +17,7 @@ const KIND_LABEL: Record<string, string> = {
   'squad.tool_run': 'Chamada de ferramenta',
 }
 
-/** A2 · Ledger de auditoria — hash-chain real (`.forge/forge.db`), com
+/** A2 · Ledger de auditoria — hash-chain real (`.btv/btv.db`), com
  *  verificação de integridade sob demanda (nunca afirmada sem rodar). */
 export function Ledger() {
   const [entries, setEntries] = useState<LedgerEntry[] | null>(null)

@@ -1,7 +1,7 @@
 // Tipos do gateway LLM compartilhados entre CoreService e SquadService.
 syntax = "proto3";
 
-package forge.llm.v1;
+package btv.llm.v1;
 
 message LlmRequest {
   string model = 1;

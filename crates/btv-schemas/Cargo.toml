@@ -1,0 +1,22 @@
+[package]
+name = "btv-schemas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tipos compartilhados, canonicalização JSON e chaves de cache da plataforma BuildToValue"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+jsonschema = "0.26"
+criterion.workspace = true
+
+[[bench]]
+name = "canonical"
+harness = false

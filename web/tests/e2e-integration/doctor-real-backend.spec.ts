@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 /** Fase 7 Onda 13 (Modelo & Onboarding): prova a fronteira do doctor por
- * EXECUÇÃO. `GET /api/doctor` (`forge-cli`, `doctor_console.rs`) agrega 4
+ * EXECUÇÃO. `GET /api/doctor` (`btv-cli`, `doctor_console.rs`) agrega 4
  * checagens reais — a tela deixa de mostrar `DOCTOR_OUTPUT` fabricado
  * (sempre "tudo verde").
  *
@@ -25,7 +25,7 @@ test('tela de onboarding mostra o doctor real — uv presente, git ausente (work
   await page.getByRole('button', { name: 'Primeiros passos' }).click()
   await expect(page.getByRole('heading', { name: 'Primeiros passos' })).toBeVisible()
 
-  const terminal = page.locator('.mono', { hasText: 'forge doctor' })
+  const terminal = page.locator('.mono', { hasText: 'btv doctor' })
   await expect(terminal).toBeVisible({ timeout: 10_000 })
 
   await expect(terminal.getByText(/uv encontrado/)).toBeVisible()

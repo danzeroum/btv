@@ -1,6 +1,6 @@
 /**
  * Fase 7 Onda 2: cliente do SSE de sessão (`GET /api/session/:id/events`,
- * `crates/forge-cli/src/web_agent.rs::SessionEvent`). Usa o `EventSource`
+ * `crates/btv-cli/src/web_agent.rs::SessionEvent`). Usa o `EventSource`
  * nativo do navegador — ele já entende o formato `data: <json>\n\n` que o
  * axum produz via `Event::json_data`, e reconecta sozinho se a conexão cair
  * (o servidor reemite o snapshot do que já aconteceu a quem conectar depois,

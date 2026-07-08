@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/squad-template.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/squad-template.v1.schema.json",
   "title": "squad-template.v1",
-  "description": "Modelo de squad do BuildToValue (galeria U1 / wizard U2 / admin A5). Fonte única dos 12 modelos em schemas/squad-templates/*.json, embutidos no forge-server e servidos em GET /api/btv/templates. `binario: true` num formato significa que a exportação direta ainda não é suportada (exige conversor na sandbox — onda futura); a UI mostra o formato desabilitado, nunca um export que entrega outra coisa.",
+  "description": "Modelo de squad do BuildToValue (galeria U1 / wizard U2 / admin A5). Fonte única dos 12 modelos em schemas/squad-templates/*.json, embutidos no btv-server e servidos em GET /api/btv/templates. `binario: true` num formato significa que a exportação direta ainda não é suportada (exige conversor na sandbox — onda futura); a UI mostra o formato desabilitado, nunca um export que entrega outra coisa.",
   "type": "object",
   "required": [
     "id",

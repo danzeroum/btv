@@ -54,7 +54,7 @@ function TurnView({ turn }: { turn: TranscriptTurn }) {
     )
   }
   const icon = turn.kind === 'tool' ? (turn.toolStatus === 'error' ? '✗' : '✓') + ' ' : ''
-  const label = turn.kind === 'user' ? 'você ▸' : turn.kind === 'agent' ? 'forge ▸' : ''
+  const label = turn.kind === 'user' ? 'você ▸' : turn.kind === 'agent' ? 'btv ▸' : ''
   return (
     <div className="mono" style={{ fontSize: 13, lineHeight: 1.65 }}>
       {label && <span style={{ color: PREFIX_COLOR[turn.kind], fontWeight: 600 }}>{label} </span>}
@@ -108,7 +108,7 @@ export function Sessao() {
           ))}
           {busy && (
             <div className="mono cursor-blink" style={{ color: 'var(--amber)', fontSize: 13 }}>
-              forge ▸ {streamingText || '…'}
+              btv ▸ {streamingText || '…'}
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import { fetchJson } from './client'
 
-/** Espelho de `forge_schemas::squad_template::SquadTemplate`
+/** Espelho de `btv_schemas::squad_template::SquadTemplate`
  *  (`squad-template.v1`) — servido por `GET /api/btv/templates` a partir dos
  *  12 JSONs embutidos de `schemas/squad-templates/`. */
 export type CategoriaSquad = 'conteudo' | 'analise' | 'criativa' | 'operacoes'

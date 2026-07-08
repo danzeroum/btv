@@ -1,6 +1,6 @@
 # infra/ — provisionamento e load-test (Fase 6 Onda 8)
 
-> **Estado honesto:** o Forge é **local-first** — o servidor só escuta em
+> **Estado honesto:** o BuildToValue é **local-first** — o servidor só escuta em
 > `127.0.0.1` e **não há alvo de deploy hospedado** hoje (sem Dockerfile, sem
 > cloud). Portanto o terraform/ansible aqui é **esqueleto marcado**, não infra de
 > produção: um ponto de partida para quando (e se) houver um alvo real. Entregar o
@@ -10,7 +10,7 @@
 ## Conteúdo
 
 - **`k6/gateway_load.js`** — o único artefato **executado** aqui: load-test
-  **real** do caminho do gateway. Martela o endpoint de carga (`forge-server` bin
+  **real** do caminho do gateway. Martela o endpoint de carga (`btv-server` bin
   `loadgen`, que embrulha o `ScriptedGenerator` — **sem key real**) e valida o
   **P95** sob concorrência. Roda no CI (job `k6`) e localmente. É a régua do
   critério de conclusão nº 3 da fase ("k6 valida o P95 do gateway").
@@ -18,17 +18,17 @@
   do `main.tf`).
 - **`ansible/`** — esqueleto de configuração (idem).
 - **`docker/`** — imagem de **TESTE / homologação** (não é deploy de produção):
-  empacota o CLI `forge` + o sidecar Python para você rodar o Forge como
+  empacota o CLI `btv` + o sidecar Python para você rodar o BuildToValue como
   ferramenta dentro de um container, na sua VPS via SSH. Continua local-first (o
   dashboard segue em `127.0.0.1`). Ver `docker/README.md` para as pegadinhas de
-  container (o `FORGE_PYTHON_DIR` obrigatório, o sandbox via socket do Docker, o
+  container (o `BTV_PYTHON_DIR` obrigatório, o sandbox via socket do Docker, o
   bind do dashboard). Não expõe serviço multiusuário na internet.
 
 ## Rodar o load-test localmente
 
 ```sh
 # 1. sobe o endpoint de carga (sem key — usa o ScriptedGenerator)
-FORGE_LOADGEN_PORT=7900 cargo run -p forge-server --bin loadgen &
+BTV_LOADGEN_PORT=7900 cargo run -p btv-server --bin loadgen &
 
 # 2. martela e valida o P95 (precisa do k6 instalado: https://k6.io)
 k6 run infra/k6/gateway_load.js

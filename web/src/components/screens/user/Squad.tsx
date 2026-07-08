@@ -155,7 +155,7 @@ export function Squad() {
   return (
     <div className="stack">
       <div className="row mono" style={{ color: 'var(--muted)' }}>
-        <span>&gt; forge squad</span>
+        <span>&gt; btv squad</span>
         <input
           value={task}
           onChange={(e) => setTask(e.target.value)}

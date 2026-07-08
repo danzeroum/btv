@@ -12,15 +12,15 @@ const PROPOSALS: {
   relatedScreen: ScreenId
   delivered?: boolean
 }[] = [
-  { title: 'Revisor de diff', tag: 'review', desc: 'inspeciona cada diff antes de aplicar.', anchor: 'ancora: forge-cli tool.edit', relatedScreen: 'sessao' },
+  { title: 'Revisor de diff', tag: 'review', desc: 'inspeciona cada diff antes de aplicar.', anchor: 'ancora: btv-cli tool.edit', relatedScreen: 'sessao' },
   { title: 'Replay de sessão', tag: 'auditoria', desc: 'reproduz uma sessão a partir do ledger.', anchor: 'ancora: ledger hash-chain + sessions.db', relatedScreen: 'ledger' },
-  { title: 'Aprovação em lote', tag: 'permissão', desc: 'aprova várias permissões pendentes de uma vez.', anchor: 'ancora: forge-core PermissionClient', relatedScreen: 'permissao' },
-  { title: 'Modo watch', tag: 'sessão', desc: 'observa arquivos e sugere ações automaticamente.', anchor: 'ancora: forge-cli watch (futuro)', relatedScreen: 'sessao' },
+  { title: 'Aprovação em lote', tag: 'permissão', desc: 'aprova várias permissões pendentes de uma vez.', anchor: 'ancora: btv-core PermissionClient', relatedScreen: 'permissao' },
+  { title: 'Modo watch', tag: 'sessão', desc: 'observa arquivos e sugere ações automaticamente.', anchor: 'ancora: btv-cli watch (futuro)', relatedScreen: 'sessao' },
   {
     title: 'A/B de prompts',
     tag: 'promptforge',
     desc: 'compara variações de prompt lado a lado.',
-    anchor: 'ancora: forge_schemas::experiment (teste z, ADR 0014)',
+    anchor: 'ancora: btv_schemas::experiment (teste z, ADR 0014)',
     relatedScreen: 'experimentos',
     delivered: true,
   },
@@ -28,7 +28,7 @@ const PROPOSALS: {
     title: 'Mapa de memória do squad',
     tag: 'squad',
     desc: 'visualiza o que cada agente lembra e busca por termo (léxico, não semântico).',
-    anchor: 'ancora: forge_squad.memory + recall.py (TF-IDF)',
+    anchor: 'ancora: btv_squad.memory + recall.py (TF-IDF)',
     relatedScreen: 'memoria',
     delivered: true,
   },

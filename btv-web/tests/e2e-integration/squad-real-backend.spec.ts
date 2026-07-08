@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 // U3 — Squad ao vivo de PONTA A PONTA contra o motor real: wizard → POST
 // /api/btv/squads → orquestrador Python de verdade (uv run, 5 agentes,
-// FORGE_SCRIPTED=1 → consenso fraco de propósito) → gate HITL real →
+// BTV_SCRIPTED=1 → consenso fraco de propósito) → gate HITL real →
 // cockpit real (ChatMessage no stream + injeção no próximo Generate) →
 // conclusão + ledger (btv.squad_activated / btv.gate_approved /
 // btv.adjust_requested). SquadPool tem capacidade 1: os testes rodam em

@@ -1,5 +1,5 @@
 /** Utilitários compartilhados pela camada api/* — mesmo cliente comprovado do
- *  console Forge (`web/src/api/client.ts`), incluindo o tratamento de corpo
+ *  console BuildToValue (`web/src/api/client.ts`), incluindo o tratamento de corpo
  *  vazio (202/204) que já pegou bug real lá. */
 
 export class ApiError extends Error {

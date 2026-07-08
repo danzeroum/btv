@@ -1,5 +1,5 @@
 /** Tipos compartilhados do BuildToValue (btv-web). Espelhos de backend moram
- *  nos módulos de `api/` (mesma convenção do console Forge em `web/`). */
+ *  nos módulos de `api/` (mesma convenção do console BuildToValue em `web/`). */
 
 export type Persona = 'user' | 'admin'
 

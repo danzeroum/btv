@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 /** Fase 7 Onda 9 (A2): prova a fronteira por EXECUÇÃO. 2 variantes reais
  * (`props.experiment`/`variant`/`success`, ver scripts/run-integration-server.mjs)
- * são semeadas via `forge_store::Telemetry::record` com diferença grande o
+ * são semeadas via `btv_store::Telemetry::record` com diferença grande o
  * bastante (18/20 vs 6/20) pro teste z ser significativo por construção — a
  * tela busca pelo nome, chama `GET /api/experiment/:nome` de verdade e mostra
  * o veredito derivado, não fabricado.

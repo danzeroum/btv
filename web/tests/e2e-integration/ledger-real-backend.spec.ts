@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test'
 
-/** Prova a fronteira frontend↔backend por EXECUÇÃO: um `forge dashboard`
+/** Prova a fronteira frontend↔backend por EXECUÇÃO: um `btv dashboard`
  * real (Rust, sqlite de verdade) é subido pelo webServer da config (ver
  * scripts/run-integration-server.mjs), com 2 entradas semeadas via o mesmo
  * `LedgerStore::append` de produção, sob o ator dedicado
  * `e2e-ledger-seed` — nenhum outro spec desta suíte usa esse ator, então a
  * ordem de execução dos arquivos (squad/permissões também escrevem no MESMO
- * forge.db) não interfere na contagem observada aqui. Filtrar por esse
+ * btv.db) não interfere na contagem observada aqui. Filtrar por esse
  * ator prova que a tela lê `?actor=` combinado com o backend real (não um
  * corte feito depois, no cliente).
  */
@@ -17,7 +17,7 @@ test('tela de ledger reflete entradas reais gravadas por fora do browser e filtr
   await expect(page.getByRole('heading', { name: 'Ledger / Auditoria' })).toBeVisible()
 
   // O ator semeado é dedicado a este teste — filtra para isolar de
-  // qualquer entrada que outros specs já tenham gravado no mesmo forge.db.
+  // qualquer entrada que outros specs já tenham gravado no mesmo btv.db.
   await page.getByRole('button', { name: 'e2e-ledger-seed', exact: true }).click({ timeout: 10_000 })
 
   const rows = page.locator('tbody tr')

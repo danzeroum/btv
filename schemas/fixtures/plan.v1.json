@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato plan.v1. Valida contra schemas/json/plan.v1.schema.json e desserializa em forge_schemas::plan::Plan (Rust, tests/schema_fixtures.rs). O invalid cobre execution_sequence vazia (minItems).",
+  "$comment": "Fixture golden do contrato plan.v1. Valida contra schemas/json/plan.v1.schema.json e desserializa em btv_schemas::plan::Plan (Rust, tests/schema_fixtures.rs). O invalid cobre execution_sequence vazia (minItems).",
   "valid": {
     "prerequisites": { "contracts": ["persona.v1"], "approvals": [], "dependencies": [] },
     "execution_sequence": [

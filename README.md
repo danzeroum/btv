@@ -1,163 +1,107 @@
-# Forge — Plataforma Unificada (Rust + Python)
+# BuildToValue
 
-**mix_btv_code** é o repositório-sede da plataforma **Forge**: um CLI/TUI de coding
-agent que unifica as ideias de três repositórios num único sistema construído por
-design em Rust e Python.
+**Squads de inteligência artificial para cada ofício — com o humano no comando.**
 
-| Origem | O que traz |
+BuildToValue é uma plataforma local-first que monta **equipes de agentes de IA**
+("squads") para profissionais que não escrevem código: editores, analistas,
+professores, advogados, músicos, produtores. Você descreve o que precisa nas
+palavras da sua área; uma equipe com papéis humanos — Pauteiro, Redator,
+Revisor de estilo, Fact-checker — produz, revisa e valida o trabalho numa
+esteira visível, para em pontos de aprovação que só você libera, e entrega
+**artefatos reais da sua profissão** (documentos, planilhas, roteiros,
+partituras), com trilha completa de quem produziu, quem revisou e quem aprovou.
+
+## Propósito
+
+Fechar a distância entre o poder dos agentes de IA e as pessoas que mais podem
+se beneficiar dele. Hoje, orquestrar múltiplos agentes exige terminal, prompts
+e jargão técnico. O BuildToValue transforma essa capacidade em uma linha de
+produção compreensível: **a esteira é a interface**, os agentes têm nomes de
+ofício, e a complexidade técnica (telemetria, custos, permissões, auditoria)
+vive num perfil de administração separado — presente, mas nunca no caminho de
+quem só quer a entrega.
+
+## Missão
+
+Colocar squads de IA confiáveis nas mãos de qualquer profissional, sob três
+compromissos inegociáveis:
+
+1. **O humano é membro e gate, nunca espectador.** A esteira para e espera a
+   sua aprovação nos pontos que importam; pelo cockpit, sua orientação entra
+   de verdade no contexto do agente ativo — você dirige o trabalho, não
+   assiste a ele.
+2. **Nada fake.** Cada número, status e artefato na tela vem de uma execução
+   real. O que ainda não existe é dito com todas as letras ("em breve"), nunca
+   simulado. Toda ação relevante fica num ledger imutável com hash encadeado —
+   auditável, verificável, à prova de reescrita.
+3. **Local-first e sob seu controle.** Tudo roda na sua máquina (`127.0.0.1`);
+   chaves de API nunca saem do processo do motor; permissões de ferramentas
+   são explícitas e valem na hora.
+
+## O que a plataforma faz
+
+| Você (Meu espaço) | Administração |
 |---|---|
-| [opencode](https://github.com/danzeroum/opencode) | Runtime de sessão durável, agentes selecionáveis, permissões, ferramentas, TUI, **ModelTier** e **verificação determinística** (fork) |
-| [prompte](https://github.com/danzeroum/prompte) | Geradores de prompt, knowledge base, quality linter, cache por hash, gateway LLM com fallback, telemetria |
-| [BuildToValue](https://github.com/danzeroum/BuildToValue_AI_Agent_Specialization) | Squad multi-agente: orquestração, consenso ponderado, planejamento, HITL, fallback progressivo, ledger, review por valor |
+| **Galeria** com 12 modelos de squad prontos (Editorial/SEO, Pesquisa, BI, Operações, Sales, Imagem, Educação, Design/UX, Jurídico, Música, Podcast, Vídeo) | **Telemetria** de uso real por squad |
+| **Wizard** de 3 passos: briefing na linguagem da sua área, equipe ajustável, entregas & gates | **Ledger** de auditoria com verificação de integridade |
+| **Squad ao vivo**: esteira em tempo real, gates de aprovação, pedido de ajuste, **cockpit** (chat com a equipe) | **Providers** LLM e rate limits |
+| **Biblioteca de entregas** com procedência completa e export dos artefatos reais | **Permissões** de ferramentas com efeito imediato |
+| **Personas & prompts**: edite o prompt de qualquer papel — vale na próxima ativação | **Modelos**: publicar/versionar templates, inclusive os do Designer |
+| **Squad Designer**: desenhe sua própria squad em notação BPMN, teste-a de verdade e salve como modelo | **Usuários**: perfis locais de acesso |
 
-- **Plano completo** (arquitetura, mapeamento 100%, roadmap 6 fases): [`docs/PLANO-PLATAFORMA-FORGE.md`](docs/PLANO-PLATAFORMA-FORGE.md)
-- **Roadmap visual interativo**: [`docs/roadmap-forge.html`](docs/roadmap-forge.html) (autocontido — abra no navegador)
-- **Decisão arquitetural central**: [`docs/adr/0001-arquitetura-rust-python-grpc.md`](docs/adr/0001-arquitetura-rust-python-grpc.md)
-- **Histórico de decisões da junção**: [`docs/DECISOES.md`](docs/DECISOES.md)
+## Arquitetura (resumo)
 
-## Layout
+- **Motor** (`crates/btv-*`, Rust): CLI/servidor `btv`, gateway LLM com
+  fallback e rate limit, ferramentas com motor de permissões, sandbox Docker,
+  pipeline de verificação (`btv verify`), ledger hash-encadeado e storage
+  SQLite local (`.btv/`).
+- **Orquestração** (`python/packages/btv-*`, Python): squad multi-agente
+  (5 agentes, consenso ponderado, HITL, loop ReAct com execução real de
+  ferramentas), falando com o motor por gRPC sobre Unix socket — chaves de
+  API existem só no lado Rust.
+- **Produto** (`btv-web/`, React): as 12 telas do BuildToValue, servidas por
+  `btv dashboard` na raiz. O console técnico de desenvolvedor (`web/`)
+  continua disponível em `/dev`.
+- **Squad Designer** sobre a biblioteca agnóstica
+  [`danzeroum/bpmn`](https://github.com/danzeroum/bpmn) (submodule
+  `vendor/bpmn`): canvas BPMN, versionamento com lifecycle, registry e
+  run-binding — cada entrega carrega a versão exata do fluxo que a produziu.
+- **Contratos** com fonte única em `schemas/` (protos gRPC, JSON Schemas como
+  `squad-template.v1`, fixtures golden).
 
-- `crates/` — núcleo Rust: `forge-cli` (binário `forge`), `forge-core`
-  (sessões/permissões), `forge-llm` (gateway + ModelTier), `forge-tools`,
-  `forge-verify`, `forge-store` (SQLite/ledger), `forge-schemas`,
-  `forge-tui`/`forge-server`/`forge-proto` (fases 2–3).
-- `python/` — sidecar de orquestração (uv workspace): `forge-squad`
-  (consenso/planejamento/HITL), `forge-promptforge` (geradores/linter/hash),
-  `forge-review`, `forge-eval`, `forge-proto-py`.
-- `schemas/` — fonte única de contratos: protos gRPC, JSON Schemas versionados
-  (`*.v1.schema.json`) e fixtures de paridade cross-language.
-
-## Desenvolvimento
-
-```sh
-just test      # cargo test + pytest
-just lint      # clippy + rustfmt
-just verify    # test + lint (evidência JSON completa na Fase 5)
-```
-
-Sem `just`: `cargo test --workspace` e `cd python && uv sync && uv run pytest`.
-
-## Estado
-
-**Fase 1 concluída**: `forge run` (tarefa única) e `forge chat` (REPL
-multi-turno) executam o loop de agente real — gateway LLM com streaming SSE
-(Anthropic/OpenAI/DeepSeek, fallback automático, keys por env), cache de
-prompts por hash (`prompt-cache-key.v1`, desative com `--no-cache`),
-ferramentas read/grep/edit/bash sob permissão interativa e cada turno
-registrado no ledger append-only (`.forge/forge.db`).
+## Como rodar
 
 ```sh
-export ANTHROPIC_API_KEY=...   # ou DEEPSEEK_API_KEY / OPENAI_API_KEY
-cargo run -p forge-cli -- run "corrija o teste X" --model claude-sonnet-5
-cargo run -p forge-cli -- chat
+git clone --recurse-submodules <repo> && cd btv
+
+# backend + produto
+cargo build -p btv-cli
+cd btv-web && pnpm install && pnpm build && cd ..
+cd web && pnpm install && pnpm build && cd ..      # console dev (/dev), opcional
+cd python && uv sync && cd ..                      # orquestrador dos squads
+
+ANTHROPIC_API_KEY=... ./target/debug/btv dashboard # http://127.0.0.1:7878
 ```
 
-**Fase 2 concluída** — sessões duráveis, Context Epochs + compaction
-tier-gated, TUI ratatui completa (diff colorido, seletor de modelo/agente)
-e Managed Tool Output Files.
+Testes: `cargo test --workspace` · `cd python && uv run pytest` ·
+`cd btv-web && pnpm test && pnpm test:e2e:integration` · atalhos no `justfile`.
 
-**Fase 3 concluída** — ativação real do gRPC: o sidecar Python
-`forge_promptforge` expõe `PromptForgeService` (Lint/Render/ListGenerators)
-sobre Unix Domain Socket; `forge-sidecar` sobe e supervisiona o processo
-(`SidecarSupervisor`) e fala com ele (`SidecarClient`), com **degradação
-graciosa total** — sem `uv`/workspace Python, `run`/`chat`/`tui` seguem
-funcionando normalmente, só sem lint/geradores. `forge chat` ganhou
-`/prompt` (lista e renderiza geradores, `save`/`library`/`use`/`fav`/`rm`
-para a biblioteca de prompts) e um aviso consultivo de lint por turno.
-Rate limiting tier-gated (`forge-llm::RateLimiter`) e telemetria
-offline-first (`forge-store::Telemetry`) decoram o gateway; `forge
-dashboard` sobe um painel local (axum) sobre `.forge/telemetry.db`.
+> **Nota de migração (rename do motor):** o motor chamava-se *Forge*; código,
+> binário (`forge` → `btv`), env vars (`FORGE_*` → `BTV_*`), protos
+> (`forge.*.v1` → `btv.*.v1`) e o diretório de dados (`.forge/` → `.btv/`)
+> foram renomeados. Instalações existentes devem renomear o diretório de dados
+> (`mv .forge .btv`) e atualizar env vars. Os documentos históricos em `docs/`
+> (ADRs, planos de fase, handoffs de design) preservam o nome antigo como
+> registro; o componente interno **PromptForge** mantém o nome próprio.
 
-```sh
-export ANTHROPIC_API_KEY=...
-cargo run -p forge-cli -- tui --model claude-sonnet-5   # sidecar sobe sozinho se `uv` estiver disponível
-cargo run -p forge-cli -- dashboard                     # sessão/permissão/squad ao vivo pelo navegador (Fase 7)
-```
+## Documentação
 
-**Fase 4 concluída** — squad multi-agente como motor, com o **gRPC
-bidirecional** ativado de ponta a ponta (ADRs 0004–0007). O sidecar Python
-`forge_squad` roda o `UnifiedOrchestrator` (5 agentes reais —
-architect/developer/auditor/designer/ops — consenso ponderado, planejamento
-adaptativo, HITL/autonomia progressiva) e streama `SquadEvent`s ao vivo
-(propostas → consenso → handoffs → steps); os agentes obtêm LLM e decisões
-de permissão de volta do Rust via `CoreService` (as API keys ficam só no
-Rust — o Python só conhece o UDS). `forge squad "..."` degrada em **3
-níveis** se o squad falhar: squad → agente-único → safe-mode read-only. O
-laço inteiro é coberto por um teste cross-process real (Rust ⇄ Python) e um
-teste de `kill -9` que prova o fallback.
+- `CLAUDE.md` — mapa vivo do repositório e convenções.
+- `docs/design_handoff_buildtovalue/` — handoff de design do produto (12 telas).
+- `docs/adr/` — decisões de arquitetura (0001–0023).
+- `pendencias.md` — decisões e descopes registrados entrega a entrega.
 
-```sh
-export ANTHROPIC_API_KEY=...
-cargo run -p forge-cli -- squad "adicione paginação ao endpoint de pedidos"
-```
-
-Princípio "Nada Fake" mantido a cada onda: onde a origem escondia
-fabricação atrás de um default (`create_plan` com constantes, o veredito
-do auditor por fórmula, o evaluator com `technical_score` fixo, a aprovação
-HITL sempre `true`), a versão portada deriva tudo de raciocínio real do
-modelo, com fallback honesto quando o parsing falha.
-
-**Fase 5 concluída** — verificação, review e governança, em 6 ondas
-(ADRs 0008–0010). `/verify` (`crates/forge-verify`) roda um pipeline
-configurável (`forge.toml`) de passos com timeout e kill de grupo de
-processos, parsers reais para `cargo test`/clippy/ruff, e produz
-`verification-evidence.v1`; `forge verify` grava a evidência em disco e
-sai com código ≠0 em veredito `Fail` — o gate que o CI (job `verify`,
-Onda 6) e o squad (Onda 3) consomem. O squad passa a rodar `/verify`
-antes de cada tarefa e anexa a evidência ao `SquadTask`
-(`verification_evidence_json`, ADR 0008); o auditor Python julga sobre
-ela e reprova automaticamente — sem chamar o LLM — quando a evidência
-está ausente ou inválida (fail-closed, provado por contagem de chamadas
-ao gateway). `forge_review` (Python) pondera quatro reviewers num
-`value_score`, mas `gates.evaluate` sobrepõe essa média com regras duras
-— finding crítico, veredito `Fail`, piso de segurança — que nenhuma média
-alta "salva"; `certification.certify` produz o artefato com o hash da
-evidência (mesmo `canonical_json`/sha256 do `prompt-cache-key`), que o
-ledger já registra livremente. O skill-vetter (`forge-verify::vetter`,
-ADR 0009) aplica a mesma máquina de evidência ao diretório de uma skill e
-decide `Vet`/`Block` de forma dura e fail-closed. A fase fecha com o
-self-hosting literal: um job de CI roda `forge verify` sobre o próprio
-workspace e falha o build no veredito `Fail` (provado com um teste
-quebrado propositalmente e revertido) — a cobrança de evidência que era
-manual nesta fase passa a morar no pipeline.
-
-**Fase 6 concluída** — ecossistema e escala, em 9 ondas (ADRs 0011–0014). A
-plataforma passa a rodar **código que não é dela**, contido: skills built-in
-viram executáveis como `dyn Tool` no `ToolRegistry` (vetadas mesmo assim), o
-sandbox Docker real (bollard, em Rust) confina o que os terceiros exigem, e uma
-skill de terceiro roda **após** vetting, dentro da cela (ADR 0011 — critério de
-conclusão nº 1). Um cliente MCP (`rmcp`) expõe tools de servidores externos sob o
-mesmo motor de permissões (ADR 0012), e um cliente LSP hand-rolled (zero-dep,
-provado contra o rust-analyzer real no CI) dá contexto semântico aos agentes. O
-`recall` do squad deixa de ser no-op e vira recuperação real por TF-IDF local
-(ADR 0013). `forge experiment` gera o relatório de A/B a partir da telemetria, com
-veredito honesto — "sem significância" em vez de vencedor fabricado (ADR 0014 —
-critério nº 2). E benches criterion nos caminhos quentes + um load-test **k6** que
-valida o P95 do gateway sob concorrência (P95≈3.5ms no CI, sem key real) fecham o
-critério nº 3; `infra/` entra como esqueleto honesto (produto local-first, sem
-alvo de deploy real ainda).
-
-**Roadmap das 6 fases concluído.** O que vier depois é produto novo, não plano
-antigo — a plataforma se verifica com a própria ferramenta (o CI roda `forge
-verify` sobre si), contém código de terceiro, e escala. Uma pendência de
-*exercício* (não de código) da Fase 4 segue registrada abaixo.
-
-**Fase 7 concluída** — o navegador vira a forma primária de uso, em 15 ondas
-(ADRs 0015–0022). O frontend (`web/`) saiu de "95% vitrine sobre 3 rotas GET"
-para toda tela com backend real: sessão de código via SSE com permissão
-interativa de verdade (gate não contornável, timeout fail-closed), squad ao
-vivo com consenso e HITL observados em tempo real, biblioteca de prompts e
-ledger reais. As **7 telas do Grupo A** do levantamento de design
-(`docs/LEVANTAMENTO-UI-DESIGNER.md`) foram entregues — Console MCP, Uso por
-modelo, Mapa de memória do squad (busca léxica TF-IDF via um `MemoryService`
-novo, ponte Python↔Rust, ADR 0022), Experimentos A/B, Rate limits, Sandbox &
-skills de terceiro, Language servers — cada uma provada por Playwright contra
-o `forge dashboard` real, não por leitura de código. `/verify` roda em
-background com progresso via polling; o Designer salva um grafo validado
-(`squad.workflow.v1`) no ledger sem fingir aplicá-lo ao squad real —
-"salvo e validado" é a promessa, não "aplicado". `forge dashboard` roda com
-o agente web habilitado por padrão agora (`--no-web-agent` volta ao modo
-só-leitura). Autonomia por tarefa (`max_autonomy_level`) e a tendência de
-esquecimento do squad (`forgetting.py`) ficam explicitamente de fora — os
-dois são código morto/desconectado do caminho real, registrado em ADR
-(0021/0022) em vez de fingidos na UI.
+Código e comentários em português; identificadores em inglês. Heranças:
+[opencode](https://github.com/danzeroum/opencode) ·
+[prompte](https://github.com/danzeroum/prompte) ·
+[BuildToValue_AI_Agent_Specialization](https://github.com/danzeroum/BuildToValue_AI_Agent_Specialization).

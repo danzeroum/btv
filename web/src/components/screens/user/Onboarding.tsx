@@ -51,7 +51,7 @@ export function Onboarding() {
             ✓ Instalar
           </div>
           <p style={{ fontSize: 13, color: 'var(--muted)' }}>Via cargo ou binário.</p>
-          <CodeBlock code="$ cargo install forge" />
+          <CodeBlock code="$ cargo install btv" />
         </Card>
 
         <Card accentBorder="var(--amber)">
@@ -91,7 +91,7 @@ export function Onboarding() {
           <div className="row" style={{ fontWeight: 600 }}>
             Primeiro comando
           </div>
-          <CodeBlock code={'$ forge run "explique a estrutura deste repo" --agent plan'} />
+          <CodeBlock code={'$ btv run "explique a estrutura deste repo" --agent plan'} />
         </Card>
 
         <Button variant="primary" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'sessao' })}>
@@ -101,7 +101,7 @@ export function Onboarding() {
 
       <Card style={{ background: 'var(--term)' }}>
         <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.9 }}>
-          <div style={{ color: 'var(--muted)' }}>$ forge doctor</div>
+          <div style={{ color: 'var(--muted)' }}>$ btv doctor</div>
           <AsyncStatus state={doctorState.state} onRetry={() => void doctorState.run()}>
             {(checks) => (
               <>

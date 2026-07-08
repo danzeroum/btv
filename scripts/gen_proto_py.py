@@ -1,6 +1,6 @@
 """Regenera os stubs gRPC Python de schemas/proto/*.proto (grpcio-tools).
 
-Saída: python/packages/forge-proto-py/src/forge_proto/ — nunca editar os
+Saída: python/packages/btv-proto-py/src/btv_proto/ — nunca editar os
 arquivos gerados à mão. Rode via `just gen-proto` (que também regenera o
 lado Rust) ou `uv run --project python python ../scripts/gen_proto_py.py`.
 """
@@ -14,11 +14,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROTO_DIR = ROOT / "schemas" / "proto"
-OUT_DIR = ROOT / "python" / "packages" / "forge-proto-py" / "src" / "forge_proto"
+OUT_DIR = ROOT / "python" / "packages" / "btv-proto-py" / "src" / "btv_proto"
 PROTOS = ["llm.proto", "core.proto", "squad.proto", "promptforge.proto", "memory.proto"]
 
 # grpc_tools gera import absoluto (`import x_pb2 as x__pb2`); como os stubs
-# vivem dentro do pacote forge_proto, precisa virar import relativo. Isso
+# vivem dentro do pacote btv_proto, precisa virar import relativo. Isso
 # aparece tanto nos `*_pb2_grpc.py` (import do próprio `*_pb2`) quanto nos
 # `*_pb2.py` que importam outro proto (ex.: `core_pb2` importa `llm_pb2`,
 # já que core.proto tem `import "llm.proto"`).

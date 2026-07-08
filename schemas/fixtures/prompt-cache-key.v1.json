@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por forge-schemas (Rust, tests/parity.rs) e forge_promptforge (Python, tests/test_hashing.py). Regeneração: just gen-fixtures.",
+  "$comment": "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por btv-schemas (Rust, tests/parity.rs) e btv_promptforge (Python, tests/test_hashing.py). Regeneração: just gen-fixtures.",
   "cases": [
     {
       "name": "simples",

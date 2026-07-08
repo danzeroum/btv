@@ -30,7 +30,7 @@ interface AuditItem {
  *  (submodule `vendor/bpmn`): `BpmnEditor` (canvas/gestos/paleta/inspetor/
  *  undo/lifecycle) + plugin de domínio do produto (`btvPlugin`). A auditoria
  *  do fluxo usa o `AuditLedger` hash-chained da lib; salvar registra a
- *  versão no `VersionRegistry` (lifecycle real) e espelha no ledger Forge
+ *  versão no `VersionRegistry` (lifecycle real) e espelha no ledger BuildToValue
  *  (`btv.flow_saved`); ▶ Testar roda o fluxo no motor REAL do squad, com o
  *  run-binding (`versionId`/`snapshotHash`) na trilha. */
 export function Designer() {
@@ -91,7 +91,7 @@ export function Designer() {
         },
       )
       setSalvo(`✓ salvo e auditado — ledger #${resp.seq}`)
-      registrar('flow.saved', `fluxo salvo como modelo "${nome}" (ledger Forge #${resp.seq})`)
+      registrar('flow.saved', `fluxo salvo como modelo "${nome}" (ledger da plataforma #${resp.seq})`)
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
     }

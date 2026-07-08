@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 // U5 — Squad Designer sobre a lib bpmn (vendor/bpmn) contra o backend real:
 // canvas com o fluxo inicial, esteira resultante da travessia, salvar como
-// modelo (VersionRegistry da lib + btv.flow_saved no ledger Forge com
+// modelo (VersionRegistry da lib + btv.flow_saved no ledger BuildToValue com
 // snapshot hash) e ▶ Testar squad rodando o fluxo no motor REAL do squad
 // (execução de teste na tela Ao vivo).
 
@@ -27,7 +27,7 @@ test('designer: canvas da lib, esteira resultante e salvar auditado', async ({ p
   await expect(page.getByText('⌂ Briefing')).toBeVisible()
   await expect(page.getByText(/☺ Entrevistador/)).toBeVisible()
 
-  // Salvar: registry da lib + ledger Forge com snapshot hash.
+  // Salvar: registry da lib + ledger BuildToValue com snapshot hash.
   await page.getByRole('button', { name: 'salvar como modelo' }).click()
   await expect(page.getByText(/✓ salvo e auditado — ledger #\d+/)).toBeVisible({ timeout: 15_000 })
   const ledger = await page.request.get('/api/ledger?limit=20')

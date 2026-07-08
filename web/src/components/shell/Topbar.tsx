@@ -31,7 +31,7 @@ export function Topbar() {
             display: 'inline-block',
           }}
         />
-        Forge
+        BuildToValue
       </div>
 
       <PersonaToggle />

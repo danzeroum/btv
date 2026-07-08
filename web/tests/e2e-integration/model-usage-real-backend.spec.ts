@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 /** Fase 7 Onda 7 (A5): prova a fronteira por EXECUÇÃO. Eventos reais
  * (`llm.call`/`cache.hit`, ver scripts/run-integration-server.mjs) são
- * semeados via `forge_store::Telemetry::record` — o mesmo caminho que
+ * semeados via `btv_store::Telemetry::record` — o mesmo caminho que
  * `RateLimitedGenerator`/`CachedGenerator` usam em produção — com 2 modelos
  * cujo id ainda bate nos regexes reais de `tier_from_id` ("haiku" -> small,
  * "sonnet" -> large), para a tela provar agregação E classificação de tier

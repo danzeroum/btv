@@ -1,6 +1,6 @@
 import { fetchJson } from './client'
 
-/** Rotas do produto BuildToValue (`forge-cli::btv_agent`). A ativação roda o
+/** Rotas do produto BuildToValue (`btv-cli::btv_agent`). A ativação roda o
  *  MESMO motor do squad (`/api/squad/*`) — estas rotas somam a montagem do
  *  briefing, o ledger (`btv.*`) e a persistência de runs. */
 
@@ -30,7 +30,7 @@ export function ativarSquad(payload: AtivarSquadPayload): Promise<AtivarSquadRes
   })
 }
 
-/** Espelho de `forge_store::BtvRun` (GET /api/btv/squads). */
+/** Espelho de `btv_store::BtvRun` (GET /api/btv/squads). */
 export interface BtvRun {
   id: number
   task_id: string
@@ -68,7 +68,7 @@ export async function pedirAjuste(taskId: string, instrucao: string, etapa: stri
   })
 }
 
-/** Espelho de `forge_store::BtvDeliverable` (GET /api/btv/deliverables). */
+/** Espelho de `btv_store::BtvDeliverable` (GET /api/btv/deliverables). */
 export interface BtvDeliverable {
   id: number
   run_id: number

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/ledger-entry.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/ledger-entry.v1.schema.json",
   "title": "ledger-entry.v1",
   "description": "Entrada do ledger append-only (governança BuildToValue). entry_hash = sha256(prev_hash + JSON canônico do corpo {kind, actor, payload, override, fake_marker, ts}). Overrides marcados e 'Nada Fake' são campos de primeira classe.",
   "type": "object",

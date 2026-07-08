@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato handoff-event.v1. Valida contra schemas/json/handoff-event.v1.schema.json e desserializa em forge_schemas::handoff::HandoffEvent (Rust, tests/schema_fixtures.rs) — só há tipo do lado Rust hoje; nenhum consumidor Python parseia este evento como objeto estruturado.",
+  "$comment": "Fixture golden do contrato handoff-event.v1. Valida contra schemas/json/handoff-event.v1.schema.json e desserializa em btv_schemas::handoff::HandoffEvent (Rust, tests/schema_fixtures.rs) — só há tipo do lado Rust hoje; nenhum consumidor Python parseia este evento como objeto estruturado.",
   "valid": {
     "event": "complete",
     "task_id": "task-1",

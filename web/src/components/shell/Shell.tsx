@@ -33,11 +33,11 @@ export function Shell() {
   const stageClass = ADMIN_SURFACE_SCREENS.has(screen) ? 'surf' : 'term'
 
   return (
-    <div id="forge-root" ref={rootRef}>
+    <div id="btv-root" ref={rootRef}>
       <Topbar />
-      <div className="forge-body">
+      <div className="btv-body">
         <Sidebar />
-        <main className={`forge-stage ${stageClass}`} style={{ position: 'relative' }}>
+        <main className={`btv-stage ${stageClass}`} style={{ position: 'relative' }}>
           <WindowChrome icon={meta.chromeIcon} title={meta.title} right={meta.chromeRight}>
             <div style={{ padding: 20 }}>
               <div className="screen-header">

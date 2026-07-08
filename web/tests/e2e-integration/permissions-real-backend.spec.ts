@@ -18,7 +18,7 @@ test('editar uma célula da matriz grava um override real, mostra na lista de re
 
   const bashRow = page.locator('tbody tr', { hasText: 'bash' })
   const planCell = bashRow.locator('button').nth(1)
-  // Default REAL do perfil `plan` (`forge_core::PLAN`/`read_only()`): bash é
+  // Default REAL do perfil `plan` (`btv_core::PLAN`/`read_only()`): bash é
   // "ask", não "deny" — precisão sobre o mock antigo que essa tela substitui.
   await expect(planCell).toHaveText('ask')
   await expect(page.getByText('nenhum override persistido')).toBeVisible()

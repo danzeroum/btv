@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/handoff-event.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/handoff-event.v1.schema.json",
   "title": "handoff-event.v1",
   "description": "Evento de handoff entre agentes/padrões (matriz de orquestração BuildToValue). Todo handoff emite start/ack/complete/error com telemetria obrigatória.",
   "type": "object",

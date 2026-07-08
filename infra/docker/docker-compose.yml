@@ -1,20 +1,20 @@
-# Compose de TESTE do Forge — NÃO é deploy de produção (ver infra/README.md).
-# Conveniência para subir um container onde você usa o `forge` como ferramenta.
+# Compose de TESTE do BuildToValue — NÃO é deploy de produção (ver infra/README.md).
+# Conveniência para subir um container onde você usa o `btv` como ferramenta.
 #
 #   export DEEPSEEK_API_KEY=sk-...      # ou ANTHROPIC_API_KEY / OPENAI_API_KEY
-#   docker compose -f infra/docker/docker-compose.yml run --rm forge
-#   # dentro do container: forge verify | forge run --model deepseek-chat "..." | ...
+#   docker compose -f infra/docker/docker-compose.yml run --rm btv
+#   # dentro do container: btv verify | btv run --model deepseek-chat "..." | ...
 #
 # Com DeepSeek, o --model deepseek-chat é OBRIGATÓRIO em run/chat/squad — o
 # gateway não troca o modelo por você (ver "Usando a API da DeepSeek" no README).
 services:
-  forge:
+  btv:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile
-    image: forge:test
+    image: btv:test
     stdin_open: true # -i
-    tty: true # -t — necessário para forge chat/squad interativos
+    tty: true # -t — necessário para btv chat/squad interativos
     environment:
       # A(s) key(s) vivem SÓ no processo Rust (ADR 0001). Passe pelo ambiente,
       # nunca commitada. Cada uma herda do host se você a exportou antes; deixe
@@ -28,14 +28,14 @@ services:
       # O projeto que o agente vai ler/editar, montado em /work.
       - ../../:/work:rw
       # --- SANDBOX (skills de terceiro, critério nº 1 da Fase 6) ---
-      # Descomente para dar ao forge acesso ao daemon Docker do host (DinD).
+      # Descomente para dar ao btv acesso ao daemon Docker do host (DinD).
       # Sem isto, skills de terceiro fail-CLOSE (por design, não é bug).
-      # Atenção à path-translation: os caminhos que o forge passa ao daemon são
+      # Atenção à path-translation: os caminhos que o btv passa ao daemon são
       # internos ao container; o daemon do host os interpreta como do host.
       # - /var/run/docker.sock:/var/run/docker.sock
 
   # --- DASHBOARD (telemetria via web) ---
-  # `forge dashboard` amarra em 127.0.0.1 por design (loopback), então um
+  # `btv dashboard` amarra em 127.0.0.1 por design (loopback), então um
   # `ports: - "7878:7878"` normal NÃO funciona (o publish do Docker mapeia pro IP
   # do container, não pro 127.0.0.1 interno). `network_mode: host` faz o
   # container compartilhar o network namespace da VPS — aí o 127.0.0.1 do
@@ -52,10 +52,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile
-    image: forge:test
+    image: btv:test
     network_mode: host
     environment:
-      # Mesma regra do serviço `forge` acima (ADR 0001, prioridade
+      # Mesma regra do serviço `btv` acima (ADR 0001, prioridade
       # Anthropic → DeepSeek → OpenAI). Sem isto, `run --rm dashboard` sobe
       # sem NENHUM provider — squad/sessão pelo navegador falham com
       # "nenhum provider configurado" antes mesmo de chegar no modelo.
@@ -65,7 +65,7 @@ services:
       # Modelo dos 5 agentes do squad ao vivo (pool de longa duração,
       # construído uma vez nesta subida — não há campo por-tarefa ainda;
       # ver README "Usando a API da DeepSeek" e pendencias.md).
-      FORGE_SQUAD_MODEL: ${FORGE_SQUAD_MODEL:-}
+      BTV_SQUAD_MODEL: ${BTV_SQUAD_MODEL:-}
     volumes:
       - ../../:/work:rw
-    command: ["forge", "dashboard", "--port", "7878"]
+    command: ["btv", "dashboard", "--port", "7878"]

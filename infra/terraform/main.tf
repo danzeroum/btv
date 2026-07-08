@@ -1,6 +1,6 @@
 # ESQUELETO (Fase 6 Onda 8) — NÃO É INFRA DE PRODUÇÃO.
 #
-# O Forge é local-first; não há alvo de deploy hospedado hoje. Este arquivo é um
+# O BuildToValue é local-first; não há alvo de deploy hospedado hoje. Este arquivo é um
 # ponto de partida honesto para quando houver um (ver infra/README.md). Nada aqui
 # provisiona recurso real — os providers/recursos ficam comentados até existir um
 # alvo, para não virar terraform decorativo.
@@ -25,6 +25,6 @@ terraform {
 #   default     = "us-east-1"
 # }
 #
-# resource "null_resource" "forge_placeholder" {
+# resource "null_resource" "btv_placeholder" {
 #   # Substituir por um recurso real (VM/container/serverless) quando houver alvo.
 # }

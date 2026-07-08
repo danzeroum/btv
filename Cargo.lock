@@ -284,6 +284,183 @@ dependencies = [
 ]
 
 [[package]]
+name = "btv-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "btv-core",
+ "btv-llm",
+ "btv-proto",
+ "btv-schemas",
+ "btv-server",
+ "btv-sidecar",
+ "btv-store",
+ "btv-tools",
+ "btv-tui",
+ "btv-verify",
+ "clap",
+ "crossterm",
+ "jsonschema",
+ "ratatui",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tonic",
+ "tower",
+]
+
+[[package]]
+name = "btv-core"
+version = "0.1.0"
+dependencies = [
+ "btv-llm",
+ "btv-schemas",
+ "btv-store",
+ "btv-tools",
+ "criterion",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "btv-llm"
+version = "0.1.0"
+dependencies = [
+ "btv-schemas",
+ "criterion",
+ "futures-util",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "btv-proto"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "protoc-bin-vendored",
+ "serde",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
+name = "btv-schemas"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "hex",
+ "jsonschema",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "btv-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "btv-llm",
+ "btv-schemas",
+ "btv-store",
+ "btv-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
+ "tokio",
+ "tower",
+ "tower-http",
+]
+
+[[package]]
+name = "btv-sidecar"
+version = "0.1.0"
+dependencies = [
+ "btv-core",
+ "btv-proto",
+ "btv-schemas",
+ "btv-store",
+ "btv-tools",
+ "hyper-util",
+ "libc",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tower",
+]
+
+[[package]]
+name = "btv-store"
+version = "0.1.0"
+dependencies = [
+ "btv-schemas",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "btv-tools"
+version = "0.1.0"
+dependencies = [
+ "bollard",
+ "futures-util",
+ "grep",
+ "ignore",
+ "libc",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "btv-tui"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+]
+
+[[package]]
+name = "btv-verify"
+version = "0.1.0"
+dependencies = [
+ "btv-schemas",
+ "jsonschema",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -762,183 +939,6 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
-
-[[package]]
-name = "forge-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "clap",
- "crossterm",
- "forge-core",
- "forge-llm",
- "forge-proto",
- "forge-schemas",
- "forge-server",
- "forge-sidecar",
- "forge-store",
- "forge-tools",
- "forge-tui",
- "forge-verify",
- "jsonschema",
- "ratatui",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tokio-stream",
- "toml",
- "tonic",
- "tower",
-]
-
-[[package]]
-name = "forge-core"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "forge-llm",
- "forge-schemas",
- "forge-store",
- "forge-tools",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "forge-llm"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "forge-schemas",
- "futures-util",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "forge-proto"
-version = "0.1.0"
-dependencies = [
- "prost",
- "protoc-bin-vendored",
- "serde",
- "tonic",
- "tonic-build",
-]
-
-[[package]]
-name = "forge-schemas"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "hex",
- "jsonschema",
- "schemars 0.8.22",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "forge-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "forge-llm",
- "forge-schemas",
- "forge-store",
- "forge-verify",
- "serde",
- "serde_json",
- "tempfile",
- "time",
- "tokio",
- "tower",
- "tower-http",
-]
-
-[[package]]
-name = "forge-sidecar"
-version = "0.1.0"
-dependencies = [
- "forge-core",
- "forge-proto",
- "forge-schemas",
- "forge-store",
- "forge-tools",
- "hyper-util",
- "libc",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tonic",
- "tower",
-]
-
-[[package]]
-name = "forge-store"
-version = "0.1.0"
-dependencies = [
- "forge-schemas",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "forge-tools"
-version = "0.1.0"
-dependencies = [
- "bollard",
- "futures-util",
- "grep",
- "ignore",
- "libc",
- "rmcp",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "forge-tui"
-version = "0.1.0"
-dependencies = [
- "ratatui",
-]
-
-[[package]]
-name = "forge-verify"
-version = "0.1.0"
-dependencies = [
- "forge-schemas",
- "jsonschema",
- "libc",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "toml",
-]
 
 [[package]]
 name = "form_urlencoded"

@@ -134,7 +134,7 @@ export function Verify() {
           </div>
         )}
         <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10 }}>
-          self-hosting: este pipeline roda sobre o próprio Forge (Fase 5). Job em memória — reinício do dashboard
+          self-hosting: este pipeline roda sobre o próprio BuildToValue (Fase 5). Job em memória — reinício do dashboard
           perde uma execução em andamento.
         </p>
       </Card>

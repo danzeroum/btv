@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-// Galeria (U1) + Wizard (U2) contra o `forge dashboard` REAL: os 12 modelos
+// Galeria (U1) + Wizard (U2) contra o `btv dashboard` REAL: os 12 modelos
 // vêm de GET /api/btv/templates (squad-template.v1 embutido no binário),
 // nunca de um catálogo duplicado no cliente.
 

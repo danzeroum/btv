@@ -57,7 +57,7 @@ export function Sandbox() {
               const thirdParty = skills.filter((s) => s.source === 'third-party')
               return thirdParty.length === 0 ? (
                 <div style={{ fontSize: 12, color: 'var(--faint)' }}>
-                  nenhuma skill de terceiro em <span className="mono">.forge/skills/</span>.
+                  nenhuma skill de terceiro em <span className="mono">.btv/skills/</span>.
                 </div>
               ) : (
                 <Table

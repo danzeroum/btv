@@ -1,8 +1,8 @@
 /**
  * Fase 7 Onda 5: cliente da biblioteca de prompts + render. Metade CRUD
- * (`/api/prompts*`) fala com `forge-server` (só `forge-store` — mesma
+ * (`/api/prompts*`) fala com `btv-server` (só `btv-store` — mesma
  * classe de `/api/skills`); metade `render`/`generators` (`/api/prompt/*`)
- * fala com o router mesclado de `forge-cli` (precisa de `forge-sidecar`
+ * fala com o router mesclado de `btv-cli` (precisa de `btv-sidecar`
  * para chegar no sidecar PromptForge) — duas rotas distintas, mesmo
  * `fetchJson`.
  */
@@ -19,7 +19,7 @@ export interface SavedPrompt {
   created_at: string
 }
 
-/** Espelha `forge_proto::promptforge::GeneratorField` — descreve um campo que o gerador espera. */
+/** Espelha `btv_proto::promptforge::GeneratorField` — descreve um campo que o gerador espera. */
 export interface GeneratorField {
   name: string
   label: string
@@ -27,7 +27,7 @@ export interface GeneratorField {
   placeholder: string
 }
 
-/** Espelha `forge_proto::promptforge::GeneratorInfo` — a lista vem do sidecar PromptForge real, não fabricada aqui. */
+/** Espelha `btv_proto::promptforge::GeneratorInfo` — a lista vem do sidecar PromptForge real, não fabricada aqui. */
 export interface GeneratorInfo {
   name: string
   category: string

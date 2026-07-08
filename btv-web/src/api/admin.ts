@@ -1,7 +1,7 @@
 import { fetchJson } from './client'
 
 /** Clients das telas de Administração (A1–A6) — todas as rotas são reais e
- *  já existentes no Forge, exceto publicação de template e perfis locais
+ *  já existentes no BuildToValue, exceto publicação de template e perfis locais
  *  (rotas btv novas). */
 
 // A1 · telemetria
@@ -39,7 +39,7 @@ export interface RateLimitEntry {
 }
 export const fetchRateLimits = () => fetchJson<RateLimitEntry[]>('/api/ratelimit')
 
-// A4 · permissões (matriz real de forge_core::{BUILD,PLAN} + overrides)
+// A4 · permissões (matriz real de btv_core::{BUILD,PLAN} + overrides)
 export type Decision = 'allow' | 'ask' | 'deny'
 export interface MatrixRow {
   tool: string

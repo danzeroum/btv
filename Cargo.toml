@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/forge-cli",
-    "crates/forge-core",
-    "crates/forge-llm",
-    "crates/forge-proto",
-    "crates/forge-schemas",
-    "crates/forge-server",
-    "crates/forge-sidecar",
-    "crates/forge-store",
-    "crates/forge-tools",
-    "crates/forge-tui",
-    "crates/forge-verify",
+    "crates/btv-cli",
+    "crates/btv-core",
+    "crates/btv-llm",
+    "crates/btv-proto",
+    "crates/btv-schemas",
+    "crates/btv-server",
+    "crates/btv-sidecar",
+    "crates/btv-store",
+    "crates/btv-tools",
+    "crates/btv-tui",
+    "crates/btv-verify",
 ]
 
 [workspace.package]
@@ -54,13 +54,13 @@ axum = "0.8"
 bollard = "0.17"
 criterion = { version = "0.5", features = ["html_reports"] }
 
-forge-schemas = { path = "crates/forge-schemas" }
-forge-core = { path = "crates/forge-core" }
-forge-llm = { path = "crates/forge-llm" }
-forge-store = { path = "crates/forge-store" }
-forge-tools = { path = "crates/forge-tools" }
-forge-verify = { path = "crates/forge-verify" }
-forge-tui = { path = "crates/forge-tui" }
-forge-proto = { path = "crates/forge-proto" }
-forge-sidecar = { path = "crates/forge-sidecar" }
-forge-server = { path = "crates/forge-server" }
+btv-schemas = { path = "crates/btv-schemas" }
+btv-core = { path = "crates/btv-core" }
+btv-llm = { path = "crates/btv-llm" }
+btv-store = { path = "crates/btv-store" }
+btv-tools = { path = "crates/btv-tools" }
+btv-verify = { path = "crates/btv-verify" }
+btv-tui = { path = "crates/btv-tui" }
+btv-proto = { path = "crates/btv-proto" }
+btv-sidecar = { path = "crates/btv-sidecar" }
+btv-server = { path = "crates/btv-server" }

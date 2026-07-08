@@ -43,7 +43,7 @@ export function Providers() {
           </div>
           <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10 }}>
             🔑 keys só no Rust · ordem de fallback fixa (anthropic → deepseek → openai) · reflete os mesmos env vars
-            que uma sessão real (<span className="mono">forge run</span>/<span className="mono">chat</span>) usaria
+            que uma sessão real (<span className="mono">btv run</span>/<span className="mono">chat</span>) usaria
           </p>
         </Card>
 
