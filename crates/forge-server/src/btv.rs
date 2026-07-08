@@ -31,7 +31,9 @@ const TEMPLATE_SOURCES: [&str; 12] = [
 
 /// Parse único e cacheado. O `expect` é seguro por construção: as fontes são
 /// literais de compile-time cobertas por `todos_os_templates_embutidos_parseiam_e_validam`.
-pub(crate) fn builtin_templates() -> &'static [SquadTemplate] {
+/// Pública porque a ativação de squad (`forge-cli::btv_agent`) resolve o
+/// template pelo MESMO catálogo embutido que esta rota serve — fonte única.
+pub fn builtin_templates() -> &'static [SquadTemplate] {
     static TEMPLATES: OnceLock<Vec<SquadTemplate>> = OnceLock::new();
     TEMPLATES.get_or_init(|| {
         TEMPLATE_SOURCES

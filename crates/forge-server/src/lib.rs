@@ -15,7 +15,7 @@
 //! `forge-server` não pode depender de `forge-cli`, a dependência é na
 //! direção oposta).
 
-mod btv;
+pub mod btv;
 
 use axum::extract::{Path as AxumPath, Query, Request, State};
 use axum::http::{header, Method, StatusCode};

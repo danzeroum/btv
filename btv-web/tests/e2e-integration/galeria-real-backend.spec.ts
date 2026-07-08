@@ -46,8 +46,8 @@ test.describe('galeria e wizard com backend real', () => {
     await wizard.getByRole('button', { name: 'Continuar →' }).click()
     await expect(wizard).toContainText('MusicXML')
     await expect(wizard).toContainText('Aprovar o rascunho antes da revisão')
-    // Descope explícito da Onda 2: ativação real chega na Onda 3.
-    await expect(wizard.getByRole('button', { name: '⚑ Ativar squad' })).toBeDisabled()
+    // Ativação real ligada (Onda 3) — exercitada em squad-real-backend.spec.ts.
+    await expect(wizard.getByRole('button', { name: '⚑ Ativar squad' })).toBeEnabled()
 
     // Voltar preserva o fluxo; fechar sai do overlay.
     await wizard.getByRole('button', { name: '← Voltar' }).click()

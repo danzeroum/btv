@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties } from 'react'
 import { useAppDispatch, useAppState } from '../../state/AppContext'
 import { useTemplates } from '../../state/TemplatesContext'
+import { useSquadRun } from '../../state/SquadRunContext'
 import type { SquadTemplate } from '../../api/templates'
 
 /** Descrições genéricas por índice de papel — os 4 arquétipos do protótipo
@@ -58,8 +59,29 @@ function WizardInner({ template, onClose }: { template: SquadTemplate; onClose: 
   const [papeisOff, setPapeisOff] = useState<Record<number, boolean>>({})
   const [refs, setRefs] = useState<RefItem[]>([])
   const [answers, setAnswers] = useState<string[]>(() => template.perguntas.map(() => ''))
+  const [ativando, setAtivando] = useState(false)
+  const [erroAtivacao, setErroAtivacao] = useState<string | null>(null)
   const linkRef = useRef<HTMLInputElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const { ativar } = useSquadRun()
+
+  const ativarSquadReal = async () => {
+    setAtivando(true)
+    setErroAtivacao(null)
+    try {
+      await ativar(template, {
+        briefing: template.perguntas.map((q, i) => ({ label: q.label, resposta: answers[i] ?? '' })),
+        refs: refs.map((r) => (r.t === 'arquivo' ? `arquivo: ${r.label}` : r.label)),
+        papeis_off: Object.entries(papeisOff)
+          .filter(([, off]) => off)
+          .map(([i]) => Number(i)),
+      })
+      // `ativar` fecha o wizard e navega para Ao vivo.
+    } catch (e) {
+      setErroAtivacao(e instanceof Error ? e.message : String(e))
+      setAtivando(false)
+    }
+  }
 
   const addLink = () => {
     const v = linkRef.current?.value.trim()
@@ -381,22 +403,20 @@ function WizardInner({ template, onClose }: { template: SquadTemplate; onClose: 
               ← Voltar
             </button>
           )}
-          {step === 2 && (
-            // Descope temporário da Onda 2: a ativação real (POST /api/btv/squads
-            // → squad de verdade + tela Ao vivo) liga na Onda 3. Botão
-            // desabilitado com nota explícita, nunca uma ativação fingida.
-            <span className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--faint)' }}>
-              ativação real chega na Onda 3
+          {erroAtivacao && (
+            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#a54334', maxWidth: 280, lineHeight: 1.4 }}>
+              {erroAtivacao}
             </span>
           )}
           <button
             onClick={() => {
               if (step < 2) setStep((s) => s + 1)
+              else void ativarSquadReal()
             }}
-            disabled={step === 2}
+            disabled={ativando}
             style={{
-              marginLeft: step === 2 ? 0 : 'auto',
-              background: step === 2 ? 'var(--line2)' : 'var(--brand)',
+              marginLeft: erroAtivacao ? 0 : 'auto',
+              background: ativando ? 'var(--line2)' : 'var(--brand)',
               color: '#fff',
               border: 'none',
               borderRadius: 10,
@@ -404,10 +424,10 @@ function WizardInner({ template, onClose }: { template: SquadTemplate; onClose: 
               fontSize: 13.5,
               fontWeight: 600,
               fontFamily: 'var(--sans)',
-              cursor: step === 2 ? 'not-allowed' : 'pointer',
+              cursor: ativando ? 'wait' : 'pointer',
             }}
           >
-            {step < 2 ? 'Continuar →' : '⚑ Ativar squad'}
+            {step < 2 ? 'Continuar →' : ativando ? 'ativando…' : '⚑ Ativar squad'}
           </button>
         </div>
       </div>

@@ -9,7 +9,7 @@
 // do console Forge (web/scripts/run-integration-server.mjs).
 
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -34,6 +34,15 @@ run('cargo', ['build', '-p', 'forge-cli'])
 // execução).
 const workDir = mkdtempSync(join(tmpdir(), 'btv-e2e-'))
 mkdirSync(join(workDir, '.forge'), { recursive: true })
+
+// `forge.toml` com passos curtos e determinísticos: o squad roda /verify
+// ANTES de cada tarefa (evidência para o auditor, ADR 0008) — sem isto, a
+// ativação tentaria os passos default (cargo test/clippy reais) dentro do
+// tmp dir. Mesma receita do harness do console (web/, Onda 11).
+writeFileSync(
+  join(workDir, 'forge.toml'),
+  '[[step]]\nname = "passo-um"\nprogram = "sh"\nargs = ["-c", "sleep 0.1"]\n',
+)
 
 // 3. sobe o dashboard real. FORGE_SCRIPTED=1 troca o gerador por respostas
 // determinísticas (sem API key) — o squad ativado pela UI roda o caminho

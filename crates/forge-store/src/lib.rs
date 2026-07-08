@@ -4,6 +4,7 @@
 //! prompts por hash, event store para sessões duráveis, telemetria
 //! offline-first e biblioteca de prompts.
 
+pub mod btv;
 pub mod events;
 pub mod ledger;
 pub mod prompt_cache;
@@ -11,6 +12,7 @@ pub mod prompt_library;
 pub mod rule_store;
 pub mod telemetry;
 
+pub use btv::{BtvRun, BtvStore, BtvStoreError};
 pub use events::{EventError, EventInput, EventStore, StoredEvent};
 pub use ledger::LedgerStore;
 pub use prompt_cache::PromptCache;

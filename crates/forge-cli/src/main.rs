@@ -5,6 +5,7 @@
 //! sob permissão interativa e ledger em `.forge/forge.db`.
 //! `squad` ativa o sidecar Python na Fase 4; `verify` completa na Fase 5.
 
+mod btv_agent;
 mod cache;
 mod doctor_console;
 mod lsp_console;
@@ -291,6 +292,18 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
         let hub = web_agent::default_hub();
         let squad_hub = squad_agent::default_hub();
         let squad_pool = squad_agent::default_squad_pool(&root);
+        // BuildToValue: mesma hub/pool do squad (uma ativação pela galeria e
+        // um `POST /api/squad/run` são o MESMO motor), ledger compartilhado e
+        // store próprio (`.forge/btv.db`).
+        let btv_store = std::sync::Arc::new(std::sync::Mutex::new(forge_store::BtvStore::open(
+            forge_dir.join("btv.db").to_str().unwrap_or(".forge/btv.db"),
+        )?));
+        let btv_router = btv_agent::router(
+            squad_hub.clone(),
+            squad_pool.clone(),
+            ledger.clone(),
+            btv_store,
+        );
         let squad_router = squad_agent::router(squad_hub, squad_pool);
         let sidecar_service = prompt_render::default_sidecar_service(&root);
         let prompt_router = prompt_render::router(sidecar_service);
@@ -301,6 +314,7 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
         let lsp_router = lsp_console::router(root.clone());
         let doctor_router = doctor_console::router();
         let extra_router = squad_router
+            .merge(btv_router)
             .merge(prompt_router)
             .merge(mcp_router)
             .merge(memory_router)

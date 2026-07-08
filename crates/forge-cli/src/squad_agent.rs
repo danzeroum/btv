@@ -154,7 +154,7 @@ impl SquadHub {
     /// diante — mesma semântica de reconexão do `SessionHub` (ADR 0016).
     /// `None` no segundo item significa "tarefa já terminou" — o chamador
     /// serve só o snapshot e encerra o SSE, não fica esperando.
-    fn subscribe(
+    pub(crate) fn subscribe(
         &self,
         task_id: &str,
     ) -> (
@@ -193,7 +193,7 @@ impl SquadHub {
 
     /// Resolve o gate HITL pendente — `Err` se não houver nenhum (evita
     /// resolver algo inexistente/já resolvido).
-    fn resolve_hitl(&self, task_id: &str, allow: bool) -> Result<(), ()> {
+    pub(crate) fn resolve_hitl(&self, task_id: &str, allow: bool) -> Result<(), ()> {
         let mut tasks = self.tasks.lock().expect("squad hub mutex poisoned");
         let Some(state) = tasks.get_mut(task_id) else {
             return Err(());
@@ -224,12 +224,22 @@ impl SquadHub {
         Ok(())
     }
 
-    /// Retira a próxima mensagem do usuário pendente, se houver (consumida
-    /// pelo ponto de consulta do orquestrador na Fase 1b). Não bloqueia.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Retira a próxima mensagem do usuário pendente, se houver. Não bloqueia.
     fn take_user_message(&self, task_id: &str) -> Option<String> {
         let mut tasks = self.tasks.lock().expect("squad hub mutex poisoned");
         tasks.get_mut(task_id).and_then(|s| s.inbox.pop_front())
+    }
+
+    /// Drena TODAS as mensagens pendentes do usuário — consumidas pelo ponto
+    /// real de injeção: a próxima chamada `Generate` do agente ativo (ver
+    /// `inject_cockpit_context`). É o que faz o cockpit ser real: a orientação
+    /// entra no contexto do modelo, não só no chat.
+    fn drain_user_messages(&self, task_id: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        while let Some(msg) = self.take_user_message(task_id) {
+            out.push(msg);
+        }
+        out
     }
 
     /// Registra o handle de abort da task que roda o squad — chamado logo
@@ -284,7 +294,7 @@ impl SquadHub {
 
     /// Se a tarefa foi parada por kill-switch. Usada como checagem
     /// Prioridade-Zero antes de seguir passos (ver `run_squad_task_inner`).
-    fn is_stopped(&self, task_id: &str) -> bool {
+    pub(crate) fn is_stopped(&self, task_id: &str) -> bool {
         let tasks = self.tasks.lock().expect("squad hub mutex poisoned");
         tasks.get(task_id).map(|s| s.stopped).unwrap_or(false)
     }
@@ -307,7 +317,8 @@ struct WebSquadCoreBackend<G: Generator> {
 #[tonic::async_trait]
 impl<G: Generator + Send + Sync + 'static> CoreBackend for WebSquadCoreBackend<G> {
     async fn generate(&self, req: &LlmRequest) -> Result<(String, Usage), String> {
-        core_generate(self.generator.as_ref(), req).await
+        let req = inject_cockpit_context(&self.hub, &self.task_id, req);
+        core_generate(self.generator.as_ref(), &req).await
     }
 
     async fn request_permission(&self, _req: &PermissionRequest) -> bool {
@@ -342,6 +353,10 @@ struct ScriptedSquadCoreBackend {
 #[tonic::async_trait]
 impl CoreBackend for ScriptedSquadCoreBackend {
     async fn generate(&self, req: &LlmRequest) -> Result<(String, Usage), String> {
+        // Mesmo dreno do backend real: a orientação do cockpit é consumida
+        // (inbox → contexto) também no modo roteirizado, então o e2e exercita
+        // o caminho verdadeiro mesmo sem provider.
+        let req = inject_cockpit_context(&self.hub, &self.task_id, req);
         let text = match req.requester.as_str() {
             "planner" => {
                 r#"{"steps":[{"step":1,"action":"deploy","description":"publicar","estimated_time":10,"dependencies":[],"can_fail":true}],"estimated_duration":10,"confidence":0.5}"#
@@ -386,6 +401,35 @@ impl CoreBackend for ScriptedSquadCoreBackend {
 
 fn now_rfc3339() -> String {
     crate::session::now_rfc3339()
+}
+
+/// Injeta as orientações pendentes do cockpit (usuário como MEMBRO da squad,
+/// handoff BTV §8) no contexto REAL do agente ativo: cada mensagem drenada da
+/// inbox vira um turno `user` extra em `messages_json` da próxima chamada
+/// `Generate`. Sem mensagem pendente (ou `messages_json` fora do formato
+/// esperado), a requisição passa intocada — nunca fabrica contexto.
+fn inject_cockpit_context(hub: &SquadHub, task_id: &str, req: &LlmRequest) -> LlmRequest {
+    // Parse ANTES de drenar: se `messages_json` não estiver no formato
+    // esperado, as orientações ficam na inbox para a próxima chamada em vez
+    // de serem perdidas em silêncio.
+    let mut messages: Vec<serde_json::Value> = match serde_json::from_str(&req.messages_json) {
+        Ok(serde_json::Value::Array(items)) => items,
+        _ => return req.clone(),
+    };
+    let pending = hub.drain_user_messages(task_id);
+    if pending.is_empty() {
+        return req.clone();
+    }
+    for text in pending {
+        messages.push(serde_json::json!({
+            "role": "user",
+            "content": format!("[orientação do cockpit — membro humano da squad] {text}"),
+        }));
+    }
+    let mut out = req.clone();
+    out.messages_json =
+        serde_json::to_string(&messages).unwrap_or_else(|_| req.messages_json.clone());
+    out
 }
 
 /// Roda a tarefa de squad inteira: sobe um `CoreService` fresco (barato —
@@ -563,23 +607,31 @@ struct RunSquadResponse {
 }
 
 #[derive(Clone)]
-struct SquadAgentState {
-    hub: SquadHub,
-    pool: Arc<SquadPool>,
+pub(crate) struct SquadAgentState {
+    pub(crate) hub: SquadHub,
+    pub(crate) pool: Arc<SquadPool>,
 }
 
-async fn run_squad_handler(
-    State(state): State<SquadAgentState>,
-    Json(body): Json<RunSquadBody>,
-) -> Response {
+/// Dispara uma tarefa de squad REAL (mesmo caminho do `POST /api/squad/run`):
+/// gera o `task_id`, escolhe o backend (roteirizado sob `FORGE_SCRIPTED`,
+/// real via `Gateway` caso contrário), faz o spawn e registra o abort do
+/// kill-switch. Compartilhado com a ativação do BuildToValue
+/// (`btv_agent::ativar_squad_handler`) — uma squad ativada pela galeria roda
+/// exatamente o mesmo motor.
+pub(crate) fn start_squad_task(
+    state: &SquadAgentState,
+    description: String,
+) -> Result<String, Box<Response>> {
     let root = match std::env::current_dir() {
         Ok(r) => r,
         Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody::new("cwd_error", e.to_string())),
-            )
-                .into_response()
+            return Err(Box::new(
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("cwd_error", e.to_string())),
+                )
+                    .into_response(),
+            ))
         }
     };
     let task_id = state.hub.new_task();
@@ -593,7 +645,7 @@ async fn run_squad_handler(
             pool,
             root,
             task_id_for_task,
-            body.task,
+            description,
             |hub, task_id, root, tools, tool_permissions| ScriptedSquadCoreBackend {
                 hub,
                 task_id,
@@ -614,11 +666,13 @@ async fn run_squad_handler(
         let generator = match crate::prepare(&opts) {
             Ok((generator, _root)) => Arc::new(generator),
             Err(e) => {
-                return (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(ErrorBody::new("no_provider", e.to_string())),
-                )
-                    .into_response()
+                return Err(Box::new(
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(ErrorBody::new("no_provider", e.to_string())),
+                    )
+                        .into_response(),
+                ))
             }
         };
         tokio::spawn(run_squad_task(
@@ -626,7 +680,7 @@ async fn run_squad_handler(
             pool,
             root,
             task_id_for_task,
-            body.task,
+            description,
             move |hub, task_id, root, tools, tool_permissions| WebSquadCoreBackend {
                 generator,
                 hub,
@@ -640,8 +694,17 @@ async fn run_squad_handler(
     // Registra o abort para o kill-switch (Fase 3) poder parar a task de
     // verdade, não só marcar a flag.
     state.hub.register_abort(&task_id, handle.abort_handle());
+    Ok(task_id)
+}
 
-    (StatusCode::ACCEPTED, Json(RunSquadResponse { task_id })).into_response()
+async fn run_squad_handler(
+    State(state): State<SquadAgentState>,
+    Json(body): Json<RunSquadBody>,
+) -> Response {
+    match start_squad_task(&state, body.task) {
+        Ok(task_id) => (StatusCode::ACCEPTED, Json(RunSquadResponse { task_id })).into_response(),
+        Err(resp) => *resp,
+    }
 }
 
 async fn squad_sse_handler(
@@ -901,6 +964,67 @@ mod tests {
     fn push_user_message_em_tarefa_inexistente_devolve_err() {
         let hub = SquadHub::new(Duration::from_millis(100));
         assert!(hub.push_user_message("nao-existe", "oi".into()).is_err());
+    }
+
+    /// O cockpit é REAL: a orientação pendente vira turno `user` extra no
+    /// `messages_json` da próxima chamada `Generate` do agente ativo — e é
+    /// consumida (a segunda chamada não a repete).
+    #[test]
+    fn inject_cockpit_context_injeta_e_drena_a_orientacao() {
+        let hub = SquadHub::new(Duration::from_millis(100));
+        let _ = hub.subscribe("t1");
+        hub.push_user_message("t1", "priorize o tom formal".into())
+            .unwrap();
+        let req = LlmRequest {
+            model: "m".into(),
+            messages_json: r#"[{"role":"user","content":"tarefa"}]"#.into(),
+            temperature: None,
+            max_tokens: None,
+            requester: "developer".into(),
+        };
+        let injected = inject_cockpit_context(&hub, "t1", &req);
+        let messages: Vec<serde_json::Value> =
+            serde_json::from_str(&injected.messages_json).unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1]["role"], "user");
+        assert!(messages[1]["content"]
+            .as_str()
+            .unwrap()
+            .contains("priorize o tom formal"));
+        // Drenada: a próxima chamada passa intocada.
+        let second = inject_cockpit_context(&hub, "t1", &req);
+        assert_eq!(second.messages_json, req.messages_json);
+    }
+
+    /// Sem mensagem pendente a requisição passa intocada; e um
+    /// `messages_json` fora do formato esperado nunca é reescrito NEM drena a
+    /// inbox — a orientação sobrevive para a próxima chamada parseável.
+    #[test]
+    fn inject_cockpit_context_preserva_requisicao_e_inbox() {
+        let hub = SquadHub::new(Duration::from_millis(100));
+        let _ = hub.subscribe("t1");
+        let req = LlmRequest {
+            model: "m".into(),
+            messages_json: r#"[{"role":"user","content":"tarefa"}]"#.into(),
+            temperature: None,
+            max_tokens: None,
+            requester: "developer".into(),
+        };
+        // Sem pendência: intocada.
+        let out = inject_cockpit_context(&hub, "t1", &req);
+        assert_eq!(out.messages_json, req.messages_json);
+
+        // Formato inválido: intocada E a orientação não é perdida.
+        hub.push_user_message("t1", "não perca isto".into())
+            .unwrap();
+        let invalido = LlmRequest {
+            messages_json: "não é json".into(),
+            ..req.clone()
+        };
+        let out = inject_cockpit_context(&hub, "t1", &invalido);
+        assert_eq!(out.messages_json, invalido.messages_json);
+        let recuperado = inject_cockpit_context(&hub, "t1", &req);
+        assert!(recuperado.messages_json.contains("não perca isto"));
     }
 
     #[test]

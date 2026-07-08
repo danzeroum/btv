@@ -201,6 +201,11 @@ jobs:
       # razão do job `web`).
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # uv: a ativação de squad pela galeria (squad-real-backend.spec.ts)
+      # sobe o `forge_squad.server` real via `uv run` — mesma razão do job
+      # `web` (resolver o venv a frio estouraria o timeout do Playwright).
+      - uses: astral-sh/setup-uv@v5
+      - run: cd ../python && uv sync
       - uses: actions/setup-node@v4
         with:
           node-version: 22
