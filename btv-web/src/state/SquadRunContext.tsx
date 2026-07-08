@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useAppDispatch } from './AppContext'
-import { ativarSquad, aprovarGate, pedirAjuste, type AtivarSquadPayload } from '../api/btv'
+import { ativarSquad, aprovarGate, pedirAjuste, type AtivarSquadPayload, type BtvRun } from '../api/btv'
 import {
   connectSquadEvents,
   emergencyStopSquad,
@@ -46,6 +46,9 @@ export interface SquadRunApi {
   feed: FeedItem[]
   chat: Array<SquadChatMessage & { ts: string }>
   ativar: (template: SquadTemplate, payload: Omit<AtivarSquadPayload, 'template_id'>) => Promise<void>
+  /** Reconecta a um run persistido (U6 → Ao vivo): o SSE reemite o snapshot
+   *  completo e a esteira é recomputada dos eventos reais. */
+  abrirRun: (run: BtvRun, template: SquadTemplate) => void
   aprovar: () => Promise<void>
   ajustar: (instrucao: string) => Promise<void>
   enviarChat: (texto: string) => Promise<void>
@@ -99,6 +102,28 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
       })
       conectar(resp.task_id)
       dispatch({ type: 'CLOSE_WIZARD' })
+      dispatch({ type: 'SET_SCREEN', screen: 'vivo' })
+    },
+    [conectar, dispatch],
+  )
+
+  const abrirRun = useCallback<SquadRunApi['abrirRun']>(
+    (btvRun, template) => {
+      const papeisAtivos: string[] = JSON.parse(btvRun.papeis_json || '[]') as string[]
+      const papeisOff = template.papeis
+        .map((p, i) => (papeisAtivos.includes(p) ? -1 : i))
+        .filter((i) => i >= 0)
+      setRun({
+        template,
+        nome: btvRun.nome,
+        etapas: makeEtapas(template, papeisOff),
+        taskId: btvRun.task_id,
+        teste: false,
+        events: [],
+        acoes: [],
+        streamEnded: false,
+      })
+      conectar(btvRun.task_id)
       dispatch({ type: 'SET_SCREEN', screen: 'vivo' })
     },
     [conectar, dispatch],
@@ -173,8 +198,8 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
   }, [run, dispatch])
 
   const value = useMemo<SquadRunApi>(
-    () => ({ run, view, feed, chat, ativar, aprovar, ajustar, enviarChat, encerrar }),
-    [run, view, feed, chat, ativar, aprovar, ajustar, enviarChat, encerrar],
+    () => ({ run, view, feed, chat, ativar, abrirRun, aprovar, ajustar, enviarChat, encerrar }),
+    [run, view, feed, chat, ativar, abrirRun, aprovar, ajustar, enviarChat, encerrar],
   )
 
   return <SquadRunContext.Provider value={value}>{children}</SquadRunContext.Provider>

@@ -67,3 +67,91 @@ export async function pedirAjuste(taskId: string, instrucao: string, etapa: stri
     body: JSON.stringify({ instrucao, etapa }),
   })
 }
+
+/** Espelho de `forge_store::BtvDeliverable` (GET /api/btv/deliverables). */
+export interface BtvDeliverable {
+  id: number
+  run_id: number
+  task_id: string
+  template_id: string
+  nome: string
+  path: string
+  formato: string
+  versao: string
+  trilha: string
+  created_ts: string
+}
+
+export function listDeliverables(): Promise<BtvDeliverable[]> {
+  return fetchJson<BtvDeliverable[]>('/api/btv/deliverables')
+}
+
+export function deliverableDownloadUrl(id: number): string {
+  return `/api/btv/deliverables/${id}/download`
+}
+
+// ── personas (U7) ──
+
+export interface PersonaView {
+  papel: string
+  /** Prompt EFETIVO (override ?? padrão) — o que a próxima ativação usa. */
+  prompt: string
+  padrao: string
+  editado: boolean
+}
+
+export interface CustomPersona {
+  id: number
+  template_id: string
+  nome: string
+  prompt: string
+}
+
+export interface PersonasResponse {
+  template_id: string
+  personas: PersonaView[]
+  proprias: CustomPersona[]
+}
+
+export function fetchPersonas(templateId: string): Promise<PersonasResponse> {
+  return fetchJson<PersonasResponse>(`/api/btv/personas/${encodeURIComponent(templateId)}`)
+}
+
+export async function setPersonaOverride(templateId: string, papel: string, prompt: string): Promise<void> {
+  await fetchJson(`/api/btv/personas/${encodeURIComponent(templateId)}/${encodeURIComponent(papel)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  })
+}
+
+export async function restorePersona(templateId: string, papel: string): Promise<void> {
+  await fetchJson(`/api/btv/personas/${encodeURIComponent(templateId)}/${encodeURIComponent(papel)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function restoreAllPersonas(templateId: string): Promise<void> {
+  await fetchJson(`/api/btv/personas/${encodeURIComponent(templateId)}`, { method: 'DELETE' })
+}
+
+export async function createCustomPersona(templateId: string, nome: string, prompt: string): Promise<number> {
+  const r = await fetchJson<{ id: number }>(`/api/btv/personas/${encodeURIComponent(templateId)}/custom`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ nome, prompt }),
+  })
+  return r.id
+}
+
+export async function updateCustomPersona(templateId: string, id: number, nome: string, prompt: string): Promise<void> {
+  await fetchJson(`/api/btv/personas/${encodeURIComponent(templateId)}/custom/${id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ nome, prompt }),
+  })
+}
+
+export async function deleteCustomPersona(templateId: string, id: number): Promise<void> {
+  await fetchJson(`/api/btv/personas/${encodeURIComponent(templateId)}/custom/${id}`, { method: 'DELETE' })
+}

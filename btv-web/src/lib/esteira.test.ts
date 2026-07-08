@@ -63,9 +63,20 @@ describe('esteiraFromEvents (mapeamento honesto de eventos reais)', () => {
   })
 
   it('Hitl abre o primeiro gate (Rascunho) e eventos informativos não movem', () => {
-    const v = esteiraFromEvents(etapas, [consensus, hitl, stepOk], [], false)
+    const proposta = ev({ Proposal: { agent: 'ops', confidence: 0.5, content_json: '{}' } })
+    const v = esteiraFromEvents(etapas, [consensus, hitl, proposta], [], false)
     expect(v.idx).toBe(3)
     expect(v.gateOpen).toBe(true)
+  })
+
+  it('replay: Step após Hitl sem ação local = gate aprovado fora desta sessão', () => {
+    // Recarregar a página perde as ações locais; o snapshot reemite os
+    // eventos. Um Step depois do Hitl só existe se o gate foi aprovado —
+    // fecha por inferência em vez de travar a esteira num gate fantasma.
+    const v = esteiraFromEvents(etapas, [consensus, hitl, stepOk], [], false)
+    expect(v.gateOpen).toBe(false)
+    expect(v.idx).toBeGreaterThanOrEqual(4)
+    expect(v.inferida).toBe(true)
   })
 
   it('aprovar o gate avança (posição inferida — o orquestrador não emite "gate resolvido")', () => {

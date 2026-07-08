@@ -27,8 +27,8 @@ function run(cmd, args) {
   }
 }
 
-// 1. garante o binário do CLI compilado.
-run('cargo', ['build', '-p', 'forge-cli'])
+// 1. garante o binário do CLI e o exemplo de seed compilados.
+run('cargo', ['build', '-p', 'forge-cli', '-p', 'forge-store', '--example', 'seed_btv'])
 
 // 2. diretório de trabalho isolado (.forge/ próprio, longe de qualquer outra
 // execução).
@@ -43,6 +43,24 @@ writeFileSync(
   join(workDir, 'forge.toml'),
   '[[step]]\nname = "passo-um"\nprogram = "sh"\nargs = ["-c", "sleep 0.1"]\n',
 )
+
+// 2b. semeia um run concluído + entregas REAIS (mesmo BtvStore de
+// produção): um artefato MD exportável (arquivo de verdade no disco, o
+// download serve o conteúdo real) e um DOCX binário (a UI mostra "em
+// breve" — sem conversor, sem fingir).
+const artigoPath = join(workDir, 'artigo-seed.md')
+writeFileSync(artigoPath, '# Artigo semeado\n\nconteúdo real do artefato para o download.\n')
+const btvDb = join(workDir, '.forge', 'btv.db')
+run('cargo', [
+  'run', '-q', '-p', 'forge-store', '--example', 'seed_btv', '--',
+  btvDb, 'editorial', 'Newsletter seed', artigoPath, 'MD',
+])
+const docxPath = join(workDir, 'minuta-seed.docx')
+writeFileSync(docxPath, 'placeholder binário')
+run('cargo', [
+  'run', '-q', '-p', 'forge-store', '--example', 'seed_btv', '--',
+  btvDb, 'juridico', 'Minuta seed', docxPath, 'DOCX',
+])
 
 // 3. sobe o dashboard real. FORGE_SCRIPTED=1 troca o gerador por respostas
 // determinísticas (sem API key) — o squad ativado pela UI roda o caminho

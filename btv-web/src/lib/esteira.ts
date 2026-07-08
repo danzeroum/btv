@@ -123,7 +123,18 @@ export function esteiraFromEvents(
       }
       continue
     }
-    if (gateOpen) continue // aguardando o humano — eventos informativos não movem
+    // Gate aberto: eventos de TRABALHO (Step/Consensus) só acontecem depois
+    // do HITL resolvido — se chegam, o gate foi aprovado fora desta sessão
+    // (replay de snapshot após recarregar a página). Fecha por inferência.
+    if (gateOpen) {
+      if ('Step' in payload || 'Consensus' in payload) {
+        gatesPassados += 1
+        gateOpen = false
+        avancar(idx + 1, true)
+      } else {
+        continue // Proposal/Handoff/Chat: informativos, não movem
+      }
+    }
     if ('Consensus' in payload) {
       avancar(2, false)
       continue

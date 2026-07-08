@@ -138,6 +138,15 @@ where
     result
 }
 
+/// Scope de um `ToolCall` (mesma resolução de dentro de `core_run_tool`) —
+/// exposto para correlacionar execuções à tarefa (trilha de entregas do BTV).
+pub(crate) fn tool_scope(tools: &ToolRegistry, call: &ToolCall) -> String {
+    serde_json::from_str::<serde_json::Value>(&call.args_json)
+        .ok()
+        .and_then(|args| tools.get(&call.tool).map(|t| t.scope(&args)))
+        .unwrap_or_default()
+}
+
 /// Best-effort — nunca deixa uma falha de ledger derrubar a resposta do
 /// `RunTool` (mesma postura de `Session::note`).
 fn log_tool_run(root: &Path, call: &ToolCall, scope: &str, result: &ToolResult) {

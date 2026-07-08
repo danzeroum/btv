@@ -69,6 +69,19 @@ struct SquadTaskState {
     /// registrado logo após o `spawn`. Parar de verdade um squad em execução
     /// (não só marcar a flag) exige cancelar quem consome o stream gRPC.
     abort: Option<tokio::task::AbortHandle>,
+    /// Trilha das ferramentas executadas pela tarefa (`RunTool` real) — o
+    /// produto (BTV) deriva daqui as entregas: um `edit` com exit 0 é um
+    /// arquivo REAL gravado no workspace.
+    tool_runs: Vec<ToolRunNote>,
+}
+
+/// Registro de uma execução de ferramenta pela tarefa (espelho enxuto do que
+/// o ledger `squad.tool_run` também grava, mas correlacionado ao task_id).
+#[derive(Clone, Debug)]
+pub(crate) struct ToolRunNote {
+    pub(crate) tool: String,
+    pub(crate) scope: String,
+    pub(crate) exit_code: i32,
 }
 
 impl SquadTaskState {
@@ -81,6 +94,7 @@ impl SquadTaskState {
             inbox: VecDeque::new(),
             stopped: false,
             abort: None,
+            tool_runs: Vec::new(),
         }
     }
 }
@@ -242,6 +256,28 @@ impl SquadHub {
         out
     }
 
+    /// Anota uma execução de ferramenta da tarefa (chamado pelos
+    /// `CoreBackend` após `core_run_tool`). O scope de um `edit` é o caminho
+    /// do arquivo tocado — a matéria-prima das entregas do BTV.
+    pub(crate) fn note_tool_run(&self, task_id: &str, tool: &str, scope: &str, exit_code: i32) {
+        let mut tasks = self.tasks.lock().expect("squad hub mutex poisoned");
+        if let Some(state) = tasks.get_mut(task_id) {
+            state.tool_runs.push(ToolRunNote {
+                tool: tool.into(),
+                scope: scope.into(),
+                exit_code,
+            });
+        }
+    }
+
+    pub(crate) fn tool_runs(&self, task_id: &str) -> Vec<ToolRunNote> {
+        let tasks = self.tasks.lock().expect("squad hub mutex poisoned");
+        tasks
+            .get(task_id)
+            .map(|s| s.tool_runs.clone())
+            .unwrap_or_default()
+    }
+
     /// Registra o handle de abort da task que roda o squad — chamado logo
     /// depois do `spawn` em `run_squad_handler`. Idempotente: se a tarefa já
     /// foi parada antes de registrar (corrida improvável), aborta na hora.
@@ -326,14 +362,21 @@ impl<G: Generator + Send + Sync + 'static> CoreBackend for WebSquadCoreBackend<G
     }
 
     async fn run_tool(&self, call: &ToolCall) -> ToolResult {
-        core_run_tool(
+        let result = core_run_tool(
             &self.tools,
             &self.tool_permissions,
             call,
             &self.root,
             |_req| self.hub.request_hitl(&self.task_id),
         )
-        .await
+        .await;
+        self.hub.note_tool_run(
+            &self.task_id,
+            &call.tool,
+            &crate::squad::tool_scope(&self.tools, call),
+            result.exit_code,
+        );
+        result
     }
 }
 
@@ -388,14 +431,21 @@ impl CoreBackend for ScriptedSquadCoreBackend {
     }
 
     async fn run_tool(&self, call: &ToolCall) -> ToolResult {
-        core_run_tool(
+        let result = core_run_tool(
             &self.tools,
             &self.tool_permissions,
             call,
             &self.root,
             |_req| self.hub.request_hitl(&self.task_id),
         )
-        .await
+        .await;
+        self.hub.note_tool_run(
+            &self.task_id,
+            &call.tool,
+            &crate::squad::tool_scope(&self.tools, call),
+            result.exit_code,
+        );
+        result
     }
 }
 

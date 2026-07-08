@@ -32,8 +32,9 @@ use crate::web_agent::ErrorBody;
 
 /// Prompts padrão por papel — os 4 arquétipos do handoff (§6 U7): abre o
 /// trabalho / produz / revisa / valida. Papéis além do 4º herdam o último
-/// arquétipo (mesma regra do protótipo). Overrides por modelo+papel entram
-/// na Onda 4 (U7) por cima destes defaults.
+/// arquétipo (mesma regra do protótipo). O prompt EFETIVO de uma ativação é
+/// o override persistido (U7) quando existir, senão este padrão — e é o
+/// efetivo que entra na descrição da tarefa e no hash de procedência.
 pub(crate) fn prompt_padrao(indice: usize, papel: &str, template_nome: &str) -> String {
     let bases = [
         format!("Você é {papel} da squad {template_nome}. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante."),
@@ -85,6 +86,7 @@ fn montar_descricao(
     template: &SquadTemplate,
     body: &AtivarSquadBody,
     papeis_ativos: &[(usize, &str)],
+    prompt_efetivo: &dyn Fn(usize, &str) -> String,
 ) -> String {
     let mut out = format!(
         "Squad \"{}\" (modelo {} {}) ativada pelo BuildToValue.\n\n## Briefing\n",
@@ -105,11 +107,7 @@ fn montar_descricao(
     }
     out.push_str("\n## Equipe (papéis e responsabilidades)\n");
     for (i, papel) in papeis_ativos {
-        out.push_str(&format!(
-            "- {}: {}\n",
-            papel,
-            prompt_padrao(*i, papel, &template.nome)
-        ));
+        out.push_str(&format!("- {}: {}\n", papel, prompt_efetivo(*i, papel)));
     }
     out.push_str("\n## Entrega esperada\n");
     let formatos: Vec<&str> = template.formatos.iter().map(|f| f.nome.as_str()).collect();
@@ -186,7 +184,26 @@ async fn ativar_squad_handler(
             .into_response();
     }
 
-    let descricao = montar_descricao(template, &body, &papeis_ativos);
+    // Overrides de persona (U7) em vigor NESTA ativação — o prompt efetivo
+    // (override ?? padrão) entra na descrição real e no hash de procedência.
+    let overrides: std::collections::HashMap<String, String> = {
+        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        store
+            .list_persona_overrides(&template.id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|o| (o.papel, o.prompt))
+            .collect()
+    };
+    let template_nome = template.nome.clone();
+    let prompt_efetivo = move |i: usize, papel: &str| -> String {
+        overrides
+            .get(papel)
+            .cloned()
+            .unwrap_or_else(|| prompt_padrao(i, papel, &template_nome))
+    };
+
+    let descricao = montar_descricao(template, &body, &papeis_ativos, &prompt_efetivo);
 
     // Procedência dos prompts (aprovação obs. 5): hash de cada prompt
     // efetivo em vigor na ativação — fecha U7 (personas) ↔ U4 (trilha).
@@ -195,9 +212,7 @@ async fn ativar_squad_handler(
         .map(|(i, papel)| {
             serde_json::json!({
                 "papel": papel,
-                "prompt_sha256": forge_schemas::sha256_hex(
-                    &prompt_padrao(*i, papel, &template.nome)
-                ),
+                "prompt_sha256": forge_schemas::sha256_hex(&prompt_efetivo(*i, papel)),
             })
         })
         .collect();
@@ -304,9 +319,82 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
                 "concluida"
             }
         };
-        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = store.set_status(&task_id, status, &crate::session::now_rfc3339());
+        let now = crate::session::now_rfc3339();
+        {
+            let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = store.set_status(&task_id, status, &now);
+        }
+        // Entregas (U4): arquivos REAIS gravados pelas ferramentas da tarefa
+        // (trilha `tool_runs` do hub) viram itens da Biblioteca, com trilha
+        // de procedência (papéis do run + gates aprovados) e registro no
+        // ledger. Só em conclusão limpa — run com erro/encerrado não
+        // "entrega".
+        if status == "concluida" {
+            let escritas = arquivos_escritos(&state.squad.hub.tool_runs(&task_id));
+            if !escritas.is_empty() {
+                let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+                if let Ok(Some(run)) = store.get_run_by_task(&task_id) {
+                    let papeis: Vec<String> =
+                        serde_json::from_str(&run.papeis_json).unwrap_or_default();
+                    let trilha = format!(
+                        "{} · {} gate(s) aprovado(s) por você",
+                        papeis.join(" → "),
+                        run.gates_aprovados
+                    );
+                    for path in escritas {
+                        let nome = std::path::Path::new(&path)
+                            .file_name()
+                            .map(|f| f.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.clone());
+                        let formato = std::path::Path::new(&path)
+                            .extension()
+                            .map(|e| e.to_string_lossy().to_uppercase())
+                            .unwrap_or_else(|| "TXT".into());
+                        match store.insert_deliverable(
+                            run.id,
+                            &task_id,
+                            &run.template_id,
+                            &nome,
+                            &path,
+                            &formato,
+                            "v1",
+                            &trilha,
+                            &now,
+                        ) {
+                            Ok(deliverable_id) => {
+                                if let Err(e) = append_ledger(
+                                    &state.ledger,
+                                    "btv.export_generated",
+                                    serde_json::json!({
+                                        "task_id": task_id,
+                                        "deliverable_id": deliverable_id,
+                                        "nome": nome,
+                                        "formato": formato,
+                                        "trilha": trilha,
+                                    }),
+                                ) {
+                                    eprintln!("btv: falha ao registrar entrega no ledger: {e}");
+                                }
+                            }
+                            Err(e) => eprintln!("btv: falha ao registrar entrega: {e}"),
+                        }
+                    }
+                }
+            }
+        }
     });
+}
+
+/// Caminhos de arquivo ESCRITOS pela tarefa — só ferramentas que gravam
+/// (`edit`) com exit 0, deduplicados preservando a ordem (o mesmo arquivo
+/// editado N vezes é UMA entrega). Função pura, testada isolada.
+fn arquivos_escritos(runs: &[crate::squad_agent::ToolRunNote]) -> Vec<String> {
+    let mut vistos = std::collections::HashSet::new();
+    runs.iter()
+        .filter(|r| r.tool == "edit" && r.exit_code == 0 && !r.scope.is_empty())
+        .filter(|r| vistos.insert(r.scope.clone()))
+        .map(|r| r.scope.clone())
+        .collect()
 }
 
 /// `GET /api/btv/squads` — runs persistidos, mais recente primeiro (U6).
@@ -339,6 +427,10 @@ async fn aprovar_gate_handler(
     match state.squad.hub.resolve_hitl(&task_id, true) {
         Ok(()) => {
             let etapa = body.and_then(|b| b.0.etapa).unwrap_or_default();
+            {
+                let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+                let _ = store.increment_gates(&task_id, &crate::session::now_rfc3339());
+            }
             if let Err(e) = append_ledger(
                 &state.ledger,
                 "btv.gate_approved",
@@ -423,6 +515,291 @@ async fn pedir_ajuste_handler(
     StatusCode::OK.into_response()
 }
 
+/// `GET /api/btv/deliverables` — Biblioteca de entregas (U4).
+async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.list_deliverables() {
+        Ok(list) => Json(list).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /api/btv/deliverables/{id}/download` — baixa o arquivo REAL da
+/// entrega. Formato binário responde 422 explícito ("em breve", aprovação
+/// obs. 3 — sem conversor real, sem fingir); arquivo sumido do disco
+/// responde 404 honesto.
+async fn download_deliverable_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+) -> Response {
+    let deliverable = {
+        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        match store.get_deliverable(id) {
+            Ok(Some(d)) => d,
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ErrorBody::new("not_found", "entrega inexistente")),
+                )
+                    .into_response()
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("store_error", e.to_string())),
+                )
+                    .into_response()
+            }
+        }
+    };
+    let binario = forge_server::btv::builtin_templates()
+        .iter()
+        .find(|t| t.id == deliverable.template_id)
+        .and_then(|t| t.formatos.iter().find(|f| f.nome == deliverable.formato))
+        .map(|f| f.binario)
+        // Formato fora do catálogo do template (extensão de arquivo livre):
+        // texto por padrão — o conteúdo é o que a ferramenta gravou.
+        .unwrap_or(false);
+    if binario {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new(
+                "format_not_exportable",
+                format!(
+                    "exportação de {} exige conversor na sandbox — em breve",
+                    deliverable.formato
+                ),
+            )),
+        )
+            .into_response();
+    }
+    match std::fs::read(&deliverable.path) {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                ("content-type", "text/plain; charset=utf-8".to_string()),
+                (
+                    "content-disposition",
+                    format!("attachment; filename=\"{}\"", deliverable.nome),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new(
+                "file_missing",
+                format!("arquivo da entrega não encontrado: {e}"),
+            )),
+        )
+            .into_response(),
+    }
+}
+
+// ── personas (U7) ──
+
+#[derive(Serialize)]
+struct PersonaView {
+    papel: String,
+    prompt: String,
+    padrao: String,
+    editado: bool,
+}
+
+#[derive(Serialize)]
+struct PersonasResponse {
+    template_id: String,
+    personas: Vec<PersonaView>,
+    proprias: Vec<forge_store::btv::CustomPersona>,
+}
+
+/// `GET /api/btv/personas/{template_id}` — papéis do modelo com o prompt
+/// EFETIVO (override ?? padrão) + personas próprias.
+async fn list_personas_handler(
+    State(state): State<BtvAgentState>,
+    Path(template_id): Path<String>,
+) -> Response {
+    let Some(template) = forge_server::btv::builtin_templates()
+        .iter()
+        .find(|t| t.id == template_id)
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("unknown_template", "modelo desconhecido")),
+        )
+            .into_response();
+    };
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    let overrides: std::collections::HashMap<String, String> = store
+        .list_persona_overrides(&template_id)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|o| (o.papel, o.prompt))
+        .collect();
+    let personas = template
+        .papeis
+        .iter()
+        .enumerate()
+        .map(|(i, papel)| {
+            let padrao = prompt_padrao(i, papel, &template.nome);
+            let (prompt, editado) = match overrides.get(papel) {
+                Some(ov) => (ov.clone(), ov != &padrao),
+                None => (padrao.clone(), false),
+            };
+            PersonaView {
+                papel: papel.clone(),
+                prompt,
+                padrao,
+                editado,
+            }
+        })
+        .collect();
+    let proprias = store.list_custom_personas(&template_id).unwrap_or_default();
+    Json(PersonasResponse {
+        template_id,
+        personas,
+        proprias,
+    })
+    .into_response()
+}
+
+#[derive(Deserialize)]
+struct PromptBody {
+    prompt: String,
+}
+
+/// `PUT /api/btv/personas/{template_id}/{papel}` — override do prompt do
+/// papel (efetivo já na PRÓXIMA ativação; auditado no ledger).
+async fn set_override_handler(
+    State(state): State<BtvAgentState>,
+    Path((template_id, papel)): Path<(String, String)>,
+    Json(body): Json<PromptBody>,
+) -> Response {
+    {
+        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = store.set_persona_override(
+            &template_id,
+            &papel,
+            &body.prompt,
+            &crate::session::now_rfc3339(),
+        ) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("store_error", e.to_string())),
+            )
+                .into_response();
+        }
+    }
+    if let Err(e) = append_ledger(
+        &state.ledger,
+        "btv.persona_updated",
+        serde_json::json!({
+            "template_id": template_id,
+            "papel": papel,
+            "prompt_sha256": forge_schemas::sha256_hex(&body.prompt),
+        }),
+    ) {
+        eprintln!("btv: falha ao registrar persona no ledger: {e}");
+    }
+    StatusCode::OK.into_response()
+}
+
+/// `DELETE /api/btv/personas/{template_id}/{papel}` — restaurar ao padrão.
+async fn delete_override_handler(
+    State(state): State<BtvAgentState>,
+    Path((template_id, papel)): Path<(String, String)>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.delete_persona_override(&template_id, &papel) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+/// `DELETE /api/btv/personas/{template_id}` — restaurar TODOS ao padrão.
+async fn clear_overrides_handler(
+    State(state): State<BtvAgentState>,
+    Path(template_id): Path<String>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.clear_persona_overrides(&template_id) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct CustomPersonaBody {
+    nome: String,
+    prompt: String,
+}
+
+async fn create_custom_handler(
+    State(state): State<BtvAgentState>,
+    Path(template_id): Path<String>,
+    Json(body): Json<CustomPersonaBody>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.insert_custom_persona(
+        &template_id,
+        &body.nome,
+        &body.prompt,
+        &crate::session::now_rfc3339(),
+    ) {
+        Ok(id) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+async fn update_custom_handler(
+    State(state): State<BtvAgentState>,
+    Path((_template_id, id)): Path<(String, i64)>,
+    Json(body): Json<CustomPersonaBody>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.update_custom_persona(id, &body.nome, &body.prompt, &crate::session::now_rfc3339())
+    {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+async fn delete_custom_handler(
+    State(state): State<BtvAgentState>,
+    Path((_template_id, id)): Path<(String, i64)>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.delete_custom_persona(id) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
 /// Router aditivo do BuildToValue — `.merge()`ado ao router do agente web
 /// (mesma guarda de `Origin`/`Host` do `merged_router`).
 pub fn router(
@@ -431,6 +808,7 @@ pub fn router(
     ledger: Arc<Mutex<LedgerStore>>,
     store: Arc<Mutex<BtvStore>>,
 ) -> Router {
+    use axum::routing::{get, put};
     Router::new()
         .route(
             "/api/btv/squads",
@@ -440,6 +818,27 @@ pub fn router(
         .route(
             "/api/btv/squads/{task_id}/ajuste",
             post(pedir_ajuste_handler),
+        )
+        .route("/api/btv/deliverables", get(list_deliverables_handler))
+        .route(
+            "/api/btv/deliverables/{id}/download",
+            get(download_deliverable_handler),
+        )
+        .route(
+            "/api/btv/personas/{template_id}",
+            get(list_personas_handler).delete(clear_overrides_handler),
+        )
+        .route(
+            "/api/btv/personas/{template_id}/custom",
+            post(create_custom_handler),
+        )
+        .route(
+            "/api/btv/personas/{template_id}/custom/{id}",
+            put(update_custom_handler).delete(delete_custom_handler),
+        )
+        .route(
+            "/api/btv/personas/{template_id}/{papel}",
+            put(set_override_handler).delete(delete_override_handler),
         )
         .with_state(BtvAgentState {
             squad: SquadAgentState { hub, pool },
@@ -479,7 +878,9 @@ mod tests {
             .filter(|(i, _)| !body.papeis_off.contains(i))
             .map(|(i, p)| (i, p.as_str()))
             .collect();
-        let d = montar_descricao(template, &body, &papeis);
+        let d = montar_descricao(template, &body, &papeis, &|i, papel| {
+            prompt_padrao(i, papel, &template.nome)
+        });
         assert!(d.contains("Newsletter de julho"));
         assert!(d.contains("logística verde no Brasil"));
         assert!(d.contains("https://exemplo.com/estudo"));
@@ -495,5 +896,70 @@ mod tests {
     fn prompt_padrao_herda_ultimo_arquetipo_alem_do_quarto() {
         let p = prompt_padrao(7, "Papel Extra", "Squad X");
         assert!(p.contains("Valide fatos"));
+    }
+
+    #[test]
+    fn arquivos_escritos_filtra_edits_ok_e_deduplica() {
+        use crate::squad_agent::ToolRunNote;
+        let runs = vec![
+            ToolRunNote {
+                tool: "read".into(),
+                scope: "a.md".into(),
+                exit_code: 0,
+            },
+            ToolRunNote {
+                tool: "edit".into(),
+                scope: "artigo.md".into(),
+                exit_code: 0,
+            },
+            ToolRunNote {
+                tool: "edit".into(),
+                scope: "artigo.md".into(),
+                exit_code: 0,
+            },
+            ToolRunNote {
+                tool: "edit".into(),
+                scope: "falhou.md".into(),
+                exit_code: 1,
+            },
+            ToolRunNote {
+                tool: "bash".into(),
+                scope: "echo oi".into(),
+                exit_code: 0,
+            },
+            ToolRunNote {
+                tool: "edit".into(),
+                scope: "notas.txt".into(),
+                exit_code: 0,
+            },
+        ];
+        assert_eq!(arquivos_escritos(&runs), vec!["artigo.md", "notas.txt"]);
+    }
+
+    #[test]
+    fn descricao_usa_prompt_efetivo_com_override() {
+        let body = AtivarSquadBody {
+            template_id: "editorial".into(),
+            nome: None,
+            briefing: vec![],
+            refs: vec![],
+            papeis_off: vec![],
+        };
+        let template = template_editorial();
+        let papeis: Vec<(usize, &str)> = template
+            .papeis
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, p.as_str()))
+            .collect();
+        let d = montar_descricao(template, &body, &papeis, &|i, papel| {
+            if papel == "Redator" {
+                "PROMPT CUSTOMIZADO DO REDATOR".into()
+            } else {
+                prompt_padrao(i, papel, &template.nome)
+            }
+        });
+        assert!(d.contains("PROMPT CUSTOMIZADO DO REDATOR"));
+        assert!(!d.contains("Redator: Você é Redator da squad"));
     }
 }
