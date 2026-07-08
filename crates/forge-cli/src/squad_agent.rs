@@ -601,7 +601,7 @@ async fn run_squad_handler(
                 tools,
                 tool_permissions,
             },
-        ));
+        ))
     } else {
         let opts = crate::RunOpts {
             model: squad_model(),
