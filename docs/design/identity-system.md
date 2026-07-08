@@ -131,11 +131,11 @@ Padrão de cabeçalho de toda tela: kicker mono → título display → corpo sa
 
 ## 7. Checklist de implementação
 
-- [ ] Substituir `btv-web/src/styles/global.css` pela versão com os novos tokens (`--decision`, `--bone`, `--warn`, `--err`, `--dark-*`)
-- [ ] Buscar usos de `--gold` na UI e migrar: gates → `--decision`; alertas → `--warn`
-- [ ] Componentes-base: `.btn-decision`, `.status-gate` (ponto quadrado), cartão de procedência
-- [ ] Copiar `docs/logo/favicon.svg` → `btv-web/public/favicon.svg`
-- [ ] Header do app com símbolo + wordmark (logo-principal, 24–28px)
-- [ ] Auditoria: "Meu espaço" 100% claro; `/dev` 100% escuro quente
+- [x] Substituir `btv-web/src/styles/global.css` pela versão com os novos tokens (`--decision`, `--bone`, `--warn`, `--err`, `--dark-*`)
+- [x] Buscar usos de `--gold` na UI e migrar: gates → `--decision`; alertas → `--warn`
+- [x] Componentes-base: `.btn-decision`, `.status-gate` (ponto quadrado), cartão de procedência
+- [x] Copiar `docs/logo/favicon.svg` → `btv-web/public/favicon.svg`
+- [x] Header do app com símbolo + wordmark (logo-principal, 24–28px)
+- [x] Auditoria: "Meu espaço" 100% claro; `/dev` 100% escuro quente
 - [ ] Página de referência interna com 6 telas-chave: header, esteira, cockpit, gate de aprovação, cartão de procedência, modo /dev
-- [ ] Lint de marca: proibir `transform`/`filter` no logo e terracota fora de contexto de decisão (revisão de PR)
+- [x] Lint de marca: proibir `transform`/`filter` no logo e terracota fora de contexto de decisão — automatizado em `btv-web/src/brand-lint.test.ts` (roda no job `btv-web` do CI). A exceção permitida é a `TERRACOTA_ALLOWLIST` do teste: cada arquivo listado é um contexto de gate/aprovação, com o motivo anotado.
