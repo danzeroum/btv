@@ -13,7 +13,8 @@
     "test:e2e:integration": "pnpm build && playwright test --config=playwright.integration.config.ts",
     "ensure:bpmn": "node scripts/ensure-bpmn.mjs",
     "prebuild": "node scripts/ensure-bpmn.mjs",
-    "predev": "node scripts/ensure-bpmn.mjs"
+    "predev": "node scripts/ensure-bpmn.mjs",
+    "pretest": "node scripts/ensure-bpmn.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",
