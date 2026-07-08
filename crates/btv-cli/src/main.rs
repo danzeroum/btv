@@ -124,6 +124,12 @@ enum Commands {
         /// Porta local do dashboard.
         #[arg(long, default_value_t = 7878)]
         port: u16,
+        /// Endereço de bind. Default `127.0.0.1` (loopback, modo local-first).
+        /// Use `0.0.0.0` SÓ atrás de um proxy/ingress COM autenticação e com
+        /// `BTV_TRUSTED_ORIGINS` setado — o dashboard executa código e guarda
+        /// API keys; expô-lo direto na internet é inseguro por design.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: std::net::IpAddr,
         /// Fase 7 Onda 15 (fecho): as rotas do agente web (sessão/permissão
         /// via SSE, squad ao vivo, designer) vêm HABILITADAS por padrão — o
         /// navegador é a forma primária de uso desta fase, não mais opt-in
@@ -181,7 +187,11 @@ async fn main() -> Result<()> {
             let (generator, root) = prepare(&opts)?;
             squad::run_squad(generator, &opts, &root, task).await
         }
-        Commands::Dashboard { port, no_web_agent } => run_dashboard(port, !no_web_agent).await,
+        Commands::Dashboard {
+            port,
+            host,
+            no_web_agent,
+        } => run_dashboard(host, port, !no_web_agent).await,
         Commands::Experiment {
             experiment,
             db,
@@ -252,7 +262,7 @@ fn print_experiment_human(report: &ExperimentReport) {
 
 /// Sobe o dashboard de telemetria lendo `.btv/telemetry.db` do diretório
 /// atual (criado, se ausente, por `run`/`chat`).
-async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
+async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Result<()> {
     let root = std::env::current_dir().context("diretório atual")?;
     let btv_dir = root.join(".btv");
     std::fs::create_dir_all(&btv_dir)?;
@@ -279,7 +289,7 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
     let ledger = std::sync::Arc::new(std::sync::Mutex::new(btv_store::LedgerStore::open(
         btv_dir.join("btv.db").to_str().unwrap_or(".btv/btv.db"),
     )?));
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = std::net::SocketAddr::new(host, port);
     let web_dir = btv_server::default_web_dir();
     if web_agent {
         eprintln!(
