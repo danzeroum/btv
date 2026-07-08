@@ -285,7 +285,7 @@ async fn run_dashboard(port: u16, web_agent: bool) -> Result<()> {
     let web_dir = forge_server::default_web_dir();
     if web_agent {
         eprintln!(
-            "forge dashboard — http://{addr} (assets: {}; sessão/permissão/squad ao vivo)",
+            "forge dashboard — http://{addr} (assets: {}; console dev em /dev; sessão/permissão/squad ao vivo)",
             web_dir.display()
         );
         let hub = web_agent::default_hub();

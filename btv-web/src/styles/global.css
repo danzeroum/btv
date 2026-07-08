@@ -1,0 +1,167 @@
+/* Design tokens do BuildToValue — handoff §4 (docs/design_handoff_buildtovalue/
+   README.md). Valores exatos do protótipo; --brand/--brandink são tweakáveis
+   pelo usuário (Ajustes rápidos ⚙) via useBrand, que sobrepõe inline. */
+#btv-root {
+  --paper: #efe9de;
+  --card: #fbf8f1;
+  --white: #ffffff;
+  --ink: #221d15;
+  --muted: #6f675a;
+  --faint: #a89e8b;
+  --line: #e0d7c4;
+  --line2: #d2c7ae;
+  --brand: #14614f;
+  --brandink: #0c4237;
+  --gold: #f2b63c;
+  --ok: #3d8b4f;
+  --warn: #b8531f;
+  --mono: 'Spline Sans Mono', ui-monospace, monospace;
+  --sans: 'Instrument Sans', system-ui, sans-serif;
+  --disp: 'Bricolage Grotesque', 'Instrument Sans', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #efe9de;
+}
+
+#btv-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+a {
+  color: var(--brand);
+}
+
+a:hover {
+  color: var(--brandink);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: var(--sans);
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--brand) 20%, transparent);
+  border-color: var(--brand) !important;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cfc5b0;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes btvPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes btvBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.disp {
+  font-family: var(--disp);
+}
+
+/* Kicker mono uppercase — padrão de cabeçalho de tela e seções (handoff §5). */
+.kicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.btv-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.btv-stage {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--paper);
+}
+
+.btv-stage-inner {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 30px 34px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.screen-title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 30px;
+  margin: 6px 0 0;
+  letter-spacing: -0.02em;
+}
+
+.screen-note {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 340px;
+  text-align: right;
+  line-height: 1.55;
+  flex: none;
+}

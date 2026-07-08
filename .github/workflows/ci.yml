@@ -185,3 +185,24 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e:integration
+
+  # Frontend do BuildToValue (btv-web/, a SPA primária servida na raiz pelo
+  # `forge dashboard`; o console Forge acima fica em /dev). Vitest + typecheck
+  # (via `pnpm build`, que roda `tsc -b`) + Playwright de UI (shell,
+  # navegação, ajustes rápidos — vite dev, sem backend).
+  btv-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: btv-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g pnpm@10
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

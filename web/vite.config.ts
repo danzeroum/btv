@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Assets relativos: o console Forge passou a ser servido sob `/dev` pelo
+  // `forge dashboard` (a SPA raiz agora é o BuildToValue, `btv-web/`), mas os
+  // testes de integração continuam servindo este build na raiz — `./` funciona
+  // nos dois pontos de montagem (o app não usa roteamento por URL).
+  base: './',
   plugins: [react()],
   server: {
     proxy: {

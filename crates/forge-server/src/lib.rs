@@ -89,9 +89,17 @@ impl ErrorBody {
 
 /// Monta o router do dashboard sobre um handle de telemetria e uma
 /// biblioteca de prompts já abertos, servindo os assets estáticos da SPA a
-/// partir de `web_dir` (build de `web/`, tipicamente `web/dist`). Path
-/// relativo é resolvido contra o diretório de trabalho do processo — ver
-/// `forge-cli`'s `run_dashboard` para a resolução por `FORGE_WEB_DIR`/padrão.
+/// partir de `web_dir` (build da SPA primária — o BuildToValue em
+/// `btv-web/dist`). Path relativo é resolvido contra o diretório de trabalho
+/// do processo — ver `forge-cli`'s `run_dashboard` para a resolução por
+/// `FORGE_WEB_DIR`/padrão.
+///
+/// O console Forge de desenvolvedor (`web/dist`, as 20 telas da Fase 7)
+/// continua acessível aninhado em `/dev` quando o build existir — ver
+/// `default_dev_console_dir`. O aninhamento é resolvido aqui (e não por
+/// parâmetro) para não alargar a assinatura pública consumida por
+/// `forge-cli::web_agent::merged_router` e pelos testes existentes; um
+/// diretório ausente simplesmente não monta a rota (sem 500, sem fake).
 pub fn router(
     telemetry: Telemetry,
     prompt_library: Arc<Mutex<PromptLibrary>>,
@@ -105,7 +113,13 @@ pub fn router(
     // para rotas client-side desconhecidas do servidor (padrão SPA).
     let serve_dir = ServeDir::new(web_dir).fallback(ServeFile::new(index_html));
 
-    Router::new()
+    let dev_dir = default_dev_console_dir();
+    let dev_console = dev_dir
+        .join("index.html")
+        .exists()
+        .then(|| ServeDir::new(&dev_dir).fallback(ServeFile::new(dev_dir.join("index.html"))));
+
+    let router = Router::new()
         .route("/api/summary", get(summary))
         .route("/api/events", get(events))
         .route("/api/skills", get(skills))
@@ -121,7 +135,12 @@ pub fn router(
         .route("/api/verify/run", post(run_verify_start))
         .route("/api/verify/{id}", get(get_verify_status))
         .route("/api/designer/workflow", post(save_workflow))
-        .fallback_service(serve_dir)
+        .fallback_service(serve_dir);
+    let router = match dev_console {
+        Some(svc) => router.nest_service("/dev", svc),
+        None => router,
+    };
+    router
         .with_state(AppState {
             telemetry,
             prompt_library,
@@ -149,11 +168,24 @@ pub async fn serve(
     .await
 }
 
-/// Resolve o diretório da SPA por precedência: `FORGE_WEB_DIR` → `web/dist`
-/// (assumindo execução a partir da raiz do repo). Evita hardcodar a
-/// suposição de CWD dentro do router em si.
+/// Resolve o diretório da SPA primária por precedência: `FORGE_WEB_DIR` →
+/// `btv-web/dist` (o BuildToValue, assumindo execução a partir da raiz do
+/// repo). Evita hardcodar a suposição de CWD dentro do router em si. O
+/// console Forge de desenvolvedor mudou para `/dev` — ver
+/// `default_dev_console_dir`.
 pub fn default_web_dir() -> PathBuf {
     std::env::var_os("FORGE_WEB_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("btv-web/dist"))
+}
+
+/// Resolve o diretório do console Forge de desenvolvedor (aninhado em `/dev`)
+/// por precedência: `FORGE_DEV_WEB_DIR` → `web/dist`. O build de `web/` usa
+/// `base: './'` (assets relativos) justamente para funcionar tanto na raiz
+/// (testes de integração, que apontam `FORGE_WEB_DIR` para ele) quanto sob
+/// `/dev` (produção).
+pub fn default_dev_console_dir() -> PathBuf {
+    std::env::var_os("FORGE_DEV_WEB_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("web/dist"))
 }
@@ -839,6 +871,92 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    /// Serializa os testes que mexem em `FORGE_DEV_WEB_DIR` (env é estado
+    /// global do processo; sem isto os dois testes abaixo poderiam
+    /// intercalar set/remove e flakar).
+    static DEV_DIR_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// O console Forge de desenvolvedor é aninhado em `/dev` quando o build
+    /// existe (BTV é a SPA raiz). Usa `FORGE_DEV_WEB_DIR` — nenhum outro
+    /// teste do workspace lê essa env var (confirmado por grep), e um router
+    /// construído em paralelo enquanto ela está setada só ganharia um `/dev`
+    /// extra que nenhuma asserção alheia consulta.
+    #[tokio::test]
+    async fn console_dev_e_servido_aninhado_em_dev_quando_build_existe() {
+        let _env = DEV_DIR_ENV_LOCK.lock().unwrap();
+        let web_dir = fixture_web_dir();
+        let dev_dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dev_dir.path().join("index.html"),
+            "<html><body>console forge</body></html>",
+        )
+        .unwrap();
+        std::env::set_var("FORGE_DEV_WEB_DIR", dev_dir.path());
+        let app = router(
+            Telemetry::open_in_memory().unwrap(),
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+        std::env::remove_var("FORGE_DEV_WEB_DIR");
+
+        // /dev serve o console (inclusive fallback SPA para sub-rotas)...
+        for uri in ["/dev", "/dev/", "/dev/skills"] {
+            let resp = app
+                .clone()
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "GET {uri}");
+            let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            assert!(
+                String::from_utf8_lossy(&body).contains("console forge"),
+                "GET {uri} deveria servir o index do console"
+            );
+        }
+        // ...e a raiz continua servindo a SPA primária, não o console.
+        let resp = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("forge"));
+        assert!(!String::from_utf8_lossy(&body).contains("console forge"));
+    }
+
+    /// Sem build do console (`FORGE_DEV_WEB_DIR` apontando para diretório
+    /// inexistente), `/dev` cai no fallback SPA da raiz — sem 500, sem rota
+    /// fantasma.
+    #[tokio::test]
+    async fn console_dev_ausente_nao_monta_rota() {
+        let _env = DEV_DIR_ENV_LOCK.lock().unwrap();
+        let web_dir = fixture_web_dir();
+        std::env::set_var("FORGE_DEV_WEB_DIR", "/nonexistent/btv-test-dev-dir");
+        let app = router(
+            Telemetry::open_in_memory().unwrap(),
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+        std::env::remove_var("FORGE_DEV_WEB_DIR");
+        let resp = app
+            .oneshot(Request::builder().uri("/dev").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // Fallback SPA da raiz responde 200 com o index da SPA primária.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("forge"));
     }
 
     #[tokio::test]
