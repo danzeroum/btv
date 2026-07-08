@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-/** Fase 7 Onda 11: prova a fronteira por EXECUÇÃO. `forge.toml` na raiz do
+/** Fase 7 Onda 11: prova a fronteira por EXECUÇÃO. `btv.toml` na raiz do
  * workDir (ver scripts/run-integration-server.mjs) declara 2 passos curtos
  * e determinísticos — clicar "rodar /verify" dispara `POST /api/verify/run`
  * de verdade (job em `spawn_blocking`), a tela mostra progresso real via

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://btv.buildtovalue.dev/schemas/squad-template.v1.schema.json",
+  "title": "squad-template.v1",
+  "description": "Modelo de squad do BuildToValue (galeria U1 / wizard U2 / admin A5). Fonte única dos 12 modelos em schemas/squad-templates/*.json, embutidos no btv-server e servidos em GET /api/btv/templates. `binario: true` num formato significa que a exportação direta ainda não é suportada (exige conversor na sandbox — onda futura); a UI mostra o formato desabilitado, nunca um export que entrega outra coisa.",
+  "type": "object",
+  "required": [
+    "id",
+    "nome",
+    "categoria",
+    "cor",
+    "onda",
+    "versao",
+    "publicado",
+    "descricao",
+    "papeis",
+    "formatos",
+    "perguntas",
+    "gates"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "nome": { "type": "string", "minLength": 1 },
+    "categoria": {
+      "type": "string",
+      "enum": ["conteudo", "analise", "criativa", "operacoes"]
+    },
+    "cor": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+    "onda": { "type": "integer", "minimum": 1, "maximum": 3 },
+    "versao": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+$" },
+    "publicado": { "type": "boolean" },
+    "descricao": { "type": "string", "minLength": 1 },
+    "papeis": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "formatos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["nome", "binario"],
+        "properties": {
+          "nome": { "type": "string", "minLength": 1 },
+          "binario": { "type": "boolean" }
+        }
+      }
+    },
+    "perguntas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["label", "placeholder"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "placeholder": { "type": "string" }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

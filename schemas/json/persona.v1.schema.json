@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/persona.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/persona.v1.schema.json",
   "title": "persona.v1",
   "description": "Persona de squad como conteúdo (BuildToValue): item de galeria com identidade, modelos mentais (referências canônicas da área), princípios, escada de autonomia DESCRITIVA (rótulo, não loop automático — ADR 0021), gatilhos de ativação e contratos de handoff. Publicar uma persona é conteúdo, não código.",
   "type": "object",

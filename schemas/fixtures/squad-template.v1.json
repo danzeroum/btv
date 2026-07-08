@@ -1,0 +1,40 @@
+{
+  "valid": {
+    "id": "editorial",
+    "nome": "Editorial / SEO",
+    "categoria": "conteudo",
+    "cor": "#b8531f",
+    "onda": 1,
+    "versao": "v1.4",
+    "publicado": true,
+    "descricao": "Artigos, newsletters e copy com revisão de estilo e fact-check embutidos.",
+    "papeis": ["Pauteiro", "Redator", "Revisor de estilo", "Fact-checker"],
+    "formatos": [
+      { "nome": "DOCX", "binario": true },
+      { "nome": "MD", "binario": false },
+      { "nome": "HTML", "binario": false }
+    ],
+    "perguntas": [
+      { "label": "Qual é a pauta ou tema?", "placeholder": "ex.: tendências de logística verde no Brasil" },
+      { "label": "Tom e estilo", "placeholder": "ex.: analítico, direto, sem clichês" },
+      { "label": "Público e canal", "placeholder": "ex.: newsletter B2B, ~1.200 palavras" }
+    ],
+    "gates": [
+      "Aprovar o rascunho antes da revisão",
+      "Aprovar a entrega final antes da exportação"
+    ]
+  },
+  "invalid_missing_formatos": {
+    "id": "editorial",
+    "nome": "Editorial / SEO",
+    "categoria": "conteudo",
+    "cor": "#b8531f",
+    "onda": 1,
+    "versao": "v1.4",
+    "publicado": true,
+    "descricao": "Sem formatos declarados.",
+    "papeis": ["Pauteiro"],
+    "perguntas": [{ "label": "Qual é a pauta?", "placeholder": "" }],
+    "gates": []
+  }
+}

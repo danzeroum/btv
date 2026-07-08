@@ -1,9 +1,9 @@
-# `skills/` — skills built-in da Forge
+# `skills/` — skills built-in da BuildToValue
 
 Uma **skill** é uma ferramenta empacotada que o agente pode invocar como
 qualquer tool (`read`, `grep`, `bash`, …). Este diretório reúne as skills
-built-in que acompanham a Forge. Elas são carregadas e **vetadas** no início de
-cada sessão (`forge run`/`chat`/`tui`) e expostas ao modelo no `ToolRegistry`.
+built-in que acompanham a BuildToValue. Elas são carregadas e **vetadas** no início de
+cada sessão (`btv run`/`chat`/`tui`) e expostas ao modelo no `ToolRegistry`.
 
 Introduzido na **Fase 6 Onda 1** (runtime de skill). O confinamento em sandbox
 Docker de skills de terceiro é a Onda 2/3 — os built-ins aqui são confiáveis e
@@ -20,7 +20,7 @@ description = "Conta palavras…"     # anunciada ao modelo
 entrypoint = 'printf "%s" "$1" | wc -w'   # comando shell a executar
 permissions = []                    # permissões declaradas (ex.: ["bash", "webfetch"])
 
-# Passos de verificação próprios (opcionais), no mesmo formato do forge.toml:
+# Passos de verificação próprios (opcionais), no mesmo formato do btv.toml:
 # [[verify]]
 # name = "testa"
 # program = "sh"
@@ -37,7 +37,7 @@ permissions = []                    # permissões declaradas (ex.: ["bash", "web
 
 ## Vetting (fail-closed)
 
-No carregamento, cada skill passa por `forge-verify::vetter::vet_skill`:
+No carregamento, cada skill passa por `btv-verify::vetter::vet_skill`:
 
 - manifesto ausente/inválido → **bloqueada** (não registrada);
 - padrão perigoso no código (ex.: `curl … | sh`, `rm -rf /`) → **bloqueada**;

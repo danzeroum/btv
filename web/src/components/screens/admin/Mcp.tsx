@@ -25,7 +25,7 @@ export function Mcp() {
     <div className="stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, color: 'var(--faint)' }}>
-          servidores declarados em <span className="mono">.forge/mcp.toml</span> · sondados agora, ao vivo
+          servidores declarados em <span className="mono">.btv/mcp.toml</span> · sondados agora, ao vivo
         </span>
         <Button onClick={() => void state.run()} disabled={state.state.status === 'loading'}>
           {state.state.status === 'loading' ? 'sondando…' : 'atualizar'}
@@ -38,7 +38,7 @@ export function Mcp() {
             {servers.length === 0 && (
               <Card>
                 <span style={{ color: 'var(--faint)', fontSize: 12 }}>
-                  nenhum servidor MCP declarado — crie <span className="mono">.forge/mcp.toml</span> com um bloco{' '}
+                  nenhum servidor MCP declarado — crie <span className="mono">.btv/mcp.toml</span> com um bloco{' '}
                   <span className="mono">[[server]]</span>.
                 </span>
               </Card>

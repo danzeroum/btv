@@ -43,14 +43,14 @@ export interface ModelTier {
   label: string
 }
 
-/** Espelha `forge_schemas::ledger::OverrideMark` — override é sempre um
+/** Espelha `btv_schemas::ledger::OverrideMark` — override é sempre um
  * campo de primeira classe na entrada em si, nunca inferido no cliente. */
 export interface LedgerOverrideMark {
   marked: boolean
   reason?: string
 }
 
-/** Espelha `forge_schemas::ledger::LedgerEntry` — a resposta de `GET
+/** Espelha `btv_schemas::ledger::LedgerEntry` — a resposta de `GET
  * /api/ledger` é essa struct serializada direto, sem DTO espelho. */
 export interface LedgerEntry {
   seq: number
@@ -95,7 +95,7 @@ export interface PermissionMatrixRow {
   plan: PermissionMatrixDecision
 }
 
-/** Override persistido (Fase 7 Onda 2) — espelha `forge_store::RuleRecord`. */
+/** Override persistido (Fase 7 Onda 2) — espelha `btv_store::RuleRecord`. */
 export interface PermissionRuleRecord {
   id: number
   profile: AgentProfile

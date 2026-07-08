@@ -1,11 +1,11 @@
 """Regenera as fixtures de paridade do contrato prompt-cache-key.v1.
 
 As fixtures são a fonte de verdade do teste de contrato cross-language:
-- Rust: crates/forge-schemas/tests/parity.rs
-- Python: python/packages/forge-promptforge/tests/test_hashing.py
+- Rust: crates/btv-schemas/tests/parity.rs
+- Python: python/packages/btv-promptforge/tests/test_hashing.py
 
 Rode via `just gen-fixtures` (usa a implementação de referência do
-forge_promptforge, não uma cópia local do algoritmo).
+btv_promptforge, não uma cópia local do algoritmo).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forge_promptforge.hashing import request_hash
+from btv_promptforge.hashing import request_hash
 
 CASES = [
     {"name": "simples", "messages": [{"role": "user", "content": "oi"}], "temperature": 0.7},
@@ -55,7 +55,7 @@ def main() -> None:
     out = {
         "$comment": (
             "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por "
-            "forge-schemas (Rust, tests/parity.rs) e forge_promptforge (Python, "
+            "btv-schemas (Rust, tests/parity.rs) e btv_promptforge (Python, "
             "tests/test_hashing.py). Regeneração: just gen-fixtures."
         ),
         "cases": CASES,

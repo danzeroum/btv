@@ -1,6 +1,6 @@
 // Load-test k6 do caminho do gateway (Fase 6 Onda 8, critério de conclusão nº 3).
 //
-// Martela o endpoint de carga (`forge-server` bin `loadgen`), que embrulha o
+// Martela o endpoint de carga (`btv-server` bin `loadgen`), que embrulha o
 // `ScriptedGenerator` — sem provider, SEM API KEY. Mede o overhead do NOSSO lado
 // (axum + agregação + streaming) isolado da latência de rede do provider, sob
 // concorrência, e valida o P95 sob o limiar. O k6 sai ≠0 se o threshold estourar:
@@ -23,7 +23,7 @@ export const options = {
   },
 };
 
-const BASE = __ENV.FORGE_LOADGEN_URL || 'http://127.0.0.1:7900';
+const BASE = __ENV.BTV_LOADGEN_URL || 'http://127.0.0.1:7900';
 
 export default function () {
   const res = http.post(

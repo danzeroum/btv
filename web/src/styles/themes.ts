@@ -1,6 +1,6 @@
 /** 5 temas renascentistas + 7 amostras de cor de destaque.
  * Valores hex copiados verbatim de docs/design_handoff_forge_telas/README.md §8.3 — não re-derivar.
- * Aplicados via CSS custom properties em #forge-root (ver state/useTheme.ts), nunca via classes.
+ * Aplicados via CSS custom properties em #btv-root (ver state/useTheme.ts), nunca via classes.
  */
 
 export type ThemeId = 'default' | 'veneziana' | 'ultramarino' | 'marmore' | 'afresco'
@@ -55,7 +55,7 @@ export const THEMES: Record<ThemeId, ThemePalette> = {
 }
 
 export const THEME_LIST: { key: ThemeId; label: string; dark: boolean }[] = [
-  { key: 'default', label: 'Forge', dark: true },
+  { key: 'default', label: 'BuildToValue', dark: true },
   { key: 'veneziana', label: 'Veneziana', dark: true },
   { key: 'ultramarino', label: 'Ultramarino', dark: true },
   { key: 'marmore', label: 'Mármore', dark: false },
@@ -85,5 +85,5 @@ export const LITERAL_COLORS = {
   modalOverlay: '#05070aa8',
 }
 
-export const THEME_STORAGE_KEY = 'forge_theme'
-export const ACCENT_STORAGE_KEY = 'forge_accent'
+export const THEME_STORAGE_KEY = 'btv_theme'
+export const ACCENT_STORAGE_KEY = 'btv_accent'

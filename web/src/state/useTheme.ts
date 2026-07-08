@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { THEMES, type ThemeId } from '../styles/themes'
 
-/** Aplica as ~18 CSS custom properties do tema em #forge-root, sobrepondo
+/** Aplica as ~18 CSS custom properties do tema em #btv-root, sobrepondo
  * --rust com `accent` quando presente. Roda a cada troca de theme/accent —
  * a restauração inicial (antes do primeiro paint) é feita pelo lazy
  * initializer do reducer em AppContext, não aqui.

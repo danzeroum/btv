@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
  * verdade. `seq` vem do MESMO `LedgerStore::append` que toda outra escrita
  * de auditoria da plataforma usa — nunca o `seq 248` fabricado que o mock
  * antigo sempre devolvia, e a cópia não promete mais "aplica na próxima
- * forge squad" (o orquestrador Python continua com os 5 agentes fixos).
+ * btv squad" (o orquestrador Python continua com os 5 agentes fixos).
  */
 test('salvar o grafo padrão grava no ledger real — seq real, cópia honesta sobre aplicação', async ({ page }) => {
   await page.goto('/')
@@ -22,7 +22,7 @@ test('salvar o grafo padrão grava no ledger real — seq real, cópia honesta s
   await expect(banner).toContainText('trabalho futuro')
   // O mock antigo prometia aplicação real e um seq fixo — nenhum dos dois
   // pode sobreviver por trás do backend real.
-  await expect(banner).not.toContainText('aplica na próxima forge squad')
+  await expect(banner).not.toContainText('aplica na próxima btv squad')
   await expect(page.getByText('seq 248')).toHaveCount(0)
 
   await expect(page.getByRole('button', { name: '✓ salvo' })).toBeVisible()

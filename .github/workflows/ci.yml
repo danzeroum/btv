@@ -15,7 +15,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       # uv é necessário para o teste de integração cross-process do
-      # sidecar (forge-sidecar/tests/python_sidecar.rs sobe o servidor
+      # sidecar (btv-sidecar/tests/python_sidecar.rs sobe o servidor
       # Python de verdade); sem ele o teste pula graciosamente.
       - uses: astral-sh/setup-uv@v5
       - run: cd python && uv sync
@@ -58,7 +58,7 @@ jobs:
 
   # Self-hosting (Fase 5 Onda 6, ADR 0010): a plataforma se verifica com sua
   # própria ferramenta. Job separado do `rust` de propósito — não arrisca o
-  # gate que já funciona; a fusão dos dois é possível depois. `forge verify`
+  # gate que já funciona; a fusão dos dois é possível depois. `btv verify`
   # já sai com exit ≠0 em veredito Fail (Onda 2) — isso sozinho é o gate;
   # o artefato é só a evidência anexada ao run para auditoria.
   verify:
@@ -67,19 +67,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # `forge verify` roda `cargo test --workspace` como parte dos
+      # `btv verify` roda `cargo test --workspace` como parte dos
       # default_steps() — precisa de uv pelo mesmo motivo que o job `rust`
       # precisa (ver comentário lá).
       - uses: astral-sh/setup-uv@v5
       - run: cd python && uv sync
-      - run: cargo run -p forge-cli -- verify --out verification-evidence.json
+      - run: cargo run -p btv-cli -- verify --out verification-evidence.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-evidence
           path: verification-evidence.json
 
-  # Testes de integração pesada do forge-tools (`#[ignore]` no `cargo test`
+  # Testes de integração pesada do btv-tools (`#[ignore]` no `cargo test`
   # normal — aparecem como "ignored", nunca verdes por engano; aqui rodam DE
   # VERDADE com `--include-ignored`). Job separado porque exigem dependências
   # externas que o gate `rust` não deve arriscar:
@@ -103,7 +103,7 @@ jobs:
       # O cliente LSP real precisa da componente rust-analyzer (a guarda do teste
       # falha se ela não estiver disponível).
       - run: rustup component add rust-analyzer
-      - run: cargo test -p forge-tools -- --include-ignored
+      - run: cargo test -p btv-tools -- --include-ignored
 
   # Benches criterion (Fase 6 Onda 8): compilam e RODAM de verdade, produzindo o
   # baseline comparável dos caminhos quentes (hash canônico, épocas de contexto,
@@ -122,9 +122,9 @@ jobs:
       # libtest, que rejeita as flags do criterion (`--warm-up-time`). Assim as
       # flags só chegam aos binários criterion. Tempos reduzidos (prova que rodam
       # e produzem baseline, não crava regressão).
-      - run: cargo bench -p forge-schemas --bench canonical -- --warm-up-time 0.5 --measurement-time 1
-      - run: cargo bench -p forge-core --bench compaction -- --warm-up-time 0.5 --measurement-time 1
-      - run: cargo bench -p forge-llm --bench gateway -- --warm-up-time 0.5 --measurement-time 1
+      - run: cargo bench -p btv-schemas --bench canonical -- --warm-up-time 0.5 --measurement-time 1
+      - run: cargo bench -p btv-core --bench compaction -- --warm-up-time 0.5 --measurement-time 1
+      - run: cargo bench -p btv-llm --bench gateway -- --warm-up-time 0.5 --measurement-time 1
 
   # Load-test k6 do caminho do gateway (Fase 6 Onda 8b, critério de conclusão
   # nº 3): sobe o endpoint de carga (`loadgen`, que embrulha o ScriptedGenerator
@@ -141,7 +141,7 @@ jobs:
       - uses: grafana/setup-k6-action@v1
       - name: Sobe o endpoint de carga e espera ficar pronto
         run: |
-          cargo build -p forge-server --bin loadgen
+          cargo build -p btv-server --bin loadgen
           ./target/debug/loadgen &
           echo $! > loadgen.pid
           for i in $(seq 1 30); do
@@ -155,7 +155,7 @@ jobs:
         run: kill "$(cat loadgen.pid)" 2>/dev/null || true
 
   # Frontend (Fase 7 Onda 1): o harness Playwright de integração real já
-  # existia (`web/tests/e2e-integration/`, sobe um `forge dashboard` real
+  # existia (`web/tests/e2e-integration/`, sobe um `btv dashboard` real
   # contra sqlite real) mas não era exercitado por nenhum job — regressão do
   # front passava despercebida. `pnpm build` roda o typecheck (tsc -b) antes do
   # bundle; `test:e2e:integration` builda + sobe o binário real via cargo, por
@@ -171,7 +171,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # uv é necessário aqui pelo mesmo motivo do job `rust`: o e2e de
       # integração do squad (squad-real-backend.spec.ts) sobe o
-      # `forge_squad.server` real via `uv run`. Sem resolver o venv antes,
+      # `btv_squad.server` real via `uv run`. Sem resolver o venv antes,
       # o primeiro `uv run` da suíte tenta baixar as dependências a frio e
       # estoura o timeout dos testes Playwright (achado real — Onda 4).
       - uses: astral-sh/setup-uv@v5
@@ -184,4 +184,39 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:integration
+
+  # Frontend do BuildToValue (btv-web/, a SPA primária servida na raiz pelo
+  # `btv dashboard`; o console BuildToValue acima fica em /dev). Vitest + typecheck
+  # (via `pnpm build`, que roda `tsc -b`) + Playwright de UI (shell,
+  # navegação, ajustes rápidos — vite dev, sem backend).
+  btv-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: btv-web
+    steps:
+      # submodules: o Squad Designer (U5) consome a lib bpmn de vendor/bpmn
+      # (pinada); scripts/ensure-bpmn.mjs constrói o dist dela no prebuild.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      # Rust: a suíte de integração sobe o `btv dashboard` real (mesma
+      # razão do job `web`).
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # uv: a ativação de squad pela galeria (squad-real-backend.spec.ts)
+      # sobe o `btv_squad.server` real via `uv run` — mesma razão do job
+      # `web` (resolver o venv a frio estouraria o timeout do Playwright).
+      - uses: astral-sh/setup-uv@v5
+      - run: cd ../python && uv sync
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g pnpm@10
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
       - run: pnpm test:e2e:integration

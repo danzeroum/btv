@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato prompt-template.v1. Valida contra schemas/json/prompt-template.v1.schema.json (tests/schema_fixtures.rs em forge-schemas). Nota honesta: este schema ainda NÃO tem tipo Rust nem Python correspondente — é a parte serializável do generators.js do prompte, ainda não portada nesta fase. Este teste só protege o arquivo de schema contra drift/erro de sintaxe, não uma paridade de tipo real (que só existirá quando o porte acontecer).",
+  "$comment": "Fixture golden do contrato prompt-template.v1. Valida contra schemas/json/prompt-template.v1.schema.json (tests/schema_fixtures.rs em btv-schemas). Nota honesta: este schema ainda NÃO tem tipo Rust nem Python correspondente — é a parte serializável do generators.js do prompte, ainda não portada nesta fase. Este teste só protege o arquivo de schema contra drift/erro de sintaxe, não uma paridade de tipo real (que só existirá quando o porte acontecer).",
   "valid": {
     "name": "resumo-pr",
     "category": "repositorio",

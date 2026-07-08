@@ -34,7 +34,7 @@ export function RateLimits() {
 
       <div style={{ fontSize: 11, color: 'var(--faint)' }}>
         tetos configurados (<span className="mono">RateLimiter::for_tier</span>) — <strong>não é uso ao vivo</strong>:
-        o dashboard é um processo separado de qualquer sessão <span className="mono">forge run</span>/
+        o dashboard é um processo separado de qualquer sessão <span className="mono">btv run</span>/
         <span className="mono">chat</span> que realmente consome vagas, então não há limitador compartilhado para
         ler. Hit de cache nunca consome vaga.
       </div>

@@ -1,7 +1,7 @@
 /**
- * Fase 7 Onda 11: pipeline `/verify` real, rodando em background no `forge
- * dashboard`. `POST /api/verify/run` dispara o job (mesma config que `forge
- * verify`: `forge.toml` na raiz, ou `default_steps()` — espelha o job
+ * Fase 7 Onda 11: pipeline `/verify` real, rodando em background no `btv
+ * dashboard`. `POST /api/verify/run` dispara o job (mesma config que `btv
+ * verify`: `btv.toml` na raiz, ou `default_steps()` — espelha o job
  * `rust` do CI) e devolve um `run_id`; `GET /api/verify/:id` (polling)
  * acompanha o progresso real passo a passo até o veredito final. Execuções
  * concorrentes são serializadas: um segundo `POST` com job ativo devolve
@@ -11,7 +11,7 @@
 import { ApiError, fetchJson } from './client'
 import type { ReviewerScore } from '../types/domain'
 
-/** "Review por valor" (`forge_review`'s gates/certification) ainda não
+/** "Review por valor" (`btv_review`'s gates/certification) ainda não
  * ligado nesta onda — escopo desta fase é só o job de `/verify` em
  * background (ver `docs/PLANO-FASE-7-frontend-primario.md`, Onda 11). */
 export const VALUE_SCORE = 0.86
@@ -42,7 +42,7 @@ export interface VerificationStep {
 
 export type Verdict = 'pass' | 'fail' | 'skipped'
 
-/** Espelha `forge_schemas::verification::VerificationEvidence`. */
+/** Espelha `btv_schemas::verification::VerificationEvidence`. */
 export interface VerificationEvidence {
   run_id: string
   git_sha: string

@@ -2,7 +2,7 @@
  * Fase 7 Onda 14 (Designer, "salvar honesto"): `POST /api/designer/workflow`
  * valida o grafo contra `squad.workflow.v1` (schema + integridade de
  * arestas) e grava no ledger de verdade — `seq` real, não fabricado.
- * "Aplica na próxima forge squad" nunca foi real (o orquestrador Python
+ * "Aplica na próxima btv squad" nunca foi real (o orquestrador Python
  * continua com os 5 agentes fixos, sem reescrita nesta fase) — a resposta
  * e a cópia da tela dizem só "salvo e validado".
  */

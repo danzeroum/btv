@@ -1,6 +1,6 @@
 /** Matriz de permissão build/plan×tool e overrides persistidos — Fase 7
- * Onda 2. Fala com o router de `forge-cli` (crates/forge-cli/src/web_agent.rs),
- * não com `forge-server` — precisa de `forge-core` (PermissionEngine/Rule).
+ * Onda 2. Fala com o router de `btv-cli` (crates/btv-cli/src/web_agent.rs),
+ * não com `btv-server` — precisa de `btv-core` (PermissionEngine/Rule).
  */
 import { fetchJson } from './client'
 import type { AgentProfile, PermissionMatrixDecision, PermissionMatrixRow, PermissionRuleRecord } from '../types/domain'

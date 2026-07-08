@@ -12,7 +12,7 @@ type Template = Omit<DesignerNode, 'id' | 'x' | 'y'>
 /** Pesos fiéis a consensus.py::DEFAULT_AGENT_WEIGHTS e a hitl.py — não inventar números novos. */
 export const TEMPLATES: Record<string, Template> = {
   Architect: {
-    kind: 'card', name: 'Architect', role: 'arquitetura', color: 'var(--teal)', icon: '◈', sub: 'agente · forge_squad.agents',
+    kind: 'card', name: 'Architect', role: 'arquitetura', color: 'var(--teal)', icon: '◈', sub: 'agente · btv_squad.agents',
     params: [
       { k: 'peso architecture', v: '0.90' },
       { k: 'peso security', v: '0.70' },
@@ -22,7 +22,7 @@ export const TEMPLATES: Record<string, Template> = {
     removable: true,
   },
   Developer: {
-    kind: 'card', name: 'Developer', role: 'implementação', color: 'var(--amber)', icon: '⚒', sub: 'agente · forge_squad.agents',
+    kind: 'card', name: 'Developer', role: 'implementação', color: 'var(--amber)', icon: '⚒', sub: 'agente · btv_squad.agents',
     params: [
       { k: 'peso architecture', v: '0.60' },
       { k: 'peso implementation', v: '0.95' },
@@ -32,7 +32,7 @@ export const TEMPLATES: Record<string, Template> = {
     removable: true,
   },
   Auditor: {
-    kind: 'card', name: 'Auditor', role: 'auditoria', color: 'var(--ok)', icon: '✓', sub: 'agente · forge_squad.agents',
+    kind: 'card', name: 'Auditor', role: 'auditoria', color: 'var(--ok)', icon: '✓', sub: 'agente · btv_squad.agents',
     params: [
       { k: 'peso security', v: '0.95' },
       { k: 'peso quality', v: '0.85' },
@@ -42,12 +42,12 @@ export const TEMPLATES: Record<string, Template> = {
     removable: true,
   },
   Designer: {
-    kind: 'card', name: 'Designer', role: 'ui/ux', color: 'var(--wire)', icon: '✎', sub: 'agente · forge_squad.agents',
+    kind: 'card', name: 'Designer', role: 'ui/ux', color: 'var(--wire)', icon: '✎', sub: 'agente · btv_squad.agents',
     params: [{ k: 'peso ui', v: '0.95' }, { k: 'peso ux', v: '0.90' }, { k: 'autonomia', v: 'nível 1' }],
     removable: true,
   },
   Ops: {
-    kind: 'card', name: 'Ops', role: 'operações', color: 'var(--rust)', icon: '⛭', sub: 'agente · forge_squad.agents',
+    kind: 'card', name: 'Ops', role: 'operações', color: 'var(--rust)', icon: '⛭', sub: 'agente · btv_squad.agents',
     params: [
       { k: 'peso infrastructure', v: '0.90' },
       { k: 'peso deployment', v: '0.90' },

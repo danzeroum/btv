@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
 
-/** Fase 7 Onda 7 (A1): prova a fronteira por EXECUÇÃO contra o `forge
- * dashboard` real. `.forge/mcp.toml` (ver scripts/run-integration-server.mjs)
+/** Fase 7 Onda 7 (A1): prova a fronteira por EXECUÇÃO contra o `btv
+ * dashboard` real. `.btv/mcp.toml` (ver scripts/run-integration-server.mjs)
  * declara 2 servidores: "vivo" aponta pro fixture MCP REAL (mesmo bin que
- * `forge-tools/tests/mcp_integration.rs` usa via handshake de verdade) e
+ * `btv-tools/tests/mcp_integration.rs` usa via handshake de verdade) e
  * "morto" aponta pra um comando inexistente — a tela precisa mostrar os dois
  * status corretamente no MESMO probe. O override é gravado aqui via a rota
  * REAL `/api/permissions/rules` (mesmo caminho que a tela de Skills usa),

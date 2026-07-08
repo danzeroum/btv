@@ -1,7 +1,7 @@
 /**
  * Fase 7 Onda 9 (A2): relatório de A/B sobre a telemetria real. `GET
- * /api/experiment/:nome` mora direto em `forge-server` (mesma classe de
- * posicionamento de A5 — só `forge-store`+`forge-schemas`). Nenhum código de
+ * /api/experiment/:nome` mora direto em `btv-server` (mesma classe de
+ * posicionamento de A5 — só `btv-store`+`btv-schemas`). Nenhum código de
  * produção grava `props.experiment`/`variant`/`success` ainda — só testes e
  * `examples/seed_telemetry.rs`; a tela mostra dados semeados com um banner
  * explícito até a instrumentação existir de verdade.
@@ -10,7 +10,7 @@ import { fetchJson } from './client'
 
 export type ExperimentVerdict = 'significant' | 'inconclusive' | 'insufficient_data'
 
-/** Espelha `forge_schemas::experiment::VariantStats`. */
+/** Espelha `btv_schemas::experiment::VariantStats`. */
 export interface VariantStats {
   variant: string
   n: number
@@ -18,7 +18,7 @@ export interface VariantStats {
   rate: number
 }
 
-/** Espelha `forge_schemas::experiment::ExperimentReport` — a resposta de
+/** Espelha `btv_schemas::experiment::ExperimentReport` — a resposta de
  * `GET /api/experiment/:nome` é essa struct serializada direto, sem DTO
  * espelho. */
 export interface ExperimentReport {

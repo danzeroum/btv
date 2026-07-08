@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/prompt-cache-key.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/prompt-cache-key.v1.schema.json",
   "title": "prompt-cache-key.v1",
-  "description": "Chave de cache de request LLM. Algoritmo: sha256 hex minúsculo do JSON canônico de {\"messages\": ..., \"temperature\": ...}. JSON canônico = chaves ordenadas em todos os níveis, separadores compactos, UTF-8 sem escape de não-ASCII. Contrato herdado do prompte (api/src/hash.js); implementações: forge-schemas::canonical (Rust) e forge_promptforge.hashing (Python). Restrição v1: floats com parte fracionária zero (ex.: 1.0) são proibidos nas entradas. Paridade verificada por schemas/fixtures/prompt-cache-key.v1.json.",
+  "description": "Chave de cache de request LLM. Algoritmo: sha256 hex minúsculo do JSON canônico de {\"messages\": ..., \"temperature\": ...}. JSON canônico = chaves ordenadas em todos os níveis, separadores compactos, UTF-8 sem escape de não-ASCII. Contrato herdado do prompte (api/src/hash.js); implementações: btv-schemas::canonical (Rust) e btv_promptforge.hashing (Python). Restrição v1: floats com parte fracionária zero (ex.: 1.0) são proibidos nas entradas. Paridade verificada por schemas/fixtures/prompt-cache-key.v1.json.",
   "type": "object",
   "required": ["messages", "temperature"],
   "properties": {

@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato persona.v1. Valida contra schemas/json/persona.v1.schema.json e desserializa em forge_schemas::persona::Persona (Rust, tests/schema_fixtures.rs). Só há tipo do lado Rust hoje; a galeria (schemas/personas/*.json) consome o mesmo schema.",
+  "$comment": "Fixture golden do contrato persona.v1. Valida contra schemas/json/persona.v1.schema.json e desserializa em btv_schemas::persona::Persona (Rust, tests/schema_fixtures.rs). Só há tipo do lado Rust hoje; a galeria (schemas/personas/*.json) consome o mesmo schema.",
   "valid": {
     "id": "revisor-de-estilo",
     "display_name": "Revisor de estilo",

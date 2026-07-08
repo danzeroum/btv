@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test'
  * Permissão, estado compartilhado via `SessionContext` acima da troca de
  * tela — não se perde ao navegar) → aprovar → volta pra Sessão → transcript
  * completo + `ledger íntegro: N entrada(s)` real, não fabricado. Roda em
- * modo roteirizado (`FORGE_SCRIPTED=1`, sem API key — mesmo processo real
+ * modo roteirizado (`BTV_SCRIPTED=1`, sem API key — mesmo processo real
  * que os outros specs desta suíte), dispara `bash` de verdade dentro do
  * sandbox de teste.
  */
@@ -36,9 +36,9 @@ test('mensagem real dispara bash, pede permissão, aprovar completa o turno e o 
 
   await page.getByRole('button', { name: 'Sessão de código' }).click()
 
-  await expect(page.locator('.mono', { hasText: 'forge ▸ pronto' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('.mono', { hasText: 'btv ▸ pronto' })).toBeVisible({ timeout: 10_000 })
   // Ledger real, não um contador fabricado — bate por igualdade com uma
-  // leitura independente do mesmo `.forge/forge.db` seria redundante com o
+  // leitura independente do mesmo `.btv/btv.db` seria redundante com o
   // que `web_agent.rs`'s teste Rust já prova; aqui o que importa é que a UI
   // mostra ALGUM número real (não a linha "nenhum turno concluído" que
   // precede qualquer turno).

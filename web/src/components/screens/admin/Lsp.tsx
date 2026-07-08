@@ -20,7 +20,7 @@ export function Lsp() {
           servers.length === 0 ? (
             <Card>
               <span style={{ fontSize: 12, color: 'var(--faint)' }}>
-                nenhum language server declarado em <span className="mono">.forge/lsp.toml</span>.
+                nenhum language server declarado em <span className="mono">.btv/lsp.toml</span>.
               </span>
             </Card>
           ) : (

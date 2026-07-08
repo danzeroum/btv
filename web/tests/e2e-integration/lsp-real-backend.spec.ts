@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-/** Fase 7 Onda 10 (A7): prova a fronteira por EXECUÇÃO. `.forge/lsp.toml`
+/** Fase 7 Onda 10 (A7): prova a fronteira por EXECUÇÃO. `.btv/lsp.toml`
  * (ver scripts/run-integration-server.mjs) declara um comando LSP
  * INEXISTENTE — a tela mostra o servidor declarado, sempre "declarado, não
  * iniciado", sem que nenhum processo suba (mesma prova que

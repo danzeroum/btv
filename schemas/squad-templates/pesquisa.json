@@ -1,0 +1,48 @@
+{
+  "id": "pesquisa",
+  "nome": "Pesquisa & Inteligência",
+  "categoria": "analise",
+  "cor": "#345f9e",
+  "onda": 1,
+  "versao": "v1.2",
+  "publicado": true,
+  "descricao": "Dossiês, benchmarks e sínteses de decisão com evidência citada.",
+  "papeis": [
+    "Investigador",
+    "Analista",
+    "Sintetizador",
+    "Verificador"
+  ],
+  "formatos": [
+    {
+      "nome": "PDF",
+      "binario": true
+    },
+    {
+      "nome": "MD",
+      "binario": false
+    },
+    {
+      "nome": "XLSX",
+      "binario": true
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Pergunta de pesquisa",
+      "placeholder": "ex.: quem são os 5 maiores players de X e como cobram?"
+    },
+    {
+      "label": "Fontes prioritárias",
+      "placeholder": "ex.: relatórios setoriais, sites oficiais"
+    },
+    {
+      "label": "Formato da síntese",
+      "placeholder": "ex.: dossiê de 6 páginas + planilha comparativa"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

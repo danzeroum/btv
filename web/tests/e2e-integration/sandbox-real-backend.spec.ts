@@ -3,12 +3,12 @@ import { test, expect } from '@playwright/test'
 /** Fase 7 Onda 10 (A6): prova a fronteira por EXECUÇÃO. Perfil real de
  * `Sandbox::new` + as constantes hardcoded de `run_with` (rootfs read-only,
  * cap-drop ALL, no-new-privileges); a skill de terceiro semeada em
- * `.forge/skills/` (ver scripts/run-integration-server.mjs) aparece via
+ * `.btv/skills/` (ver scripts/run-integration-server.mjs) aparece via
  * `/api/skills` real, filtrada por `source === 'third-party'`. **Não**
  * afirma um valor fixo para o status do daemon Docker — se há ou não um
  * daemon alcançável varia por ambiente (dev local vs. runner de CI); a
  * propriedade fail-closed determinística já está provada no nível de
- * `forge_tools::sandbox` (`ping_com_daemon_inalcancavel_e_false`).
+ * `btv_tools::sandbox` (`ping_com_daemon_inalcancavel_e_false`).
  */
 test('tela de sandbox mostra o perfil real e a skill de terceiro semeada', async ({ page }) => {
   await page.goto('/')

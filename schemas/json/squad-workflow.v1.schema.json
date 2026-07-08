@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/squad-workflow.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/squad-workflow.v1.schema.json",
   "title": "squad-workflow.v1",
   "description": "Grafo do Squad Designer (Fase 7 Onda 14). Salvar valida contra este schema e grava no ledger — aplicação real ao orquestrador (que continua com os 5 agentes fixos) é trabalho futuro, não fingida aqui.",
   "type": "object",

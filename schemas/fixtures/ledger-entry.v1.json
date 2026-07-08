@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixture golden do contrato ledger-entry.v1. Valida contra schemas/json/ledger-entry.v1.schema.json e desserializa em forge_schemas::ledger::LedgerEntry (Rust, tests/schema_fixtures.rs) — só há tipo do lado Rust hoje; o ledger é território exclusivo de forge-store (ADR 0001).",
+  "$comment": "Fixture golden do contrato ledger-entry.v1. Valida contra schemas/json/ledger-entry.v1.schema.json e desserializa em btv_schemas::ledger::LedgerEntry (Rust, tests/schema_fixtures.rs) — só há tipo do lado Rust hoje; o ledger é território exclusivo de btv-store (ADR 0001).",
   "valid": {
     "seq": 1,
     "prev_hash": "",

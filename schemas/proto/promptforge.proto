@@ -1,11 +1,11 @@
 // PromptForgeService — primeira ativação do canal gRPC Rust↔Python (Fase 3).
 // O sidecar Python expõe geradores declarativos, quality linter e glossário
-// (origem: prompte); o núcleo Rust consome via forge-sidecar sobre UDS.
+// (origem: prompte); o núcleo Rust consome via btv-sidecar sobre UDS.
 // Regra de ouro (ADR 0001) mantida: este serviço não gera texto de LLM —
 // isso continua exclusivo do gateway Rust.
 syntax = "proto3";
 
-package forge.promptforge.v1;
+package btv.promptforge.v1;
 
 service PromptForgeService {
   rpc Health(HealthRequest) returns (HealthResponse);

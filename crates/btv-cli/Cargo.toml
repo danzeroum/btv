@@ -1,0 +1,41 @@
+[package]
+name = "btv-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI da plataforma BuildToValue"
+
+[[bin]]
+name = "btv"
+path = "src/main.rs"
+
+[dependencies]
+btv-core.workspace = true
+btv-llm.workspace = true
+btv-schemas.workspace = true
+btv-store.workspace = true
+btv-tools.workspace = true
+btv-tui.workspace = true
+btv-sidecar.workspace = true
+btv-proto.workspace = true
+btv-server.workspace = true
+btv-verify.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+time.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+thiserror.workspace = true
+axum.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+jsonschema = "0.26"
+reqwest.workspace = true
+tower = { workspace = true, features = ["util"] }

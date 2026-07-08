@@ -5,7 +5,7 @@ target/
 .git/
 web/dist/
 **/*.db
-.forge/
+.btv/
 .venv/
 **/.venv/
 **/__pycache__/

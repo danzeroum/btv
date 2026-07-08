@@ -9,12 +9,12 @@ import { getLedger, verifyChain } from '../../../api/ledger'
 import type { LedgerEntry } from '../../../types/domain'
 
 /** Cor por prefixo de `actor` — `web:*` (override feito pelo navegador),
- * `forge-cli:*` (sessão de CLI/TUI/squad); qualquer outro (ex.: futuro
+ * `btv-cli:*` (sessão de CLI/TUI/squad); qualquer outro (ex.: futuro
  * agente Python) cai no terceiro tom. Puramente cosmético no cliente — o
  * dado real é a string `actor` em si, não essa cor. */
 function actorColor(actor: string): string {
   if (actor.startsWith('web:')) return 'var(--wire)'
-  if (actor.startsWith('forge-cli:')) return 'var(--ok)'
+  if (actor.startsWith('btv-cli:')) return 'var(--ok)'
   return 'var(--py)'
 }
 

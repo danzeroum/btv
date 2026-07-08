@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
 
-/** Fase 7 Onda 8 (A3): prova a fronteira por EXECUÇÃO contra o `forge
+/** Fase 7 Onda 8 (A3): prova a fronteira por EXECUÇÃO contra o `btv
  * dashboard` real com o `MemoryService` (sidecar Python real, ADR 0022) por
  * trás. O corpus (ver scripts/run-integration-server.mjs) é semeado DIRETO
  * no caminho que o sidecar real usa, sob um agente dedicado
  * (`e2e-memory-agent`) — nenhum outro spec desta suíte toca
- * `.forge/squad-memory`, então a asserção de contagem é robusta independente
+ * `.btv/squad-memory`, então a asserção de contagem é robusta independente
  * da ordem de execução dos arquivos de teste.
  */
 test('mapa de memória mostra o agente semeado e a busca léxica recupera por termo', async ({ page }) => {

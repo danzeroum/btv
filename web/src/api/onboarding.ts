@@ -1,7 +1,7 @@
 /**
  * Fase 7 Onda 13 (Modelo & Onboarding): `ENV_KEYS`/`DOCTOR_OUTPUT` (arrays
  * estáticos, sempre "tudo verde" exceto os fallbacks marcados de propósito)
- * saem do mock — `GET /api/doctor` (`forge-cli`, `doctor_console.rs`) agrega
+ * saem do mock — `GET /api/doctor` (`btv-cli`, `doctor_console.rs`) agrega
  * as 4 checagens reais (providers do gateway, `uv --version`, ping Docker,
  * git). A checagem de providers aqui é só o resumo agregado (`N/3
  * configurado(s)`) — nunca um preview de key mascarada (o backend nunca

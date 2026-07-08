@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://forge.buildtovalue.dev/schemas/plan.v1.schema.json",
+  "$id": "https://btv.buildtovalue.dev/schemas/plan.v1.schema.json",
   "title": "plan.v1",
   "description": "Manifesto de plano/entrega da esteira BuildToValue: fases → entregas exportáveis (DOCX/XLSX/PDF/MusicXML) → quality gates → critérios de sucesso → orçamento → rollback. Ponte entre o grafo do squad (squad.workflow.v1) e os artefatos que são o produto.",
   "type": "object",

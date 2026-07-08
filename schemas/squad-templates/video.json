@@ -1,0 +1,48 @@
+{
+  "id": "video",
+  "nome": "Vídeo",
+  "categoria": "criativa",
+  "cor": "#444d99",
+  "onda": 3,
+  "versao": "v0.4",
+  "publicado": false,
+  "descricao": "Roteiro, shot list, legendas e instruções de edição para sua produção.",
+  "papeis": [
+    "Roteirista",
+    "Diretor de shot list",
+    "Legendador",
+    "Montador"
+  ],
+  "formatos": [
+    {
+      "nome": "Roteiro",
+      "binario": false
+    },
+    {
+      "nome": "EDL",
+      "binario": false
+    },
+    {
+      "nome": "SRT",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "O que é o vídeo?",
+      "placeholder": "ex.: institucional de 90s para o site"
+    },
+    {
+      "label": "Mensagem central",
+      "placeholder": "ex.: confiança e velocidade de entrega"
+    },
+    {
+      "label": "Recursos disponíveis",
+      "placeholder": "ex.: banco de imagens + locução própria"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

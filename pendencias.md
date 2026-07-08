@@ -1362,3 +1362,84 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   `StepResult{step_id:"final_validation"}` aprovado é observável fora do
   retorno Python que `server.py` descartava. Detalhes completos e o
   raciocínio de cada decisão em `docs/adr/0023-runtool-ativado-squad-como-executor.md`.
+
+
+# BuildToValue — plataforma de squads para não técnicos (6 ondas)
+
+Plano aprovado com 6 observações (todas atendidas — ver commits `feat(btv)`).
+Decisões e descopes desta entrega:
+
+- **[decisão] "Pedir ajuste" no gate aprova o HITL COM a instrução em
+  contexto, nunca nega.** Confirmado no código antes de decidir: negação →
+  `orchestrator.py` aborta com "Plan rejected" (seria encerrar, não
+  refazer). A instrução entra pela MESMA injeção real do cockpit
+  (`inject_cockpit_context`) e a esteira regride visivelmente 2 etapas
+  (obs. 1 da aprovação), re-avançando com os eventos reais.
+- **[decisão] Cockpit virou real nesta entrega (era Fase 1a no console).**
+  `take_user_message` estava morto (`allow(dead_code)`); agora a inbox é
+  drenada e injetada como turno `user` no próximo `Generate` do agente
+  ativo — nos DOIS backends (real e roteirizado). Parse antes do dreno:
+  formato inesperado não perde a orientação (bug pego por teste).
+- **[decisão] Esteira sem % fabricado.** A barra da etapa ativa é pulsante
+  (indeterminada); posições inferidas dos eventos são rotuladas na UI
+  (obs. 4). Replay pós-reload: `Step`/`Consensus` com gate aberto = gate
+  aprovado fora da sessão → fecha por inferência (teste dedicado).
+- **[decisão] Entregas = só `edit` com exit 0.** `bash` pode escrever
+  qualquer coisa mas o scope não diz o quê — capturar seria adivinhar.
+  Registrado em conclusão limpa apenas (run com erro/kill não "entrega").
+- **[decisão] Lib bpmn consumida por submodule pinado + dist ESM via alias**
+  (não npm — publicar exige token, pendência já registrada NO repo da lib;
+  não workspace pnpm — `workspace:*` da lib não resolve fora dela).
+  `resolve.dedupe` de react/react-dom é obrigatório: sem ele o bundle de
+  produção carregava o React 18 de `vendor/bpmn/node_modules` junto do 19
+  do app (React error #525 SÓ em produção — dev funcionava; achado real).
+  **Zero mudança na lib**: registry e run-binding que o handoff §12 pedia
+  já existiam upstream (v1.0.0) — a onda 5 virou consumo.
+- **[descope] Aplicação do fluxo do Designer ao orquestrador real** — mesmo
+  descope honesto do console (squad.workflow.v1): salvar valida, versiona
+  (VersionRegistry) e audita (`btv.flow_saved` com snapshot hash); o
+  ▶ Testar roda o fluxo como DESCRIÇÃO da tarefa no motor real (com
+  run-binding na trilha), não como pipeline por etapas — reescrever o
+  UnifiedOrchestrator para pipelines configuráveis é a mesma categoria
+  arquitetural do max_autonomy_level (ADR 0021).
+- **[descope] Conversores binários (DOCX/PDF/XLSX/MusicXML→MIDI) na
+  sandbox** — confirmado na aprovação do plano: export honesto mostra "em
+  breve" e o download só existe para formatos de texto (flag `binario` no
+  squad-template.v1). `FORGE_SQUAD_MODEL` global e `SquadPool` capacidade 1
+  seguem como estavam (descopes herdados, re-declarados).
+- **[descope] A6 sem autenticação** — perfis locais nomeados para
+  atribuição (aprovado no plano); banner explícito na tela.
+- **[dúvida/futuro] Custo monetário por squad (A1)** exige tabela de preços
+  por modelo/provider — a tela mostra contagens reais e diz isso.
+- **[nota] fix pré-existente**: o HEAD da branch ("Add files via upload")
+  não compilava (ponto-e-vírgula no braço if do kill-switch em
+  `squad_agent.rs`) — corrigido em commit separado no início da entrega.
+
+# Rename completo do motor: Forge → BuildToValue/btv
+
+Pedido explícito do usuário após a entrega das 6 ondas. Esquema aplicado:
+`btv` como identificador técnico (crates `btv-*`, pacotes Python `btv_*`,
+binário `btv`, protos `btv.*.v1`, env vars `BTV_*`, diretório de dados
+`.btv/`, `btv.toml`) e **BuildToValue** na prosa/UI. 284 arquivos + 19
+diretórios/arquivos movidos; stubs gRPC Python regenerados (o descritor
+serializado embute o package — sed não basta); `uv.lock`/`Cargo.lock`
+regenerados; screenshots do console dev regeneradas (strings mudaram).
+
+- **[decisão] Exceções preservadas de propósito:** `PromptForge` (nome
+  próprio do componente de prompts, herdado do prompte — package
+  `btv.promptforge.v1`, serviço `PromptForgeService`); `forgetting.py`
+  ("forget" contém "forge" — palavra inglesa, não marca); documentos
+  históricos em `docs/` (ADRs, PLANO-*, DECISOES, handoffs de design,
+  roadmap-forge.html) ficam como registro com o nome antigo — reescrever
+  histórico falsificaria as decisões; este arquivo idem (as seções acima
+  citam os nomes da época).
+- **[achados reais do sed, corrigidos]** duas corrupções por substring:
+  `.forgetting` → `.btvtting` (regra `.forge`) e `IntelligentForgetting` →
+  `IntelligentBuildToValuetting` (regra `Forge`) — pegas por teste e por
+  varredura de colagem (`BuildToValue` grudado em palavra), restauradas.
+- **[migração]** instalações existentes: `mv .forge .btv` + renomear env
+  vars `FORGE_*`→`BTV_*` (nota no README). Sem código de migração
+  automática — local-first, decisão documentada.
+- **[fixes de UI da auditoria]** os 3 vazamentos de nome de motor na UI do
+  produto foram reescritos (erro da galeria sem citar comando; auditoria do
+  Designer "ledger da plataforma"; nota do A4 sem nome de crate).

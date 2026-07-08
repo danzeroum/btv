@@ -3,18 +3,18 @@
 // diretamente; tudo passa por aqui (keys, permissões e ledger ficam no core).
 syntax = "proto3";
 
-package forge.core.v1;
+package btv.core.v1;
 
 import "llm.proto";
 
 service CoreService {
   // Geração LLM via gateway (streaming de chunks).
-  rpc Generate(forge.llm.v1.LlmRequest) returns (stream forge.llm.v1.LlmChunk);
+  rpc Generate(btv.llm.v1.LlmRequest) returns (stream btv.llm.v1.LlmChunk);
   // Execução de ferramenta sujeita ao motor de permissões.
   rpc RunTool(ToolCall) returns (ToolResult);
   // Anexa entrada ao ledger append-only.
   rpc AppendLedger(LedgerAppend) returns (LedgerAck);
-  // Memória do squad persistida no forge-store.
+  // Memória do squad persistida no btv-store.
   rpc Recall(RecallRequest) returns (RecallResponse);
   rpc Remember(RememberRequest) returns (RememberAck);
   // Pedido de permissão/escalonamento HITL (decisão vem da TUI).
