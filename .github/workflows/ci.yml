@@ -196,7 +196,11 @@ jobs:
       run:
         working-directory: btv-web
     steps:
+      # submodules: o Squad Designer (U5) consome a lib bpmn de vendor/bpmn
+      # (pinada); scripts/ensure-bpmn.mjs constrói o dist dela no prebuild.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       # Rust: a suíte de integração sobe o `forge dashboard` real (mesma
       # razão do job `web`).
       - uses: dtolnay/rust-toolchain@stable

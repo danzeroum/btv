@@ -800,6 +800,88 @@ async fn delete_custom_handler(
     }
 }
 
+#[derive(Deserialize)]
+struct SalvarFluxoBody {
+    nome: String,
+    /// Diagrama completo da lib bpmn (BpmnDiagram serializado) — opaco para
+    /// o servidor, hasheado para a trilha (run-binding do Designer).
+    diagram: serde_json::Value,
+    /// Metadados de versão do registry da lib (`VersionRegistry.register`).
+    #[serde(default)]
+    versao_semantica: Option<String>,
+    #[serde(default)]
+    snapshot_hash: Option<String>,
+    /// Cabeça da cadeia do AuditLedger da lib (auditoria do fluxo, §7).
+    #[serde(default)]
+    audit_head: Option<String>,
+    #[serde(default)]
+    audit_len: Option<u64>,
+}
+
+/// `POST /api/btv/designer/flows` — "salvar como modelo" (U5→A5): o fluxo
+/// desenhado é validado minimamente, hasheado e gravado no ledger REAL
+/// (`btv.flow_saved`) com os metadados de versão do registry da lib.
+/// "Salvo e auditado" — a aplicação do fluxo ao orquestrador real continua
+/// sendo trabalho futuro (mesma honestidade do Designer do console Forge).
+async fn salvar_fluxo_handler(
+    State(state): State<BtvAgentState>,
+    Json(body): Json<SalvarFluxoBody>,
+) -> Response {
+    if body.nome.trim().is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new("empty_name", "o fluxo precisa de um nome")),
+        )
+            .into_response();
+    }
+    let Some(nodes) = body.diagram.get("nodes").and_then(|n| n.as_object()) else {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new(
+                "invalid_diagram",
+                "diagrama sem 'nodes' — não é um BpmnDiagram serializado",
+            )),
+        )
+            .into_response();
+    };
+    if nodes.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new(
+                "empty_diagram",
+                "fluxo vazio não vira modelo",
+            )),
+        )
+            .into_response();
+    }
+    let canonico = serde_json::to_string(&body.diagram).unwrap_or_default();
+    let diagram_sha256 = forge_schemas::sha256_hex(&canonico);
+    match append_ledger(
+        &state.ledger,
+        "btv.flow_saved",
+        serde_json::json!({
+            "nome": body.nome,
+            "blocos": nodes.len(),
+            "diagram_sha256": diagram_sha256,
+            "versao_semantica": body.versao_semantica,
+            "snapshot_hash": body.snapshot_hash,
+            "audit_head": body.audit_head,
+            "audit_len": body.audit_len,
+        }),
+    ) {
+        Ok(seq) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({ "seq": seq, "diagram_sha256": diagram_sha256 })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("ledger_error", e)),
+        )
+            .into_response(),
+    }
+}
+
 /// Router aditivo do BuildToValue — `.merge()`ado ao router do agente web
 /// (mesma guarda de `Origin`/`Host` do `merged_router`).
 pub fn router(
@@ -819,6 +901,7 @@ pub fn router(
             "/api/btv/squads/{task_id}/ajuste",
             post(pedir_ajuste_handler),
         )
+        .route("/api/btv/designer/flows", post(salvar_fluxo_handler))
         .route("/api/btv/deliverables", get(list_deliverables_handler))
         .route(
             "/api/btv/deliverables/{id}/download",

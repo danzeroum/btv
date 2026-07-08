@@ -14,6 +14,7 @@ import {
   connectSquadEvents,
   emergencyStopSquad,
   postSquadMessage,
+  runSquad,
   type SquadChatMessage,
   type SquadEventEnvelope,
 } from '../api/squad'
@@ -49,6 +50,9 @@ export interface SquadRunApi {
   /** Reconecta a um run persistido (U6 → Ao vivo): o SSE reemite o snapshot
    *  completo e a esteira é recomputada dos eventos reais. */
   abrirRun: (run: BtvRun, template: SquadTemplate) => void
+  /** ▶ Testar squad do Designer (U5): roda o fluxo desenhado no MESMO motor
+   *  real do squad, marcado "execução de teste" na tela Ao vivo. */
+  ativarTeste: (nome: string, etapas: Etapa[], descricao: string) => Promise<void>
   aprovar: () => Promise<void>
   ajustar: (instrucao: string) => Promise<void>
   enviarChat: (texto: string) => Promise<void>
@@ -129,6 +133,39 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
     [conectar, dispatch],
   )
 
+  const ativarTeste = useCallback<SquadRunApi['ativarTeste']>(
+    async (nome, etapas, descricao) => {
+      const resp = await runSquad(descricao)
+      const templateStub: SquadTemplate = {
+        id: 'designer',
+        nome,
+        categoria: 'criativa',
+        cor: '#2b7a8c',
+        onda: 1,
+        versao: 'v0.1',
+        publicado: false,
+        descricao: 'Criada por você no Squad Designer.',
+        papeis: [...new Set(etapas.map((e) => e.papel).filter((p) => p !== 'Você' && p !== 'BuildToValue'))],
+        formatos: [],
+        perguntas: [],
+        gates: [],
+      }
+      setRun({
+        template: templateStub,
+        nome,
+        etapas,
+        taskId: resp.task_id,
+        teste: true,
+        events: [],
+        acoes: [],
+        streamEnded: false,
+      })
+      conectar(resp.task_id)
+      dispatch({ type: 'SET_SCREEN', screen: 'vivo' })
+    },
+    [conectar, dispatch],
+  )
+
   const view = useMemo(
     () => (run ? esteiraFromEvents(run.etapas, run.events, run.acoes, run.streamEnded) : null),
     [run],
@@ -198,8 +235,8 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
   }, [run, dispatch])
 
   const value = useMemo<SquadRunApi>(
-    () => ({ run, view, feed, chat, ativar, abrirRun, aprovar, ajustar, enviarChat, encerrar }),
-    [run, view, feed, chat, ativar, abrirRun, aprovar, ajustar, enviarChat, encerrar],
+    () => ({ run, view, feed, chat, ativar, abrirRun, ativarTeste, aprovar, ajustar, enviarChat, encerrar }),
+    [run, view, feed, chat, ativar, abrirRun, ativarTeste, aprovar, ajustar, enviarChat, encerrar],
   )
 
   return <SquadRunContext.Provider value={value}>{children}</SquadRunContext.Provider>
