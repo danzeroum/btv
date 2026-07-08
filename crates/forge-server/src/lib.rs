@@ -15,6 +15,8 @@
 //! `forge-server` não pode depender de `forge-cli`, a dependência é na
 //! direção oposta).
 
+mod btv;
+
 use axum::extract::{Path as AxumPath, Query, Request, State};
 use axum::http::{header, Method, StatusCode};
 use axum::middleware::{self, Next};
@@ -135,6 +137,7 @@ pub fn router(
         .route("/api/verify/run", post(run_verify_start))
         .route("/api/verify/{id}", get(get_verify_status))
         .route("/api/designer/workflow", post(save_workflow))
+        .route("/api/btv/templates", get(btv::list_templates))
         .fallback_service(serve_dir);
     let router = match dev_console {
         Some(svc) => router.nest_service("/dev", svc),

@@ -1,0 +1,48 @@
+{
+  "id": "musica",
+  "nome": "Música simbólica",
+  "categoria": "criativa",
+  "cor": "#6b4fae",
+  "onda": 3,
+  "versao": "v0.9",
+  "publicado": true,
+  "descricao": "Composição e arranjo com partitura exportável — MusicXML, MIDI e PDF.",
+  "papeis": [
+    "Compositor",
+    "Arranjador",
+    "Copista",
+    "Revisor técnico"
+  ],
+  "formatos": [
+    {
+      "nome": "MusicXML",
+      "binario": false
+    },
+    {
+      "nome": "MIDI",
+      "binario": true
+    },
+    {
+      "nome": "PDF",
+      "binario": true
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Forma e caráter",
+      "placeholder": "ex.: peça AABA, lírica, ~2 min"
+    },
+    {
+      "label": "Instrumentação",
+      "placeholder": "ex.: quarteto de cordas"
+    },
+    {
+      "label": "Andamento e tonalidade",
+      "placeholder": "ex.: 72 bpm, Ré menor"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

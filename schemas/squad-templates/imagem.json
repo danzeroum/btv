@@ -1,0 +1,48 @@
+{
+  "id": "imagem",
+  "nome": "Imagem / Branding",
+  "categoria": "criativa",
+  "cor": "#8d3f6a",
+  "onda": 2,
+  "versao": "v1.0",
+  "publicado": true,
+  "descricao": "Briefing → direção → geração → curadoria: packs visuais com guideline.",
+  "papeis": [
+    "Diretor de arte",
+    "Prompt designer",
+    "Curador",
+    "Finalizador"
+  ],
+  "formatos": [
+    {
+      "nome": "PNG",
+      "binario": true
+    },
+    {
+      "nome": "SVG",
+      "binario": false
+    },
+    {
+      "nome": "PDF",
+      "binario": true
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Briefing visual",
+      "placeholder": "ex.: campanha de lançamento, tom quente"
+    },
+    {
+      "label": "Referências",
+      "placeholder": "ex.: 3 links ou uploads de moodboard"
+    },
+    {
+      "label": "Usos previstos",
+      "placeholder": "ex.: social 1:1, banner site, impresso A4"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

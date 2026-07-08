@@ -23,6 +23,7 @@ use forge_schemas::handoff::HandoffEvent;
 use forge_schemas::ledger::LedgerEntry;
 use forge_schemas::persona::Persona;
 use forge_schemas::plan::Plan;
+use forge_schemas::squad_template::SquadTemplate;
 use forge_schemas::telemetry::TelemetryEvent;
 use forge_schemas::workflow::SquadWorkflow;
 use jsonschema::validator_for;
@@ -154,6 +155,36 @@ fn squad_workflow_fixture_valida_e_desserializa() {
     assert!(
         !validator.is_valid(&doc["invalid_missing_removable"]),
         "documento sem 'removable' deveria reprovar o schema"
+    );
+}
+
+#[test]
+fn squad_template_fixture_valida_e_desserializa() {
+    let schema = schema("squad-template");
+    let doc = fixture("squad-template");
+    let validator = validator_for(&schema).expect("schema compila");
+
+    assert!(
+        validator.is_valid(&doc["valid"]),
+        "fixture válida não bateu o schema: {:?}",
+        validator.iter_errors(&doc["valid"]).collect::<Vec<_>>()
+    );
+    let parsed: SquadTemplate =
+        serde_json::from_value(doc["valid"].clone()).expect("desserializa em SquadTemplate");
+    assert_eq!(parsed.id, "editorial");
+    assert_eq!(parsed.papeis.len(), 4);
+    // DOCX é binário (exportação direta indisponível — sem conversor ainda);
+    // MD não. A UI usa exatamente este flag para desabilitar o export.
+    assert!(parsed
+        .formatos
+        .iter()
+        .any(|f| f.nome == "DOCX" && f.binario));
+    assert!(parsed.formatos.iter().any(|f| f.nome == "MD" && !f.binario));
+    assert!(parsed.validate().is_ok());
+
+    assert!(
+        !validator.is_valid(&doc["invalid_missing_formatos"]),
+        "documento sem 'formatos' deveria reprovar o schema"
     );
 }
 

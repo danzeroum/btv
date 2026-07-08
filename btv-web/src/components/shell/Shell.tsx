@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar'
 import { GearDrawer } from './GearDrawer'
 import { SCREEN_META } from '../../lib/screenMeta'
 import { SCREEN_COMPONENTS } from '../../lib/screenComponents'
+import { WizardOverlay } from '../wizard/Wizard'
 
 export function Shell() {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -39,6 +40,7 @@ export function Shell() {
         </main>
       </div>
       {gearOpen && <GearDrawer onClose={() => setGearOpen(false)} />}
+      <WizardOverlay />
     </div>
   )
 }

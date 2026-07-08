@@ -1,0 +1,48 @@
+{
+  "id": "bi",
+  "nome": "BI / Dados",
+  "categoria": "analise",
+  "cor": "#1d6f63",
+  "onda": 1,
+  "versao": "v2.1",
+  "publicado": true,
+  "descricao": "Análises recorrentes, gráficos e relatórios executivos a partir dos seus dados.",
+  "papeis": [
+    "Preparador de dados",
+    "Analista",
+    "Visualizador",
+    "Revisor"
+  ],
+  "formatos": [
+    {
+      "nome": "XLSX",
+      "binario": true
+    },
+    {
+      "nome": "CSV",
+      "binario": false
+    },
+    {
+      "nome": "HTML",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Fonte de dados",
+      "placeholder": "ex.: export CSV do ERP, planilha de vendas"
+    },
+    {
+      "label": "Pergunta de negócio",
+      "placeholder": "ex.: onde perdemos margem no último trimestre?"
+    },
+    {
+      "label": "Métricas-chave",
+      "placeholder": "ex.: margem por praça, ticket médio, churn"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

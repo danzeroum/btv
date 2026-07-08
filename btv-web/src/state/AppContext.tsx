@@ -15,6 +15,9 @@ export interface AppState {
   /** Recorte da squad ativa que o shell exibe; null = nenhuma squad rodando.
    *  O estado completo da execução (esteira, feed, chat) chega na Onda 3. */
   squad: ActiveSquadInfo | null
+  /** Wizard "Montar squad" (U2) — overlay de fluxo, não ocupa item de menu.
+   *  Aberto pela galeria (U1) e pelo "reativar" de Minhas squads (U6). */
+  wizardTemplateId: string | null
 }
 
 export type AppAction =
@@ -22,6 +25,8 @@ export type AppAction =
   | { type: 'SET_SCREEN'; screen: ScreenId }
   | { type: 'SET_ACCENT'; accent: string | null }
   | { type: 'SET_SQUAD'; squad: ActiveSquadInfo | null }
+  | { type: 'OPEN_WIZARD'; templateId: string }
+  | { type: 'CLOSE_WIZARD' }
 
 function readPersistedAccent(): string | null {
   try {
@@ -33,7 +38,13 @@ function readPersistedAccent(): string | null {
 }
 
 function initState(): AppState {
-  return { persona: 'user', screen: DEFAULT_SCREEN.user, accent: readPersistedAccent(), squad: null }
+  return {
+    persona: 'user',
+    screen: DEFAULT_SCREEN.user,
+    accent: readPersistedAccent(),
+    squad: null,
+    wizardTemplateId: null,
+  }
 }
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -69,6 +80,10 @@ function reducer(state: AppState, action: AppAction): AppState {
       const screen = !action.squad && state.screen === 'vivo' ? DEFAULT_SCREEN.user : state.screen
       return { ...state, squad: action.squad, screen }
     }
+    case 'OPEN_WIZARD':
+      return { ...state, wizardTemplateId: action.templateId }
+    case 'CLOSE_WIZARD':
+      return { ...state, wizardTemplateId: null }
   }
 }
 

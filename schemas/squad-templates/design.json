@@ -1,0 +1,48 @@
+{
+  "id": "design",
+  "nome": "Design / UX",
+  "categoria": "criativa",
+  "cor": "#2b7a8c",
+  "onda": 2,
+  "versao": "v1.0",
+  "publicado": true,
+  "descricao": "Fluxos, wireframes, specs e auditorias de heurísticas.",
+  "papeis": [
+    "Pesquisador UX",
+    "Arquiteto de fluxo",
+    "Wireframer",
+    "Auditor de heurísticas"
+  ],
+  "formatos": [
+    {
+      "nome": "SVG",
+      "binario": false
+    },
+    {
+      "nome": "JSON",
+      "binario": false
+    },
+    {
+      "nome": "HTML",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "O que desenhar ou auditar?",
+      "placeholder": "ex.: fluxo de checkout do app"
+    },
+    {
+      "label": "Problema atual",
+      "placeholder": "ex.: 40% abandonam no frete"
+    },
+    {
+      "label": "Restrições",
+      "placeholder": "ex.: design system existente, mobile-first"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "sales",
+  "nome": "Sales enablement",
+  "categoria": "operacoes",
+  "cor": "#b0742c",
+  "onda": 1,
+  "versao": "v2.0",
+  "publicado": true,
+  "descricao": "Propostas, battlecards e scripts de follow-up alinhados ao seu playbook.",
+  "papeis": [
+    "Estrategista",
+    "Redator de propostas",
+    "Battlecard writer",
+    "Revisor comercial"
+  ],
+  "formatos": [
+    {
+      "nome": "DOCX",
+      "binario": true
+    },
+    {
+      "nome": "PDF",
+      "binario": true
+    },
+    {
+      "nome": "Slides",
+      "binario": true
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "O que a squad vai produzir?",
+      "placeholder": "ex.: proposta para a conta Y"
+    },
+    {
+      "label": "Contexto do deal",
+      "placeholder": "ex.: concorrendo com Z, decisor é o CFO"
+    },
+    {
+      "label": "Materiais existentes",
+      "placeholder": "ex.: deck institucional, tabela de preços"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

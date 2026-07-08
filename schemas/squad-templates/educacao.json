@@ -1,0 +1,48 @@
+{
+  "id": "educacao",
+  "nome": "Educação",
+  "categoria": "conteudo",
+  "cor": "#9a6b14",
+  "onda": 2,
+  "versao": "v1.0",
+  "publicado": true,
+  "descricao": "Trilhas, apostilas, exercícios e rubricas de avaliação completas.",
+  "papeis": [
+    "Planejador pedagógico",
+    "Autor",
+    "Avaliador",
+    "Revisor"
+  ],
+  "formatos": [
+    {
+      "nome": "PDF",
+      "binario": true
+    },
+    {
+      "nome": "Slides",
+      "binario": true
+    },
+    {
+      "nome": "Quiz",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Tema e objetivo de aprendizagem",
+      "placeholder": "ex.: Excel intermediário para financeiro"
+    },
+    {
+      "label": "Perfil dos alunos",
+      "placeholder": "ex.: analistas juniores, 20 pessoas"
+    },
+    {
+      "label": "Carga e formato",
+      "placeholder": "ex.: 4 aulas de 1h + exercícios"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

@@ -197,6 +197,10 @@ jobs:
         working-directory: btv-web
     steps:
       - uses: actions/checkout@v4
+      # Rust: a suíte de integração sobe o `forge dashboard` real (mesma
+      # razão do job `web`).
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -206,3 +210,4 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - run: pnpm test:e2e:integration

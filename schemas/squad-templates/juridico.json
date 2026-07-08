@@ -1,0 +1,48 @@
+{
+  "id": "juridico",
+  "nome": "Jurídico documental",
+  "categoria": "operacoes",
+  "cor": "#6b5744",
+  "onda": 2,
+  "versao": "v1.0",
+  "publicado": true,
+  "descricao": "Minutas, revisão de cláusulas e checklists — sempre com revisão humana.",
+  "papeis": [
+    "Analista jurídico",
+    "Redator de minutas",
+    "Revisor de cláusulas",
+    "Compliance"
+  ],
+  "formatos": [
+    {
+      "nome": "DOCX",
+      "binario": true
+    },
+    {
+      "nome": "PDF",
+      "binario": true
+    },
+    {
+      "nome": "Checklist",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Tipo de documento",
+      "placeholder": "ex.: NDA bilateral, prestação de serviços"
+    },
+    {
+      "label": "Partes e contexto",
+      "placeholder": "ex.: contratação de agência, prazo 12 meses"
+    },
+    {
+      "label": "Pontos sensíveis",
+      "placeholder": "ex.: propriedade intelectual, multa rescisória"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

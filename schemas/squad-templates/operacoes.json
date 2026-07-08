@@ -1,0 +1,48 @@
+{
+  "id": "operacoes",
+  "nome": "Operações / SOPs",
+  "categoria": "operacoes",
+  "cor": "#57702b",
+  "onda": 1,
+  "versao": "v1.0",
+  "publicado": true,
+  "descricao": "SOPs, playbooks e runbooks auditáveis, prontos para o time seguir.",
+  "papeis": [
+    "Mapeador de processo",
+    "Redator técnico",
+    "Auditor de processo",
+    "Publicador"
+  ],
+  "formatos": [
+    {
+      "nome": "MD",
+      "binario": false
+    },
+    {
+      "nome": "PDF",
+      "binario": true
+    },
+    {
+      "nome": "YAML",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Qual processo documentar?",
+      "placeholder": "ex.: onboarding de cliente enterprise"
+    },
+    {
+      "label": "Quem executa hoje?",
+      "placeholder": "ex.: time de CS, 4 pessoas"
+    },
+    {
+      "label": "Nível de detalhe",
+      "placeholder": "ex.: passo a passo com checklists"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "podcast",
+  "nome": "Podcast",
+  "categoria": "criativa",
+  "cor": "#c04a4a",
+  "onda": 3,
+  "versao": "v0.6",
+  "publicado": false,
+  "descricao": "Pauta, roteiro, perguntas, cortes e show notes prontos para gravar.",
+  "papeis": [
+    "Pauteiro",
+    "Roteirista",
+    "Editor de cortes",
+    "Produtor"
+  ],
+  "formatos": [
+    {
+      "nome": "Roteiro",
+      "binario": false
+    },
+    {
+      "nome": "SRT",
+      "binario": false
+    },
+    {
+      "nome": "Notes",
+      "binario": false
+    }
+  ],
+  "perguntas": [
+    {
+      "label": "Tema do episódio",
+      "placeholder": "ex.: entrevista sobre carreira em dados"
+    },
+    {
+      "label": "Convidado e ângulo",
+      "placeholder": "ex.: CTO de fintech, foco em decisões"
+    },
+    {
+      "label": "Duração alvo",
+      "placeholder": "ex.: 45 min + 3 cortes de 60s"
+    }
+  ],
+  "gates": [
+    "Aprovar o rascunho antes da revisão",
+    "Aprovar a entrega final antes da exportação"
+  ]
+}

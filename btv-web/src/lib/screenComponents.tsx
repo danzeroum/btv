@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import type { ScreenId } from '../types/domain'
+import { Inicio } from '../components/screens/user/Inicio'
 
 /** Placeholder honesto de tela ainda não construída — substituído onda a onda
  *  (ordem da seção 16 do handoff). Nunca simula dado ou comportamento. */
@@ -22,7 +23,6 @@ function EmConstrucao({ onda }: { onda: string }) {
   )
 }
 
-const Inicio = () => <EmConstrucao onda="Onda 2 (Galeria + Wizard)" />
 const Vivo = () => <EmConstrucao onda="Onda 3 (Squad ao vivo + Cockpit)" />
 const Biblioteca = () => <EmConstrucao onda="Onda 4 (Biblioteca de entregas)" />
 const Designer = () => <EmConstrucao onda="Onda 5 (Squad Designer sobre bpmn-react)" />
