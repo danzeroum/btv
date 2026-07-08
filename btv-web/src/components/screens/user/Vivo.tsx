@@ -125,7 +125,7 @@ export function Vivo() {
               dotStyle = { ...base, background: cor, color: '#fff', fontWeight: 700 }
               dotIcon = '✓'
             } else if (active && e.gate && view.gateOpen) {
-              dotStyle = { ...base, background: 'var(--gold)', color: '#3d2b05', animation: 'btvPulse 1.6s infinite' }
+              dotStyle = { ...base, background: 'var(--decision)', color: 'var(--card)', animation: 'btvPulse 1.6s infinite' }
               dotIcon = '✋'
             } else if (active) {
               dotStyle = {
@@ -189,10 +189,10 @@ export function Vivo() {
           {view.gateOpen && etapaAtual && (
             <div
               data-testid="gate-card"
-              style={{ background: 'var(--white)', border: '2px solid var(--gold)', borderRadius: 16, padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
+              style={{ background: 'var(--white)', border: '2px solid var(--decision)', borderRadius: 16, padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--gold)', color: '#3d2b05', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
+                <span style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--decision)', color: 'var(--card)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
                   ✋
                 </span>
                 <span style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 16 }}>
