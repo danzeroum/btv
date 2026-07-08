@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #efe9de; }
+  a { color: #14614f; } a:hover { color: #0c4237; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #cfc5b0; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @keyframes btvPulse { 0%,100% { opacity:.35 } 50% { opacity:1 } }
+  @keyframes btvDots { 0% { content:'' } }
+  @keyframes btvBlink { 0%,49% { opacity:1 } 50%,100% { opacity:.15 } }
+  input, textarea { font-family: 'Instrument Sans', sans-serif; }
+  input:focus, textarea:focus { outline: 2px solid #14614f33; border-color: #14614f !important; }
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="--paper:#efe9de; --card:#fbf8f1; --white:#ffffff; --ink:#221d15; --muted:#6f675a; --faint:#a89e8b; --line:#e0d7c4; --line2:#d2c7ae; --brand:#14614f; --brandink:#0c4237; --gold:#f2b63c; --ok:#3d8b4f; --warn:#b8531f; --mono:'Spline Sans Mono',monospace; --sans:'Instrument Sans',sans-serif; --disp:'Bricolage Grotesque',sans-serif; min-height:100vh; height:100vh; background:var(--paper); color:var(--ink); font-family:var(--sans); display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- ══════ TOPBAR ══════ -->
+  <header style="display:flex; align-items:center; gap:22px; padding:12px 22px; border-bottom:1px solid var(--line2); background:var(--card); flex:none; z-index:30;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div style="width:30px; height:30px; border-radius:9px; background:var(--brand); color:var(--gold); display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:800; font-size:16px;">B</div>
+      <div style="display:flex; flex-direction:column; gap:1px;">
+        <span style="font-family:var(--disp); font-weight:700; font-size:16px; letter-spacing:-.01em; line-height:1;">BuildToValue</span>
+        <span style="font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); white-space:nowrap;">squads de IA para cada ofício</span>
+      </div>
+    </div>
+
+    <div style="display:flex; flex:none; background:var(--paper); border:1px solid var(--line2); border-radius:10px; padding:3px; gap:2px;">
+      <button onClick="{{ setUser }}" style="{{ userTabStyle }}">Meu espaço</button>
+      <button onClick="{{ setAdmin }}" style="{{ adminTabStyle }}">Administração</button>
+    </div>
+
+    <div style="margin-left:auto; display:flex; align-items:center; gap:18px; font-family:var(--mono); font-size:11px; color:var(--muted); min-width:0; overflow:hidden;">
+      <sc-if value="{{ hasSquad }}" hint-placeholder-val="{{ false }}">
+        <span style="display:flex; align-items:center; gap:8px; background:var(--white); border:1px solid var(--line); border-radius:999px; padding:5px 14px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:{{ squadCor }}; animation:btvPulse 2s infinite;"></span>
+          <span style="color:var(--ink); font-weight:500;">{{ squadNome }}</span>
+          <span style="color:var(--faint);">{{ squadStatusLabel }}</span>
+        </span>
+      </sc-if>
+      <span style="display:flex; align-items:center; gap:7px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>local · 127.0.0.1</span>
+    </div>
+    <button onClick="{{ toggleGear }}" title="Ajustes rápidos" style="flex:none; width:34px; height:34px; border-radius:10px; border:1px solid var(--line2); background:var(--white); color:var(--muted); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;" style-hover="color:var(--ink); border-color:var(--ink);">⚙</button>
+  </header>
+
+  <!-- ══════ BODY ══════ -->
+  <div style="display:flex; flex:1; min-height:0;">
+
+    <!-- SIDEBAR -->
+    <nav style="width:236px; flex:none; border-right:1px solid var(--line2); background:var(--card); padding:18px 12px 14px; display:flex; flex-direction:column; gap:3px; overflow-y:auto;">
+      <sc-if value="{{ showSquadSection }}" hint-placeholder-val="{{ false }}">
+        <div style="font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:{{ squadCor }}; padding:2px 10px 8px;">squad ativa</div>
+        <sc-for list="{{ navSquad }}" as="it" hint-placeholder-count="2">
+          <button onClick="{{ it.on }}" style="{{ it.style }}">
+            <span style="font-family:var(--mono); font-size:13px; width:20px; text-align:center; flex:none; color:{{ it.accent }};">{{ it.icon }}</span>
+            <span style="font-size:13.5px; font-weight:500;">{{ it.label }}</span>
+            <sc-if value="{{ it.badge }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto; background:var(--warn); color:#fff; font-family:var(--mono); font-size:9.5px; border-radius:999px; padding:2px 7px;">{{ it.badge }}</span></sc-if>
+          </button>
+        </sc-for>
+        <div style="height:1px; background:var(--line); margin:12px 6px;"></div>
+      </sc-if>
+
+      <div style="font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); padding:2px 10px 8px;">{{ navHeading }}</div>
+      <sc-for list="{{ navMain }}" as="it" hint-placeholder-count="4">
+        <button onClick="{{ it.on }}" style="{{ it.style }}">
+          <span style="font-family:var(--mono); font-size:13px; width:20px; text-align:center; flex:none; color:{{ it.accent }};">{{ it.icon }}</span>
+          <span style="display:flex; flex-direction:column; gap:2px; text-align:left; min-width:0;">
+            <span style="font-size:13.5px; font-weight:500;">{{ it.label }}</span>
+            <span style="font-size:10.5px; color:var(--faint); font-family:var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ it.hint }}</span>
+          </span>
+        </button>
+      </sc-for>
+
+      <div style="margin-top:auto; border-top:1px solid var(--line); padding:12px 10px 2px; display:flex; align-items:center; gap:10px;">
+        <div style="width:28px; height:28px; border-radius:50%; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:700; font-size:12px;">M</div>
+        <div style="display:flex; flex-direction:column; gap:1px;">
+          <span style="font-size:12.5px; font-weight:500;">Marina L.</span>
+          <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ perfilLabel }}</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- STAGE -->
+    <main style="flex:1; min-width:0; overflow-y:auto; background:var(--paper);">
+      <div style="max-width:1060px; margin:0 auto; padding:30px 34px 60px; display:flex; flex-direction:column; gap:22px;">
+
+        <!-- screen header -->
+        <div style="display:flex; align-items:flex-end; gap:16px;">
+          <div style="min-width:0;">
+            <div style="font-family:var(--mono); font-size:10.5px; letter-spacing:.15em; text-transform:uppercase; color:{{ screenAccent }};">{{ screenKicker }}</div>
+            <h1 style="font-family:var(--disp); font-weight:700; font-size:30px; margin:6px 0 0; letter-spacing:-.02em;">{{ screenTitle }}</h1>
+          </div>
+          <div style="margin-left:auto; font-size:13px; color:var(--muted); max-width:340px; text-align:right; line-height:1.55; flex:none;">{{ screenNote }}</div>
+        </div>
+
+        <!-- ░░░░ U1 · INÍCIO / GALERIA ░░░░ -->
+        <sc-if value="{{ isInicio }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <sc-for list="{{ catChips }}" as="c" hint-placeholder-count="5">
+              <button onClick="{{ c.on }}" style="{{ c.style }}">{{ c.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:14px;">
+            <sc-for list="{{ galeria }}" as="m" hint-placeholder-count="6">
+              <button onClick="{{ m.on }}" style="min-width:0; text-align:left; background:var(--white); border:1px solid var(--line); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:12px; cursor:pointer; font-family:var(--sans); color:var(--ink); transition:transform .15s, box-shadow .15s, border-color .15s;" style-hover="transform:translateY(-3px); box-shadow:0 14px 30px -18px #22140a55; border-color:var(--line2);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="width:12px; height:12px; border-radius:4px; background:{{ m.cor }}; flex:none;"></span>
+                  <span style="font-family:var(--disp); font-weight:700; font-size:16px; letter-spacing:-.01em;">{{ m.nome }}</span>
+                  <span style="{{ m.ondaStyle }}">{{ m.ondaLabel }}</span>
+                </div>
+                <div style="font-size:12.5px; color:var(--muted); line-height:1.55; min-height:38px;">{{ m.desc }}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                  <sc-for list="{{ m.papeisChips }}" as="p" hint-placeholder-count="4">
+                    <span style="font-size:10.5px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:3px 9px; color:var(--muted);">{{ p.n }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px; border-top:1px solid var(--line); padding-top:11px; margin-top:2px;">
+                  <sc-for list="{{ m.fmtChips }}" as="f" hint-placeholder-count="3">
+                    <span style="font-family:var(--mono); font-size:9.5px; letter-spacing:.06em; background:#f0ebdf; border-radius:5px; padding:3px 7px; color:{{ m.cor }}; font-weight:600;">{{ f.n }}</span>
+                  </sc-for>
+                  <span style="margin-left:auto; font-family:var(--mono); font-size:11px; color:{{ m.cor }}; font-weight:600;">montar →</span>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ U3 · SQUAD AO VIVO ░░░░ -->
+        <sc-if value="{{ isVivo }}" hint-placeholder-val="{{ false }}">
+          <!-- esteira -->
+          <div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:24px 26px 20px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+              <span style="width:12px; height:12px; border-radius:4px; background:{{ squadCor }};"></span>
+              <span style="font-family:var(--disp); font-weight:700; font-size:17px;">{{ squadNome }}</span>
+              <span style="font-family:var(--mono); font-size:10.5px; color:var(--faint); letter-spacing:.08em;">{{ squadMeta }}</span>
+              <button onClick="{{ encerrarSquad }}" style="margin-left:auto; background:none; border:1px solid var(--line2); border-radius:8px; padding:6px 13px; font-family:var(--mono); font-size:10.5px; color:var(--muted); cursor:pointer;" style-hover="border-color:var(--warn); color:var(--warn);">encerrar squad</button>
+            </div>
+            <div style="display:flex; align-items:flex-start; gap:0;">
+              <sc-for list="{{ esteira }}" as="e" hint-placeholder-count="7">
+                <div style="flex:1; display:flex; flex-direction:column; gap:8px; position:relative; padding:0 4px;">
+                  <div style="display:flex; align-items:center; width:100%;">
+                    <span style="flex:1; height:2px; background:{{ e.lineL }};"></span>
+                    <span style="{{ e.dotStyle }}">{{ e.dotIcon }}</span>
+                    <span style="flex:1; height:2px; background:{{ e.lineR }};"></span>
+                  </div>
+                  <div style="text-align:center; display:flex; flex-direction:column; gap:3px;">
+                    <span style="font-size:12px; font-weight:600; color:{{ e.nomeCor }};">{{ e.nome }}</span>
+                    <span style="font-family:var(--mono); font-size:9.5px; color:var(--faint);">{{ e.papel }}</span>
+                  </div>
+                  <sc-if value="{{ e.showProg }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:4px; background:var(--paper); border-radius:99px; overflow:hidden; margin:0 12px;">
+                      <div style="height:100%; background:{{ squadCor }}; border-radius:99px; width:{{ e.prog }}%;"></div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:14px; align-items:start;">
+            <!-- painel do papel ativo OU gate -->
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <sc-if value="{{ gateOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--white); border:2px solid var(--gold); border-radius:16px; padding:22px 24px; display:flex; flex-direction:column; gap:14px;">
+                  <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="width:26px; height:26px; border-radius:8px; background:var(--gold); color:#3d2b05; display:flex; align-items:center; justify-content:center; font-size:14px;">✋</span>
+                    <span style="font-family:var(--disp); font-weight:700; font-size:16px;">{{ gateTitulo }}</span>
+                    <span style="margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--faint); letter-spacing:.1em;">gate humano</span>
+                  </div>
+                  <div style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:16px 18px; font-size:13.5px; line-height:1.65; color:var(--ink);">
+                    <div style="font-family:var(--mono); font-size:10px; color:{{ squadCor }}; letter-spacing:.1em; text-transform:uppercase; margin-bottom:8px;">prévia · {{ gateArtefato }}</div>
+                    {{ gatePreview }}
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:5px;">
+                    <sc-for list="{{ gateChecks }}" as="c" hint-placeholder-count="3">
+                      <span style="font-size:12.5px; color:var(--muted); display:flex; gap:8px; align-items:center;"><span style="color:var(--ok); font-weight:700;">✓</span>{{ c.t }}</span>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ ajusteMode }}" hint-placeholder-val="{{ false }}">
+                    <textarea ref="{{ ajusteRef }}" placeholder="Descreva o ajuste em uma frase — ela vira instrução para o papel certo…" style="width:100%; min-height:64px; border:1px solid var(--line2); border-radius:10px; padding:12px 14px; font-size:13.5px; background:var(--paper); color:var(--ink); resize:vertical;"></textarea>
+                  </sc-if>
+                  <div style="display:flex; gap:10px;">
+                    <button onClick="{{ aprovarGate }}" style="background:var(--brand); color:#fff; border:none; border-radius:10px; padding:11px 22px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--sans);" style-hover="background:var(--brandink);">Aprovar e continuar</button>
+                    <button onClick="{{ pedirAjuste }}" style="background:none; border:1px solid var(--line2); border-radius:10px; padding:11px 18px; font-size:13.5px; color:var(--muted); cursor:pointer; font-family:var(--sans);" style-hover="border-color:var(--ink); color:var(--ink);">{{ ajusteBtnLabel }}</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ showPainelAtivo }}" hint-placeholder-val="{{ true }}">
+                <div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:22px 24px; display:flex; gap:16px; align-items:flex-start;">
+                  <div style="width:44px; height:44px; border-radius:14px; background:{{ squadCor }}; color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:800; font-size:17px; flex:none;">{{ ativoInicial }}</div>
+                  <div style="display:flex; flex-direction:column; gap:6px; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <span style="font-family:var(--disp); font-weight:700; font-size:15.5px;">{{ ativoPapel }}</span>
+                      <span style="font-family:var(--mono); font-size:10px; background:#eaf1ec; color:var(--ok); border-radius:999px; padding:3px 9px;">{{ ativoStatus }}</span>
+                    </div>
+                    <span style="font-size:13.5px; color:var(--muted); line-height:1.6;">{{ ativoFazendo }}<span style="animation:btvBlink 1s infinite; color:{{ squadCor }}; font-weight:700;"> ▮</span></span>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ squadDone }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#e7efe9; border:1px solid #bcd4c8; border-radius:16px; padding:22px 24px; display:flex; align-items:center; gap:14px;">
+                  <span style="font-size:22px;">◈</span>
+                  <div>
+                    <div style="font-family:var(--disp); font-weight:700; font-size:15.5px; color:var(--brandink);">Entrega concluída</div>
+                    <div style="font-size:13px; color:#3f6355; margin-top:3px;">Os artefatos estão na <a href="#" onClick="{{ irBiblioteca }}">Biblioteca de entregas</a>, com trilha completa de procedência.</div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- COCKPIT: você é membro da squad -->
+              <div style="background:var(--white); border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:10px; padding:13px 18px; border-bottom:1px solid var(--line); flex-wrap:wrap;">
+                  <span style="font-family:var(--disp); font-weight:700; font-size:14px;">Cockpit</span>
+                  <span style="font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.1em;">você faz parte da squad</span>
+                  <span style="margin-left:auto; display:flex; gap:5px; flex-wrap:wrap;">
+                    <sc-for list="{{ roster }}" as="r" hint-placeholder-count="4"><span style="{{ r.style }}">{{ r.n }}</span></sc-for>
+                  </span>
+                </div>
+                <div ref="{{ chatBodyRef }}" style="display:flex; flex-direction:column; gap:10px; padding:16px 18px; max-height:250px; overflow-y:auto;">
+                  <sc-for list="{{ chat }}" as="m" hint-placeholder-count="2">
+                    <div style="{{ m.rowStyle }}">
+                      <div style="{{ m.bubbleStyle }}">
+                        <div style="font-family:var(--mono); font-size:9px; letter-spacing:.08em; margin-bottom:3px; opacity:.75;">{{ m.from }} · {{ m.ts }}</div>
+                        {{ m.txt }}
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); background:var(--card);">
+                  <input ref="{{ chatRef }}" onKeyDown="{{ chatKey }}" placeholder="fale com a squad — direcione, pergunte, mude o rumo…" style="flex:1; border:1px solid var(--line2); border-radius:10px; padding:10px 14px; font-size:13px; background:var(--white); color:var(--ink); min-width:0;">
+                  <button onClick="{{ sendChat }}" style="background:var(--brand); color:#fff; border:none; border-radius:10px; padding:0 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--sans);" style-hover="background:var(--brandink);">enviar ↑</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- feed -->
+            <div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; display:flex; flex-direction:column; gap:2px; max-height:420px; overflow-y:auto;">
+              <div style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint); margin-bottom:10px;">atividade</div>
+              <sc-for list="{{ feed }}" as="f" hint-placeholder-count="4">
+                <div style="display:flex; gap:10px; padding:7px 0; border-bottom:1px dashed var(--line); align-items:baseline;">
+                  <span style="font-family:var(--mono); font-size:10px; color:var(--faint); flex:none; width:38px;">{{ f.ts }}</span>
+                  <span style="font-size:12.5px; color:var(--ink); line-height:1.5;">{{ f.txt }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ U4 · BIBLIOTECA ░░░░ -->
+        <sc-if value="{{ isBiblioteca }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ biblioteca }}" as="g" hint-placeholder-count="3">
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+                <span style="width:10px; height:10px; border-radius:3px; background:{{ g.cor }};"></span>
+                <span style="font-family:var(--disp); font-weight:700; font-size:15px;">{{ g.squad }}</span>
+                <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ g.qtd }}</span>
+              </div>
+              <sc-for list="{{ g.itens }}" as="a" hint-placeholder-count="3">
+                <div style="display:grid; grid-template-columns:86px 1.3fr 1.6fr auto; gap:16px; align-items:center; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:14px 18px;">
+                  <span style="font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.06em; background:#f0ebdf; color:{{ g.cor }}; border-radius:6px; padding:5px 0; text-align:center;">{{ a.fmt }}</span>
+                  <div style="display:flex; flex-direction:column; gap:2px; min-width:0;">
+                    <span style="font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ a.nome }}</span>
+                    <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ a.versao }}</span>
+                  </div>
+                  <span style="font-size:11.5px; color:var(--muted); line-height:1.5;">{{ a.trilha }}</span>
+                  <button style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 14px; font-family:var(--mono); font-size:10.5px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">exportar ↓</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </sc-if>
+
+        <!-- ░░░░ U5 · DESIGNER ░░░░ -->
+        <sc-if value="{{ isDesigner }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <input value="{{ dzNome }}" onChange="{{ dzNomeOn }}" title="nome da squad" style="font-family:var(--disp); font-weight:700; font-size:15px; color:var(--ink); background:none; border:none; border-bottom:1px dashed var(--line2); padding:4px 2px; width:200px;">
+            <span style="font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint);">começar de</span>
+            <sc-for list="{{ dzBases }}" as="b" hint-placeholder-count="4"><button onClick="{{ b.on }}" style="{{ b.style }}">{{ b.nome }}</button></sc-for>
+            <span style="margin-left:auto; display:flex; gap:8px;">
+              <button onClick="{{ dzDuplicarFluxo }}" style="background:none; border:1px solid var(--line2); border-radius:9px; padding:8px 14px; font-family:var(--mono); font-size:10.5px; color:var(--muted); cursor:pointer;" style-hover="color:var(--ink); border-color:var(--ink);">⧉ duplicar fluxo</button>
+              <button onClick="{{ dzLimpar }}" style="background:none; border:1px solid var(--line2); border-radius:9px; padding:8px 14px; font-family:var(--mono); font-size:10.5px; color:var(--muted); cursor:pointer;" style-hover="color:var(--warn); border-color:var(--warn);">limpar</button>
+              <button onClick="{{ dzSalvar }}" style="background:none; border:1px solid var(--line2); border-radius:9px; padding:8px 14px; font-family:var(--mono); font-size:10.5px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="border-color:var(--brand);">{{ dzSalvarLabel }}</button>
+              <button onClick="{{ dzTestar }}" style="background:var(--brand); color:#fff; border:none; border-radius:9px; padding:9px 18px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:var(--sans);" style-hover="background:var(--brandink);">▶ Testar squad</button>
+            </span>
+          </div>
+          <div style="display:grid; grid-template-columns:230px 1fr; gap:14px; align-items:start;">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <sc-if value="{{ dzSel }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--white); border:1px solid var(--line2); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint);">bloco selecionado</span>
+                    <span style="margin-left:auto; font-family:var(--mono); font-size:9.5px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:3px 9px; color:var(--muted);">{{ dzSelTipo }}</span>
+                  </div>
+                  <label style="display:flex; flex-direction:column; gap:5px;">
+                    <span style="font-size:11.5px; font-weight:600;">Nome</span>
+                    <input value="{{ dzSelNome }}" onChange="{{ dzSelNomeOn }}" style="border:1px solid var(--line2); border-radius:9px; padding:9px 12px; font-size:12.5px; background:var(--paper); color:var(--ink); width:100%;">
+                  </label>
+                  <sc-if value="{{ dzSelIsGateway }}" hint-placeholder-val="{{ false }}">
+                    <label style="display:flex; flex-direction:column; gap:5px;">
+                      <span style="font-size:11.5px; font-weight:600;">Condição do gateway</span>
+                      <input value="{{ dzSelCond }}" onChange="{{ dzSelCondOn }}" placeholder="ex.: qualidade aprovada? sim → segue · não → volta" style="border:1px solid var(--line2); border-radius:9px; padding:9px 12px; font-size:12px; background:var(--paper); color:var(--ink); width:100%;">
+                    </label>
+                  </sc-if>
+                  <sc-if value="{{ dzSelIsPapel }}" hint-placeholder-val="{{ false }}">
+                    <label style="display:flex; flex-direction:column; gap:5px;">
+                      <span style="font-size:11.5px; font-weight:600;">Prompt do papel</span>
+                      <textarea value="{{ dzSelPrompt }}" onChange="{{ dzSelPromptOn }}" style="width:100%; min-height:104px; border:1px solid var(--line2); border-radius:9px; padding:10px 12px; font-family:var(--mono); font-size:10.5px; line-height:1.6; background:var(--paper); color:var(--ink); resize:vertical;"></textarea>
+                    </label>
+                    <sc-if value="{{ dzSelPromptEditado }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ dzSelPromptReset }}" style="align-self:flex-start; background:none; border:1px solid var(--line2); border-radius:8px; padding:6px 12px; font-family:var(--mono); font-size:9.5px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">↺ prompt padrão</button>
+                    </sc-if>
+                  </sc-if>
+                  <sc-if value="{{ dzSelIsApi }}" hint-placeholder-val="{{ false }}">
+                    <label style="display:flex; flex-direction:column; gap:5px;">
+                      <span style="font-size:11.5px; font-weight:600;">Endpoint / módulo</span>
+                      <input value="{{ dzSelEndpoint }}" onChange="{{ dzSelEndpointOn }}" placeholder="ex.: POST /transcricoes · MCP whisper" style="border:1px solid var(--line2); border-radius:9px; padding:9px 12px; font-size:12px; background:var(--paper); color:var(--ink); width:100%;">
+                    </label>
+                  </sc-if>
+                  <sc-if value="{{ dzSelIsDados }}" hint-placeholder-val="{{ false }}">
+                    <label style="display:flex; flex-direction:column; gap:5px;">
+                      <span style="font-size:11.5px; font-weight:600;">Fonte de dados</span>
+                      <input value="{{ dzSelFonte }}" onChange="{{ dzSelFonteOn }}" placeholder="ex.: PostgreSQL · tabela casos" style="border:1px solid var(--line2); border-radius:9px; padding:9px 12px; font-size:12px; background:var(--paper); color:var(--ink); width:100%;">
+                    </label>
+                  </sc-if>
+                  <div style="display:flex; gap:8px; border-top:1px solid var(--line); padding-top:12px; flex-wrap:wrap;">
+                    <button onClick="{{ dzConectar }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:10px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">⤳ conectar</button>
+                    <button onClick="{{ dzDuplicar }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:10px; color:var(--muted); cursor:pointer;" style-hover="color:var(--ink); border-color:var(--ink);">⧉ duplicar</button>
+                    <button onClick="{{ dzRemover }}" style="margin-left:auto; background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:10px; color:var(--muted); cursor:pointer;" style-hover="color:var(--warn); border-color:var(--warn);">remover</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ dzEdgeSel }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--white); border:1px solid var(--line2); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint);">seta selecionada</span>
+                  </div>
+                  <span style="font-family:var(--mono); font-size:10.5px; color:var(--muted);">{{ dzEdgeDesc }}</span>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <sc-for list="{{ dzEdgeTipos }}" as="t" hint-placeholder-count="4"><button onClick="{{ t.on }}" style="{{ t.style }}">{{ t.n }}</button></sc-for>
+                  </div>
+                  <label style="display:flex; flex-direction:column; gap:5px;">
+                    <span style="font-size:11.5px; font-weight:600;">Rótulo</span>
+                    <input value="{{ dzEdgeLabel }}" onChange="{{ dzEdgeLabelOn }}" placeholder="ex.: aprovado · refazer" style="border:1px solid var(--line2); border-radius:9px; padding:9px 12px; font-size:12px; background:var(--paper); color:var(--ink); width:100%;">
+                  </label>
+                  <div style="display:flex; gap:8px; border-top:1px solid var(--line); padding-top:12px;">
+                    <button onClick="{{ dzEdgeInverter }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:10px; color:var(--muted); cursor:pointer;" style-hover="color:var(--ink); border-color:var(--ink);">⇄ inverter direção</button>
+                    <button onClick="{{ dzEdgeRemover }}" style="margin-left:auto; background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:10px; color:var(--muted); cursor:pointer;" style-hover="color:var(--warn); border-color:var(--warn);">apagar seta</button>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:8px;">
+                <div style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint); margin-bottom:4px;">blocos · bpmn simplificado</div>
+                <sc-for list="{{ paleta }}" as="b" hint-placeholder-count="4">
+                  <button onClick="{{ b.on }}" style="display:flex; align-items:center; gap:10px; background:var(--white); border:1px dashed var(--line2); border-radius:10px; padding:11px 13px; cursor:pointer; font-family:var(--sans); color:var(--ink); text-align:left;" style-hover="border-color:var(--brand); border-style:solid;">
+                    <span style="width:24px; height:24px; border-radius:7px; background:{{ b.cor }}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; flex:none;">{{ b.icon }}</span>
+                    <span style="display:flex; flex-direction:column;">
+                      <span style="font-size:12.5px; font-weight:600;">{{ b.nome }}</span>
+                      <span style="font-family:var(--mono); font-size:9.5px; color:var(--faint);">{{ b.hint }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+                <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:12px; font-size:11.5px; color:var(--muted); line-height:1.6;">Clique para adicionar; arraste para posicionar. As <strong>setas</strong> definem o fluxo — selecione um bloco e use ⤳ conectar; clique numa seta para editar, inverter ou apagar.</div>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+              <div style="border:1px solid var(--line); border-radius:14px; background:var(--white); overflow:auto;">
+                <div onMouseDown="{{ canvasDown }}" onMouseMove="{{ canvasMove }}" onMouseUp="{{ canvasUp }}" onMouseLeave="{{ canvasUp }}" style="position:relative; width:1200px; height:480px; background-image:radial-gradient(#d8cfba 1px, transparent 1px); background-size:20px 20px; cursor:default;">
+                  {{ designerLines }}
+                  <sc-if value="{{ dzConectando }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute; top:12px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-family:var(--mono); font-size:10.5px; border-radius:999px; padding:7px 16px; z-index:3; white-space:nowrap;">clique no bloco de destino para criar a seta · clique no fundo para cancelar</div>
+                  </sc-if>
+                  <sc-for list="{{ blocos }}" as="bl" hint-placeholder-count="5">
+                    <div onMouseDown="{{ bl.down }}" style="{{ bl.style }}">
+                      <sc-if value="{{ bl.isCard }}" hint-placeholder-val="{{ true }}">
+                        <span style="width:22px; height:22px; border-radius:6px; background:{{ bl.cor }}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; flex:none;">{{ bl.icon }}</span>
+                        <span style="display:flex; flex-direction:column; min-width:0;">
+                          <span style="font-size:12px; font-weight:600; white-space:nowrap;">{{ bl.nome }}</span>
+                          <span style="font-family:var(--mono); font-size:9px; color:var(--faint); white-space:nowrap;">{{ bl.tipo }}</span>
+                        </span>
+                      </sc-if>
+                      <sc-if value="{{ bl.isDiamond }}" hint-placeholder-val="{{ false }}">
+                        <span style="{{ bl.shapeStyle }}"><span style="transform:rotate(-45deg); font-size:13px;">{{ bl.icon }}</span></span>
+                        <span style="{{ bl.capStyle }}">{{ bl.nome }}</span>
+                      </sc-if>
+                      <sc-if value="{{ bl.isCircle }}" hint-placeholder-val="{{ false }}">
+                        <span style="{{ bl.shapeStyle }}">{{ bl.icon }}</span>
+                        <span style="{{ bl.capStyle }}">{{ bl.nome }}</span>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <div style="position:absolute; left:16px; bottom:12px; font-family:var(--mono); font-size:10px; color:var(--faint);">{{ blocosQtd }} blocos · {{ edgesQtd }} setas · as setas definem o fluxo · clique no fundo para desselecionar</div>
+                </div>
+              </div>
+              <div style="display:flex; gap:7px; align-items:center; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px;">
+                <span style="font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin-right:6px;">esteira resultante</span>
+                <sc-for list="{{ dzEsteira }}" as="e" hint-placeholder-count="6">
+                  <span style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; background:var(--white); border:1px solid var(--line); border-radius:999px; padding:5px 11px; color:var(--ink);"><span style="width:7px; height:7px; border-radius:2px; background:{{ e.cor }};"></span>{{ e.n }}</span>
+                  <sc-if value="{{ e.arrow }}" hint-placeholder-val="{{ false }}"><span style="color:var(--faint); font-size:11px;">→</span></sc-if>
+                </sc-for>
+              </div>
+              <div style="background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint);">auditoria do fluxo</span>
+                  <span style="font-family:var(--mono); font-size:9.5px; color:var(--faint); margin-left:auto;">{{ dzLogQtd }} eventos · registro imutável</span>
+                </div>
+                <sc-for list="{{ dzLog }}" as="l" hint-placeholder-count="3">
+                  <div style="display:flex; gap:10px; font-family:var(--mono); font-size:10.5px; color:var(--muted); border-top:1px dashed var(--line); padding-top:6px;"><span style="color:var(--faint); flex:none;">{{ l.ts }}</span><span>{{ l.txt }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ U6 · MINHAS SQUADS ░░░░ -->
+        <sc-if value="{{ isMinhas }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ minhasSquads }}" as="s" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:1.5fr 1fr 140px 1fr auto; gap:18px; align-items:center; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:15px 20px;">
+                <span style="font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:10px; min-width:0;"><span style="width:9px; height:9px; border-radius:3px; background:{{ s.cor }}; flex:none;"></span><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ s.nome }}</span></span>
+                <span style="font-family:var(--mono); font-size:10.5px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ s.modelo }}</span>
+                <span style="{{ s.pillStyle }}">{{ s.status }}</span>
+                <div style="height:7px; background:var(--paper); border-radius:99px; overflow:hidden;"><div style="height:100%; width:{{ s.pct }}%; background:{{ s.cor }}; border-radius:99px;"></div></div>
+                <button onClick="{{ s.on }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 14px; font-family:var(--mono); font-size:10.5px; color:var(--brand); cursor:pointer; font-weight:600; white-space:nowrap;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">{{ s.acao }}</button>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ U7 · PERSONAS & PROMPTS ░░░░ -->
+        <sc-if value="{{ isPersonas }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; gap:7px; flex-wrap:wrap;">
+            <sc-for list="{{ personaModelos }}" as="pm" hint-placeholder-count="6">
+              <button onClick="{{ pm.on }}" style="{{ pm.style }}"><span style="width:8px; height:8px; border-radius:3px; background:{{ pm.cor }}; flex:none;"></span>{{ pm.nome }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:12.5px; color:var(--muted);">{{ personaResumo }}</span>
+            <button onClick="{{ restaurarTodos }}" style="margin-left:auto; background:none; border:1px solid var(--line2); border-radius:9px; padding:8px 14px; font-family:var(--mono); font-size:10.5px; color:var(--muted); cursor:pointer;" style-hover="color:var(--warn); border-color:var(--warn);">↺ restaurar todos ao padrão</button>
+            <button onClick="{{ novaPersona }}" style="background:var(--brand); color:#fff; border:none; border-radius:9px; padding:9px 16px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:var(--sans);" style-hover="background:var(--brandink);">+ Nova persona</button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:14px;">
+            <sc-for list="{{ personas }}" as="p" hint-placeholder-count="4">
+              <div style="min-width:0; background:var(--white); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:12px;">
+                <div style="display:flex; align-items:center; gap:11px;">
+                  <span style="width:36px; height:36px; border-radius:12px; background:{{ p.cor }}; color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:700; font-size:15px; flex:none;">{{ p.inicial }}</span>
+                  <span style="display:flex; flex-direction:column; gap:2px; min-width:0; flex:1;">
+                    <sc-if value="{{ p.custom }}" hint-placeholder-val="{{ false }}">
+                      <input value="{{ p.nome }}" onChange="{{ p.onNome }}" style="border:none; border-bottom:1px dashed var(--line2); background:none; font-size:14px; font-weight:600; font-family:var(--sans); color:var(--ink); padding:2px 0; width:100%;">
+                    </sc-if>
+                    <sc-if value="{{ p.fixo }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-size:14px; font-weight:600;">{{ p.nome }}</span>
+                    </sc-if>
+                    <span style="font-size:11px; color:var(--faint);">{{ p.papelDesc }}</span>
+                  </span>
+                  <span style="{{ p.badgeStyle }}">{{ p.badge }}</span>
+                </div>
+                <textarea value="{{ p.prompt }}" onChange="{{ p.onPrompt }}" style="width:100%; min-height:128px; border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-family:var(--mono); font-size:11.5px; line-height:1.65; background:var(--paper); color:var(--ink); resize:vertical;"></textarea>
+                <div style="display:flex; gap:8px; min-height:28px;">
+                  <sc-if value="{{ p.editado }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ p.restaurar }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 13px; font-family:var(--mono); font-size:10px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">↺ restaurar padrão</button>
+                  </sc-if>
+                  <sc-if value="{{ p.custom }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ p.remover }}" style="margin-left:auto; background:none; border:1px solid var(--line2); border-radius:8px; padding:7px 13px; font-family:var(--mono); font-size:10px; color:var(--muted); cursor:pointer;" style-hover="color:var(--warn); border-color:var(--warn);">remover</button>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A1 · TELEMETRIA ░░░░ -->
+        <sc-if value="{{ isTelemetria }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+            <sc-for list="{{ statCards }}" as="s" hint-placeholder-count="4">
+              <div style="background:var(--white); border:1px solid var(--line); border-radius:13px; padding:18px 20px;">
+                <div style="font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);">{{ s.k }}</div>
+                <div style="font-family:var(--disp); font-weight:800; font-size:26px; margin-top:7px; letter-spacing:-.02em;">{{ s.v }}</div>
+                <div style="font-family:var(--mono); font-size:10.5px; color:{{ s.deltaCor }}; margin-top:3px;">{{ s.delta }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--white); border:1px solid var(--line); border-radius:14px; padding:22px 24px;">
+            <div style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint); margin-bottom:16px;">custo por squad · junho</div>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ custoBars }}" as="b" hint-placeholder-count="6">
+                <div style="display:grid; grid-template-columns:170px 1fr 74px; gap:14px; align-items:center;">
+                  <span style="font-size:12.5px; font-weight:500; display:flex; align-items:center; gap:8px;"><span style="width:8px; height:8px; border-radius:3px; background:{{ b.cor }};"></span>{{ b.nome }}</span>
+                  <div style="height:10px; background:var(--paper); border-radius:99px; overflow:hidden;"><div style="height:100%; width:{{ b.pct }}%; background:{{ b.cor }}; border-radius:99px;"></div></div>
+                  <span style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right;">{{ b.valor }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A2 · LEDGER ░░░░ -->
+        <sc-if value="{{ isLedger }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--white); border:1px solid var(--line); border-radius:14px; overflow:hidden;">
+            <div style="display:grid; grid-template-columns:120px 1.7fr 1fr 1fr 110px; gap:14px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint);">
+              <span>quando</span><span>evento</span><span>squad</span><span>ator</span><span>hash</span>
+            </div>
+            <sc-for list="{{ ledger }}" as="l" hint-placeholder-count="8">
+              <div style="display:grid; grid-template-columns:120px 1.7fr 1fr 1fr 110px; gap:14px; padding:12px 20px; border-bottom:1px solid var(--line); align-items:baseline;">
+                <span style="font-family:var(--mono); font-size:10.5px; color:var(--faint);">{{ l.ts }}</span>
+                <span style="font-size:13px;">{{ l.ev }}</span>
+                <span style="font-size:12px; color:{{ l.cor }}; font-weight:500;">{{ l.squad }}</span>
+                <span style="font-size:12px; color:var(--muted);">{{ l.ator }}</span>
+                <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ l.hash }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A3 · PROVIDERS ░░░░ -->
+        <sc-if value="{{ isProviders }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <sc-for list="{{ providers }}" as="p" hint-placeholder-count="3">
+              <div style="display:grid; grid-template-columns:1.2fr 1.4fr 1.4fr auto; gap:20px; align-items:center; background:var(--white); border:1px solid var(--line); border-radius:13px; padding:18px 22px;">
+                <div style="display:flex; flex-direction:column; gap:3px;">
+                  <span style="font-family:var(--disp); font-weight:700; font-size:15px;">{{ p.nome }}</span>
+                  <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ p.tipo }}</span>
+                </div>
+                <span style="font-size:12.5px; color:var(--muted); line-height:1.5;">{{ p.modelos }}</span>
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                  <div style="display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--faint);"><span>uso do limite</span><span>{{ p.pct }}%</span></div>
+                  <div style="height:8px; background:var(--paper); border-radius:99px; overflow:hidden;"><div style="height:100%; width:{{ p.pct }}%; background:{{ p.barCor }}; border-radius:99px;"></div></div>
+                </div>
+                <span style="{{ p.pillStyle }}">{{ p.status }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A4 · PERMISSÕES ░░░░ -->
+        <sc-if value="{{ isPermissoes }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ tools }}" as="t" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:200px 1.7fr 1.5fr auto; gap:18px; align-items:center; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:15px 20px;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                  <span style="font-family:var(--mono); font-size:12px; font-weight:600; color:var(--ink);">{{ t.nome }}</span>
+                  <span style="font-family:var(--mono); font-size:9.5px; color:var(--faint);">{{ t.escopo }}</span>
+                </div>
+                <span style="font-size:12.5px; color:var(--muted); line-height:1.5;">{{ t.desc }}</span>
+                <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                  <sc-for list="{{ t.squads }}" as="sq" hint-placeholder-count="2">
+                    <span style="font-size:10px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:3px 9px; color:var(--muted);">{{ sq.n }}</span>
+                  </sc-for>
+                </div>
+                <button onClick="{{ t.toggle }}" style="{{ t.switchStyle }}"><span style="{{ t.knobStyle }}"></span></button>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A5 · MODELOS ░░░░ -->
+        <sc-if value="{{ isModelos }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--white); border:1px solid var(--line); border-radius:14px; overflow-x:auto;">
+            <div style="min-width:780px; display:grid; grid-template-columns:1.6fr 90px 1fr 100px 120px 150px; gap:14px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint);">
+              <span>modelo</span><span>versão</span><span>categoria</span><span>em uso</span><span>status</span><span>ação</span>
+            </div>
+            <sc-for list="{{ templates }}" as="t" hint-placeholder-count="8">
+              <div style="min-width:780px; display:grid; grid-template-columns:1.6fr 90px 1fr 100px 120px 150px; gap:14px; padding:13px 20px; border-bottom:1px solid var(--line); align-items:center;">
+                <span style="font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:9px;"><span style="width:9px; height:9px; border-radius:3px; background:{{ t.cor }};"></span>{{ t.nome }}</span>
+                <span style="font-family:var(--mono); font-size:11px; color:var(--muted);">{{ t.versao }}</span>
+                <span style="font-size:12px; color:var(--muted);">{{ t.cat }}</span>
+                <span style="font-family:var(--mono); font-size:11px; color:var(--muted);">{{ t.uso }}</span>
+                <span style="{{ t.pillStyle }}">{{ t.status }}</span>
+                <button onClick="{{ t.toggle }}" style="background:none; border:1px solid var(--line2); border-radius:8px; padding:6px 12px; font-family:var(--mono); font-size:10px; color:var(--brand); cursor:pointer; font-weight:600;" style-hover="background:var(--brand); color:#fff; border-color:var(--brand);">{{ t.acao }}</button>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- ░░░░ A6 · USUÁRIOS & ACESSOS ░░░░ -->
+        <sc-if value="{{ isUsuarios }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ usuarios }}" as="u" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:auto 1.6fr 120px 1fr auto; gap:18px; align-items:center; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:14px 20px;">
+                <span style="width:34px; height:34px; border-radius:50%; background:{{ u.bg }}; color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:700; font-size:13px;">{{ u.inicial }}</span>
+                <span style="display:flex; flex-direction:column; gap:1px; min-width:0;">
+                  <span style="font-size:13.5px; font-weight:600;">{{ u.nome }}</span>
+                  <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ u.email }}</span>
+                </span>
+                <span style="{{ u.papelStyle }}">{{ u.papel }}</span>
+                <span style="font-size:12px; color:var(--muted);">{{ u.squads }}</span>
+                <div style="display:flex; align-items:center; gap:9px;">
+                  <span style="font-family:var(--mono); font-size:10px; color:var(--faint);">{{ u.acessoLabel }}</span>
+                  <button onClick="{{ u.toggle }}" style="{{ u.switchStyle }}"><span style="{{ u.knobStyle }}"></span></button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════ AJUSTES RÁPIDOS (engrenagem) ══════ -->
+  <sc-if value="{{ gearOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeGear }}" style="position:fixed; inset:0; background:#221d1526; z-index:55;"></div>
+    <aside style="position:fixed; top:0; right:0; bottom:0; width:320px; background:var(--card); border-left:1px solid var(--line2); box-shadow:-24px 0 60px -34px #22140a66; z-index:56; padding:22px; display:flex; flex-direction:column; gap:24px; overflow-y:auto;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:15px;">⚙</span>
+        <span style="font-family:var(--disp); font-weight:700; font-size:16px;">Ajustes rápidos</span>
+        <button onClick="{{ closeGear }}" style="margin-left:auto; background:none; border:none; font-size:16px; color:var(--faint); cursor:pointer;" style-hover="color:var(--ink);">✕</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <span style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint);">marca</span>
+        <div style="display:flex; gap:8px;">
+          <sc-for list="{{ accentSwatches }}" as="a" hint-placeholder-count="5"><button onClick="{{ a.on }}" style="{{ a.style }}"></button></sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <span style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint);">esteira</span>
+        <label style="display:flex; flex-direction:column; gap:7px;">
+          <span style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="font-weight:600;">Ritmo da esteira</span><span style="font-family:var(--mono); font-size:11px; color:var(--muted);">{{ ritmoLabel }}</span></span>
+          <input type="range" min="0.3" max="3" step="0.1" value="{{ ritmoVal }}" onChange="{{ setRitmo }}" style="width:100%; accent-color:var(--brand);">
+        </label>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="display:flex; flex-direction:column; gap:1px; flex:1;">
+            <span style="font-size:12.5px; font-weight:600;">Aprovar rascunhos por mim</span>
+            <span style="font-size:11px; color:var(--faint);">gates passam sozinhos após alguns segundos</span>
+          </span>
+          <button onClick="{{ toggleAutoGates }}" style="{{ autoGatesSwitch }}"><span style="{{ autoGatesKnob }}"></span></button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <span style="font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--faint);">atalhos</span>
+        <button onClick="{{ gearGoPersonas }}" style="display:flex; align-items:center; gap:9px; background:var(--white); border:1px solid var(--line); border-radius:10px; padding:10px 13px; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer; font-family:var(--sans); text-align:left;" style-hover="border-color:var(--brand);">☺ Personas &amp; prompts</button>
+        <button onClick="{{ gearGoMinhas }}" style="display:flex; align-items:center; gap:9px; background:var(--white); border:1px solid var(--line); border-radius:10px; padding:10px 13px; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer; font-family:var(--sans); text-align:left;" style-hover="border-color:var(--brand);">≣ Minhas squads</button>
+      </div>
+
+      <div style="margin-top:auto; font-size:11.5px; color:var(--faint); line-height:1.6; border-top:1px solid var(--line); padding-top:14px;">Estes ajustes valem só para você e são aplicados na hora — nada aqui exige a administração.</div>
+    </aside>
+  </sc-if>
+
+  <!-- ══════ U2 · WIZARD OVERLAY ══════ -->
+  <sc-if value="{{ wizardOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:#221d1580; z-index:50; display:flex; align-items:center; justify-content:center; padding:30px;">
+      <div style="width:640px; max-width:100%; max-height:88vh; overflow-y:auto; background:var(--card); border-radius:20px; box-shadow:0 40px 90px -30px #000a; padding:32px 36px; display:flex; flex-direction:column; gap:20px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="width:13px; height:13px; border-radius:4px; background:{{ wizCor }};"></span>
+          <span style="font-family:var(--disp); font-weight:700; font-size:19px; letter-spacing:-.01em;">{{ wizTitulo }}</span>
+          <button onClick="{{ fecharWizard }}" style="margin-left:auto; background:none; border:none; font-size:17px; color:var(--faint); cursor:pointer;" style-hover="color:var(--ink);">✕</button>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <sc-for list="{{ wizSteps }}" as="s" hint-placeholder-count="3">
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+              <div style="height:4px; border-radius:99px; background:{{ s.bar }};"></div>
+              <span style="font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:{{ s.cor }};">{{ s.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ wizIsBriefing }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <p style="font-size:13.5px; color:var(--muted); margin:0; line-height:1.6;">Conte para a squad o que você precisa — nas palavras da sua área. Nada aqui é técnico.</p>
+            <sc-for list="{{ wizPerguntas }}" as="q" hint-placeholder-count="3">
+              <label style="display:flex; flex-direction:column; gap:6px;">
+                <span style="font-size:13px; font-weight:600;">{{ q.label }}</span>
+                <input placeholder="{{ q.ph }}" style="border:1px solid var(--line2); border-radius:10px; padding:11px 14px; font-size:13.5px; background:var(--white); color:var(--ink);">
+              </label>
+            </sc-for>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <span style="font-size:13px; font-weight:600;">Referências e materiais <span style="color:var(--faint); font-weight:400;">· opcional</span></span>
+              <div style="display:flex; gap:8px;">
+                <input ref="{{ refInputRef }}" placeholder="cole um link de referência…" style="flex:1; border:1px solid var(--line2); border-radius:10px; padding:10px 14px; font-size:13px; background:var(--white); color:var(--ink); min-width:0;">
+                <button onClick="{{ addRef }}" style="background:none; border:1px solid var(--line2); border-radius:10px; padding:0 16px; font-size:12.5px; font-weight:600; color:var(--brand); cursor:pointer; font-family:var(--sans);" style-hover="border-color:var(--brand);">adicionar</button>
+              </div>
+              <button onClick="{{ addFile }}" style="border:1.5px dashed var(--line2); border-radius:10px; padding:13px; background:none; color:var(--faint); font-size:12px; cursor:pointer; font-family:var(--sans);" style-hover="border-color:var(--brand); color:var(--brand);">⇪ arraste arquivos aqui ou clique para anexar</button>
+              <sc-if value="{{ refsExist }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  <sc-for list="{{ wizardRefsChips }}" as="r" hint-placeholder-count="2">
+                    <span style="display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10.5px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:5px 7px 5px 12px; color:var(--muted);">{{ r.label }}<button onClick="{{ r.rm }}" style="background:none; border:none; color:var(--faint); cursor:pointer; font-size:12px; padding:0 4px;" style-hover="color:var(--warn);">×</button></span>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ wizIsEquipe }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <p style="font-size:13.5px; color:var(--muted); margin:0; line-height:1.6;">Esta é a equipe do modelo. Desligue papéis que você mesmo fará.</p>
+            <sc-for list="{{ wizPapeis }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--line); border-radius:12px; padding:13px 16px;">
+                <span style="width:34px; height:34px; border-radius:11px; background:{{ p.bg }}; color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--disp); font-weight:700; font-size:14px;">{{ p.inicial }}</span>
+                <span style="display:flex; flex-direction:column; gap:1px;">
+                  <span style="font-size:13.5px; font-weight:600;">{{ p.nome }}</span>
+                  <span style="font-size:11.5px; color:var(--faint);">{{ p.papelDesc }}</span>
+                </span>
+                <button onClick="{{ p.toggle }}" style="{{ p.switchStyle }}"><span style="{{ p.knobStyle }}"></span></button>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ wizIsEntregas }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Formatos de entrega</div>
+              <div style="display:flex; gap:7px; flex-wrap:wrap;">
+                <sc-for list="{{ wizFormatos }}" as="f" hint-placeholder-count="3">
+                  <span style="font-family:var(--mono); font-size:11px; font-weight:600; background:#f0ebdf; color:{{ wizCor }}; border:1px solid var(--line); border-radius:8px; padding:7px 13px;">{{ f.n }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Pontos onde a squad vai esperar por você</div>
+              <div style="display:flex; flex-direction:column; gap:7px;">
+                <span style="font-size:13px; color:var(--muted); display:flex; gap:9px; align-items:center;"><span style="color:var(--gold); font-size:14px;">✋</span>Aprovar o rascunho antes da revisão</span>
+                <span style="font-size:13px; color:var(--muted); display:flex; gap:9px; align-items:center;"><span style="color:var(--gold); font-size:14px;">✋</span>Aprovar a entrega final antes da exportação</span>
+              </div>
+            </div>
+            <div style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:13px 16px; font-size:12px; color:var(--muted); line-height:1.6;">As ferramentas desta squad já foram liberadas pela administração. Você pode acompanhar tudo na tela <strong>Ao vivo</strong> e pedir ajustes a qualquer momento.</div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex; gap:10px; border-top:1px solid var(--line); padding-top:18px;">
+          <sc-if value="{{ wizCanBack }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ wizBack }}" style="background:none; border:1px solid var(--line2); border-radius:10px; padding:11px 18px; font-size:13.5px; color:var(--muted); cursor:pointer; font-family:var(--sans);" style-hover="color:var(--ink); border-color:var(--ink);">← Voltar</button>
+          </sc-if>
+          <button onClick="{{ wizNext }}" style="margin-left:auto; background:var(--brand); color:#fff; border:none; border-radius:10px; padding:11px 26px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:var(--sans);" style-hover="background:var(--brandink);">{{ wizNextLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;corMarca&quot;: {&quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#14614f&quot;, &quot;options&quot;: [&quot;#14614f&quot;, &quot;#8a3b2a&quot;, &quot;#2b4a8c&quot;, &quot;#5b3f8c&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Marca&quot;}, &quot;ritmoEsteira&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 0.3, &quot;max&quot;: 3, &quot;step&quot;: 0.1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Comportamento&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const SQUADS = [
+      { id:'editorial', nome:'Editorial / SEO', cat:'conteudo', cor:'#b8531f', onda:1, desc:'Artigos, newsletters e copy com revisão de estilo e fact-check embutidos.', papeis:['Pauteiro','Redator','Revisor de estilo','Fact-checker'], formatos:['DOCX','MD','HTML'], perguntas:[['Qual é a pauta ou tema?','ex.: tendências de logística verde no Brasil'],['Tom e estilo','ex.: analítico, direto, sem clichês'],['Público e canal','ex.: newsletter B2B, ~1.200 palavras']] },
+      { id:'pesquisa', nome:'Pesquisa & Inteligência', cat:'analise', cor:'#345f9e', onda:1, desc:'Dossiês, benchmarks e sínteses de decisão com evidência citada.', papeis:['Investigador','Analista','Sintetizador','Verificador'], formatos:['PDF','MD','XLSX'], perguntas:[['Pergunta de pesquisa','ex.: quem são os 5 maiores players de X e como cobram?'],['Fontes prioritárias','ex.: relatórios setoriais, sites oficiais'],['Formato da síntese','ex.: dossiê de 6 páginas + planilha comparativa']] },
+      { id:'bi', nome:'BI / Dados', cat:'analise', cor:'#1d6f63', onda:1, desc:'Análises recorrentes, gráficos e relatórios executivos a partir dos seus dados.', papeis:['Preparador de dados','Analista','Visualizador','Revisor'], formatos:['XLSX','CSV','HTML'], perguntas:[['Fonte de dados','ex.: export CSV do ERP, planilha de vendas'],['Pergunta de negócio','ex.: onde perdemos margem no último trimestre?'],['Métricas-chave','ex.: margem por praça, ticket médio, churn']] },
+      { id:'operacoes', nome:'Operações / SOPs', cat:'operacoes', cor:'#57702b', onda:1, desc:'SOPs, playbooks e runbooks auditáveis, prontos para o time seguir.', papeis:['Mapeador de processo','Redator técnico','Auditor de processo','Publicador'], formatos:['MD','PDF','YAML'], perguntas:[['Qual processo documentar?','ex.: onboarding de cliente enterprise'],['Quem executa hoje?','ex.: time de CS, 4 pessoas'],['Nível de detalhe','ex.: passo a passo com checklists']] },
+      { id:'sales', nome:'Sales enablement', cat:'operacoes', cor:'#b0742c', onda:1, desc:'Propostas, battlecards e scripts de follow-up alinhados ao seu playbook.', papeis:['Estrategista','Redator de propostas','Battlecard writer','Revisor comercial'], formatos:['DOCX','PDF','Slides'], perguntas:[['O que a squad vai produzir?','ex.: proposta para a conta Y'],['Contexto do deal','ex.: concorrendo com Z, decisor é o CFO'],['Materiais existentes','ex.: deck institucional, tabela de preços']] },
+      { id:'imagem', nome:'Imagem / Branding', cat:'criativa', cor:'#8d3f6a', onda:2, desc:'Briefing → direção → geração → curadoria: packs visuais com guideline.', papeis:['Diretor de arte','Prompt designer','Curador','Finalizador'], formatos:['PNG','SVG','PDF'], perguntas:[['Briefing visual','ex.: campanha de lançamento, tom quente'],['Referências','ex.: 3 links ou uploads de moodboard'],['Usos previstos','ex.: social 1:1, banner site, impresso A4']] },
+      { id:'educacao', nome:'Educação', cat:'conteudo', cor:'#9a6b14', onda:2, desc:'Trilhas, apostilas, exercícios e rubricas de avaliação completas.', papeis:['Planejador pedagógico','Autor','Avaliador','Revisor'], formatos:['PDF','Slides','Quiz'], perguntas:[['Tema e objetivo de aprendizagem','ex.: Excel intermediário para financeiro'],['Perfil dos alunos','ex.: analistas juniores, 20 pessoas'],['Carga e formato','ex.: 4 aulas de 1h + exercícios']] },
+      { id:'design', nome:'Design / UX', cat:'criativa', cor:'#2b7a8c', onda:2, desc:'Fluxos, wireframes, specs e auditorias de heurísticas.', papeis:['Pesquisador UX','Arquiteto de fluxo','Wireframer','Auditor de heurísticas'], formatos:['SVG','JSON','HTML'], perguntas:[['O que desenhar ou auditar?','ex.: fluxo de checkout do app'],['Problema atual','ex.: 40% abandonam no frete'],['Restrições','ex.: design system existente, mobile-first']] },
+      { id:'juridico', nome:'Jurídico documental', cat:'operacoes', cor:'#6b5744', onda:2, desc:'Minutas, revisão de cláusulas e checklists — sempre com revisão humana.', papeis:['Analista jurídico','Redator de minutas','Revisor de cláusulas','Compliance'], formatos:['DOCX','PDF','Checklist'], perguntas:[['Tipo de documento','ex.: NDA bilateral, prestação de serviços'],['Partes e contexto','ex.: contratação de agência, prazo 12 meses'],['Pontos sensíveis','ex.: propriedade intelectual, multa rescisória']] },
+      { id:'musica', nome:'Música simbólica', cat:'criativa', cor:'#6b4fae', onda:3, desc:'Composição e arranjo com partitura exportável — MusicXML, MIDI e PDF.', papeis:['Compositor','Arranjador','Copista','Revisor técnico'], formatos:['MusicXML','MIDI','PDF'], perguntas:[['Forma e caráter','ex.: peça AABA, lírica, ~2 min'],['Instrumentação','ex.: quarteto de cordas'],['Andamento e tonalidade','ex.: 72 bpm, Ré menor']] },
+      { id:'podcast', nome:'Podcast', cat:'criativa', cor:'#c04a4a', onda:3, desc:'Pauta, roteiro, perguntas, cortes e show notes prontos para gravar.', papeis:['Pauteiro','Roteirista','Editor de cortes','Produtor'], formatos:['Roteiro','SRT','Notes'], perguntas:[['Tema do episódio','ex.: entrevista sobre carreira em dados'],['Convidado e ângulo','ex.: CTO de fintech, foco em decisões'],['Duração alvo','ex.: 45 min + 3 cortes de 60s']] },
+      { id:'video', nome:'Vídeo', cat:'criativa', cor:'#444d99', onda:3, desc:'Roteiro, shot list, legendas e instruções de edição para sua produção.', papeis:['Roteirista','Diretor de shot list','Legendador','Montador'], formatos:['Roteiro','EDL','SRT'], perguntas:[['O que é o vídeo?','ex.: institucional de 90s para o site'],['Mensagem central','ex.: confiança e velocidade de entrega'],['Recursos disponíveis','ex.: banco de imagens + locução própria']] },
+    ];
+    this.SQUADS = SQUADS;
+    this.byId = Object.fromEntries(SQUADS.map(s => [s.id, s]));
+    this.byId.designer = { id:'designer', nome:'Squad do Designer', cat:'criativa', cor:'#2b7a8c', onda:1, desc:'Criada por você no Squad Designer.', papeis:['Papel A','Papel B','Papel C','Papel D'], formatos:['DOCX','PDF'] };
+    this.state = {
+      perfil:'user', tela:'inicio', cat:'todas',
+      wizardOpen:false, wizardStep:0, wizardModelId:null, papeisOff:{},
+      squad:null, ajusteMode:false,
+      toolsOff:{}, tplDraft:{}, usersOff:{},
+      gearOpen:false, accent:null, ritmo:null, autoGates:false,
+      personaModelId:'editorial', promptOv:{}, customPersonas:{}, nextPersonaId:1,
+      wizardRefs:[],
+      designerBase:'blank', designerNome:'Estudo de caso', designerSaved:false,
+      chat:[],
+      blocos:[
+        { id:1, tipo:'papel', nome:'Entrevistador', x:40,  y:60 },
+        { id:2, tipo:'ferramenta', nome:'Transcrição', x:250, y:150 },
+        { id:3, tipo:'papel', nome:'Redator do caso', x:460, y:70 },
+        { id:4, tipo:'gate', nome:'Sua aprovação', x:640, y:180 },
+        { id:5, tipo:'exportador', nome:'DOCX + PDF', x:820, y:90 },
+      ],
+      nextBlocoId:6, drag:null, selBloco:null,
+      edges:[
+        { id:1, from:1, to:2, tipo:'seq', label:'' },
+        { id:2, from:2, to:3, tipo:'seq', label:'' },
+        { id:3, from:3, to:4, tipo:'seq', label:'' },
+        { id:4, from:4, to:5, tipo:'seq', label:'' },
+      ],
+      nextEdgeId:5, selEdge:null, connectFrom:null,
+      dzLog:[{ ts:'—', txt:'fluxo inicial carregado — 5 blocos, 4 setas' }],
+    };
+    this.rootRef = React.createRef();
+    this.ajusteRef = React.createRef();
+    this.refInputRef = React.createRef();
+    this.chatRef = React.createRef();
+    this.chatBodyRef = React.createRef();
+    this.canvasRef = null;
+  }
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.tick(), 140);
+    this.applyBrand();
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  componentDidUpdate() {
+    this.applyBrand();
+    const el = this.chatBodyRef.current;
+    if (el && this._chatLen !== this.state.chat.length) { this._chatLen = this.state.chat.length; el.scrollTop = el.scrollHeight; }
+  }
+
+  sendChatMsg() {
+    const el = this.chatRef.current;
+    const v = el && el.value.trim();
+    if (!v) return;
+    el.value = '';
+    const sq = this.state.squad; if (!sq) return;
+    this.setState({ chat:[...this.state.chat, { from:'Você', ts:this.fitem('').ts, txt:v }],
+      squad:{ ...sq, feed:[this.fitem('💬 você orientou a squad pelo cockpit'), ...sq.feed] } });
+    clearTimeout(this._chatT);
+    this._chatT = setTimeout(() => {
+      const s2 = this.state.squad; if (!s2) return;
+      const et = s2.etapas[Math.min(s2.idx, s2.etapas.length - 1)];
+      const m = this.byId[s2.modelId];
+      const papel = et && et.papel !== 'Você' && et.papel !== 'BuildToValue' ? et.papel : (m.papeis ? m.papeis[0] : 'Squad');
+      const modos = [
+        'Entendido — já incorporo isso no que estou fazendo agora.',
+        'Boa direção. Ajusto o trabalho com esse critério e sigo.',
+        'Anotado. Se isso mudar o resultado, te chamo no próximo gate.',
+        'Faz sentido. Vou tratar isso como requisito daqui em diante.',
+      ];
+      this.setState({ chat:[...this.state.chat, { from:papel, ts:this.fitem('').ts, txt:modos[this.state.chat.length % modos.length] }] });
+    }, 1200);
+  }
+  applyBrand() {
+    const el = this.rootRef.current;
+    if (!el) return;
+    const c = this.state.accent ?? this.props.corMarca ?? '#14614f';
+    el.style.setProperty('--brand', c);
+    el.style.setProperty('--brandink', c);
+  }
+
+  // ── esteira viva ──
+  tick() {
+    const sq = this.state.squad;
+    if (!sq || sq.done) return;
+    if (sq.gateOpen) {
+      if (this.state.autoGates) {
+        this._gw = (this._gw || 0) + 1;
+        if (this._gw > 12) { this._gw = 0; this.approveGate(true); }
+      }
+      return;
+    }
+    this._gw = 0;
+    const ritmo = this.state.ritmo ?? this.props.ritmoEsteira ?? 1;
+    let prog = sq.prog + (1.1 + Math.random() * 1.4) * ritmo;
+    if (prog < 100) { this.setState({ squad: { ...sq, prog } }); return; }
+    const etapas = sq.etapas;
+    const atual = etapas[sq.idx];
+    const feed = [this.fitem(this.doneMsg(atual, sq)), ...sq.feed];
+    const nextIdx = sq.idx + 1;
+    if (nextIdx >= etapas.length) {
+      this.setState({ squad: { ...sq, idx:nextIdx, prog:0, done:true, feed:[this.fitem('entregas disponíveis na Biblioteca ◈'), ...feed] } });
+      return;
+    }
+    const next = etapas[nextIdx];
+    if (next.gate) {
+      this.setState({ squad: { ...sq, idx:nextIdx, prog:0, gateOpen:true, feed:[this.fitem('✋ gate aberto — ' + next.nome + ' aguarda sua decisão'), ...feed] } });
+    } else {
+      this.setState({ squad: { ...sq, idx:nextIdx, prog:0, feed:[this.fitem(next.papel + ' assumiu: ' + next.nome.toLowerCase()), ...feed] } });
+    }
+  }
+  fitem(txt) { const d = new Date(); const ts = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); return { ts, txt }; }
+
+  logFlow(txt) {
+    const d = new Date();
+    const ts = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+    this.setState(s => ({ dzLog: [{ ts, txt }, ...s.dzLog] }));
+  }
+
+  flowOrder() {
+    const { blocos, edges } = this.state;
+    if (!blocos.length) return [];
+    const byId = Object.fromEntries(blocos.map(b => [b.id, b]));
+    const out = {};
+    edges.forEach(e => { (out[e.from] = out[e.from] || []).push(e); });
+    const hasIn = new Set(edges.map(e => e.to));
+    const start = blocos.find(b => b.tipo === 'inicio' && !hasIn.has(b.id)) || blocos.find(b => !hasIn.has(b.id)) || blocos[0];
+    const seen = new Set(); const order = [];
+    let cur = start;
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id); order.push(cur);
+      const outs = (out[cur.id] || []).filter(e => byId[e.to]);
+      const nx = outs.find(e => e.tipo !== 'nao') || outs[0];
+      cur = nx ? byId[nx.to] : null;
+    }
+    blocos.filter(b => !seen.has(b.id)).sort((a, b) => a.x - b.x).forEach(b => order.push(b));
+    return order;
+  }
+  doneMsg(etapa, sq) {
+    const m = this.byId[sq.modelId];
+    if (etapa.nome === 'Exportação') return 'exportação concluída: ' + m.formatos.join(', ');
+    return etapa.papel + ' concluiu ' + etapa.nome.toLowerCase();
+  }
+
+  makeEtapas(m, papeisOff) {
+    const on = m.papeis.filter((p, i) => !papeisOff[i]);
+    const p = (i) => on[Math.min(i, on.length - 1)] || 'Você';
+    return [
+      { nome:'Briefing', papel:'Você' },
+      { nome:'Planejamento', papel:p(0) },
+      { nome:'Produção', papel:p(1) },
+      { nome:'Rascunho', papel:'Você', gate:true },
+      { nome:'Revisão', papel:p(2) },
+      { nome:'Validação', papel:p(3) },
+      { nome:'Entrega', papel:'Você', gate:true },
+      { nome:'Exportação', papel:'BuildToValue' },
+    ];
+  }
+
+  ativarSquad() {
+    const m = this.byId[this.state.wizardModelId];
+    const etapas = this.makeEtapas(m, this.state.papeisOff);
+    this.setState({
+      wizardOpen:false, tela:'vivo', perfil:'user',
+      chat:[ { from:etapas[1].papel, ts:this.fitem('').ts, txt:'Recebi seu briefing e vou propor o plano. Você faz parte desta squad — me diga por aqui qualquer direção extra, a qualquer momento.' } ],
+      squad: { modelId:m.id, etapas, idx:1, prog:0, gateOpen:false, done:false,
+        feed:[ this.fitem(etapas[1].papel + ' assumiu: planejamento'), this.fitem('briefing recebido e distribuído para a equipe'), this.fitem('squad "' + m.nome + '" ativada') ] },
+    });
+  }
+
+  approveGate(auto) {
+    const sq = this.state.squad;
+    if (!sq || !sq.gateOpen) return;
+    const label = auto ? '✓ gate aprovado automaticamente (ajuste rápido)' : '✓ você aprovou: ' + sq.etapas[sq.idx].nome.toLowerCase();
+    const feed2 = [this.fitem(label), ...sq.feed];
+    const nextIdx = sq.idx + 1;
+    const next = sq.etapas[nextIdx];
+    this.setState({ ajusteMode:false, squad:{ ...sq, idx:nextIdx, prog:0, gateOpen:false,
+      feed: next ? [this.fitem(next.papel + ' assumiu: ' + next.nome.toLowerCase()), ...feed2] : feed2 } });
+  }
+
+  promptPadrao(i, nome, m) {
+    const bases = [
+      'Você é ' + nome + ' da squad ' + m.nome + '. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante.',
+      'Você é ' + nome + ' da squad ' + m.nome + '. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar.',
+      'Você é ' + nome + ' da squad ' + m.nome + '. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê.',
+      'Você é ' + nome + ' da squad ' + m.nome + '. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência.',
+    ];
+    return bases[Math.min(i, 3)];
+  }
+
+  dzDefaultPrompt(nome) {
+    return 'Você é ' + nome + ', papel desta squad. Descreva o ofício, as responsabilidades e o critério para passar o trabalho adiante.';
+  }
+
+  loadBase(mid) {
+    if (mid === 'blank') {
+      this.setState({ designerBase:'blank', blocos:[], edges:[], selBloco:null, selEdge:null, connectFrom:null, designerNome:'Estudo de caso' });
+      this.logFlow('fluxo zerado — base em branco');
+      return;
+    }
+    const m = this.byId[mid];
+    const blocos = []; const edges = []; let x = 20, id = 1, eid = 1;
+    blocos.push({ id:id++, tipo:'inicio', nome:'Início', x, y:150 }); x += 115;
+    m.papeis.forEach((p, i) => {
+      blocos.push({ id:id++, tipo:'papel', nome:p, x, y: 60 + (i % 2) * 150 }); x += 150;
+      if (i === 1) { blocos.push({ id:id++, tipo:'gate', nome:'Sua aprovação', x, y:280 }); x += 145; }
+    });
+    blocos.push({ id:id++, tipo:'gate', nome:'Aprovação final', x, y:100 }); x += 140;
+    blocos.push({ id:id++, tipo:'exportador', nome:m.formatos.join(' + '), x, y:220 }); x += 135;
+    blocos.push({ id:id++, tipo:'fim', nome:'Fim', x, y:150 });
+    for (let i = 0; i < blocos.length - 1; i++) edges.push({ id:eid++, from:blocos[i].id, to:blocos[i+1].id, tipo:'seq', label:'' });
+    this.setState({ designerBase:mid, blocos, edges, nextBlocoId:id, nextEdgeId:eid, selBloco:null, selEdge:null, connectFrom:null, designerNome:'Derivada de ' + m.nome });
+    this.logFlow('base carregada: ' + m.nome + ' — ' + blocos.length + ' blocos, ' + edges.length + ' setas');
+  }
+
+  renderVals() {
+    const S = this.state;
+    const T = this;
+    const sqModel = S.squad ? this.byId[S.squad.modelId] : null;
+
+    const nav = (label, hint, icon, tela, accent) => {
+      const active = S.tela === tela;
+      return { label, hint, icon, accent: active ? 'var(--brand)' : (accent || 'var(--faint)'),
+        on: () => T.setState({ tela }),
+        style: 'display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px; border-radius:10px; border:none; cursor:pointer; font-family:var(--sans); color:' + (active ? 'var(--ink)' : 'var(--muted)') + '; background:' + (active ? '#ffffff' : 'transparent') + ';' + (active ? ' box-shadow:0 1px 4px #22140a14; outline:1px solid var(--line);' : '') };
+    };
+
+    // sidebar
+    const navMain = S.perfil === 'user' ? [
+      nav('Início', 'galeria de modelos', '⌂', 'inicio'),
+      nav('Minhas squads', 'ativas e histórico', '≣', 'minhas'),
+      nav('Personas', 'papéis e prompts', '☺', 'personas'),
+      nav('Biblioteca', 'todas as entregas', '▤', 'biblioteca'),
+      nav('Designer', 'monte sua squad', '✎', 'designer'),
+    ] : [
+      nav('Telemetria', 'custo e uso', '◔', 'telemetria'),
+      nav('Ledger', 'trilha auditável', '≡', 'ledger'),
+      nav('Providers', 'modelos e limites', '⇄', 'providers'),
+      nav('Permissões', 'skills, tools, MCP', '⚿', 'permissoes'),
+      nav('Modelos', 'templates da galeria', '❖', 'modelos'),
+      nav('Usuários', 'acessos e papéis', '☷', 'usuarios'),
+    ];
+    const navSquad = (S.perfil === 'user' && S.squad) ? [
+      Object.assign(nav('Ao vivo', '', '●', 'vivo'), { badge: (S.squad.gateOpen ? '1 gate' : null), accent: sqModel.cor,
+        style: nav('','','','vivo').style }),
+      Object.assign(nav('Entregas', '', '▤', 'biblioteca'), { badge: null }),
+    ] : [];
+    if (navSquad[0]) { const a = S.tela==='vivo'; navSquad[0].style = 'display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px; border-radius:10px; border:none; cursor:pointer; font-family:var(--sans); color:' + (a?'var(--ink)':'var(--muted)') + '; background:' + (a?'#ffffff':'transparent') + ';' + (a?' box-shadow:0 1px 4px #22140a14; outline:1px solid var(--line);':''); }
+
+    // header per tela
+    const heads = {
+      inicio:      ['perfil usuário · U1', 'Monte uma squad, receba entregas', 'Cada modelo é uma equipe pronta: papéis, esteira, gates de aprovação e formatos de exportação da sua área.', 'var(--brand)'],
+      vivo:        ['perfil usuário · U3', 'Squad ao vivo', 'A esteira mostra onde o trabalho está. Quando um gate abre, a squad espera por você.', sqModel ? sqModel.cor : 'var(--brand)'],
+      biblioteca:  ['perfil usuário · U4', 'Biblioteca de entregas', 'Todo artefato carrega sua procedência: quem produziu, quem revisou, qual gate aprovou.', 'var(--brand)'],
+      designer:    ['perfil usuário · U5', 'Squad Designer', 'A posição horizontal define a ordem da esteira. Selecione um bloco para editar nome e prompt, teste a squad e salve como modelo.', 'var(--brand)'],
+      telemetria:  ['administração · A1', 'Telemetria & custos', 'Visão do parque de squads para decidir limites e prioridades.', '#345f9e'],
+      ledger:      ['administração · A2', 'Ledger de auditoria', 'Trilha imutável: ativações, gates, exportações e chamadas de ferramenta.', '#345f9e'],
+      providers:   ['administração · A3', 'Providers & rate limits', 'Provedores de modelo conectados, consumo de limite e fallback.', '#345f9e'],
+      permissoes:  ['administração · A4', 'Permissões — skills, tools e MCP', 'O que cada template de squad pode usar. Negar aqui vale imediatamente.', '#345f9e'],
+      modelos:     ['administração · A5', 'Modelos de squad', 'Publique, versione e promova templates — inclusive os criados no Designer.', '#345f9e'],
+      minhas:      ['perfil usuário · U6', 'Minhas squads', 'Tudo que está rodando ou já rodou — retome, reative ou vá direto às entregas.', 'var(--brand)'],
+      personas:    ['perfil usuário · U7', 'Personas & prompts', 'A equipe de cada modelo é sua: edite o prompt de qualquer papel, crie personas novas ou volte ao padrão.', 'var(--brand)'],
+      usuarios:    ['administração · A6', 'Usuários & acessos', 'Quem usa o BuildToValue, com que papel, e o que pode ativar.', '#345f9e'],
+    };
+    const h = heads[S.tela] || heads.inicio;
+
+    // U1 galeria
+    const cats = [['todas','Todas'],['conteudo','Conteúdo'],['analise','Análise'],['criativa','Criativas'],['operacoes','Operações']];
+    const catChips = cats.map(([id,label]) => ({ label,
+      on: () => T.setState({ cat:id }),
+      style: 'border-radius:999px; padding:8px 16px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:var(--sans); border:1px solid ' + (S.cat===id ? 'var(--brand); background:var(--brand); color:#fff;' : 'var(--line2); background:var(--white); color:var(--muted);') }));
+    const ondaTxt = { 1:'onda 1', 2:'onda 2', 3:'onda 3' };
+    const ondaCss = { 1:'background:#e7efe9; color:#2d6a50;', 2:'background:#fdf3e3; color:#9a6b14;', 3:'background:#f4e9ef; color:#8d3f6a;' };
+    const galeria = this.SQUADS.filter(m => S.cat==='todas' || m.cat===S.cat).map(m => ({
+      nome:m.nome, desc:m.desc, cor:m.cor,
+      ondaLabel: ondaTxt[m.onda], ondaStyle: 'margin-left:auto; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; border-radius:999px; padding:3px 9px; ' + ondaCss[m.onda],
+      papeisChips: m.papeis.map(n => ({ n })),
+      fmtChips: m.formatos.map(n => ({ n })),
+      on: () => T.setState({ wizardOpen:true, wizardStep:0, wizardModelId:m.id, papeisOff:{}, wizardRefs:[] }),
+    }));
+
+    // U2 wizard
+    const wm = S.wizardModelId ? this.byId[S.wizardModelId] : null;
+    const stepNames = ['Briefing','Equipe','Entregas & gates'];
+    const wizSteps = stepNames.map((label, i) => ({ label,
+      bar: i <= S.wizardStep ? (wm ? wm.cor : 'var(--brand)') : 'var(--line)',
+      cor: i === S.wizardStep ? 'var(--ink)' : 'var(--faint)' }));
+    const papelDescs = ['abre o trabalho e estrutura o plano','produz a primeira versão','refina qualidade e consistência','valida antes da entrega'];
+    const wizPapeis = wm ? wm.papeis.map((nome, i) => {
+      const off = !!S.papeisOff[i];
+      return { nome, inicial: nome[0], bg: off ? 'var(--faint)' : wm.cor, papelDesc: papelDescs[i],
+        toggle: () => T.setState({ papeisOff: { ...S.papeisOff, [i]: !off } }),
+        switchStyle: 'margin-left:auto; width:40px; height:22px; border-radius:99px; border:none; cursor:pointer; position:relative; transition:background .15s; background:' + (off ? 'var(--line2)' : 'var(--brand)') + ';',
+        knobStyle: 'position:absolute; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s; left:' + (off ? '3px' : '21px') + ';' };
+    }) : [];
+
+    // U3 vivo
+    let esteira = [], feed = [], gateVals = {};
+    if (S.squad && sqModel) {
+      esteira = S.squad.etapas.map((e, i) => {
+        const done = i < S.squad.idx || S.squad.done;
+        const active = i === S.squad.idx && !S.squad.done;
+        const cor = sqModel.cor;
+        const base = 'width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; flex:none; z-index:1; ';
+        let dotStyle, dotIcon;
+        if (done) { dotStyle = base + 'background:' + cor + '; color:#fff; font-weight:700;'; dotIcon = '✓'; }
+        else if (active && e.gate) { dotStyle = base + 'background:var(--gold); color:#3d2b05; animation:btvPulse 1.6s infinite;'; dotIcon = '✋'; }
+        else if (active) { dotStyle = base + 'background:#fff; outline:2px solid ' + cor + '; color:' + cor + '; font-weight:700; animation:btvPulse 1.8s infinite;'; dotIcon = '●'; }
+        else { dotStyle = base + 'background:var(--paper); outline:1px solid var(--line2); color:var(--faint);'; dotIcon = String(i+1); }
+        return { nome:e.nome, papel:e.papel,
+          nomeCor: done || active ? 'var(--ink)' : 'var(--faint)',
+          dotStyle, dotIcon,
+          lineL: i === 0 ? 'transparent' : (done || active ? cor : 'var(--line)'),
+          lineR: i === S.squad.etapas.length - 1 ? 'transparent' : (done ? cor : 'var(--line)'),
+          showProg: active && !e.gate, prog: Math.round(S.squad.prog) };
+      });
+      feed = S.squad.feed;
+      const etapaAtual = S.squad.etapas[S.squad.idx];
+      const isFinalGate = etapaAtual && etapaAtual.nome === 'Entrega';
+      gateVals = {
+        gateTitulo: isFinalGate ? 'Entrega final pronta para sua aprovação' : 'Rascunho pronto para sua aprovação',
+        gateArtefato: sqModel.formatos[0] + ' · v' + (isFinalGate ? '2' : '1'),
+        gatePreview: isFinalGate
+          ? 'Versão final revisada e validada. Fatos checados, estilo consistente com o briefing e estrutura completa. Após sua aprovação, a exportação gera ' + sqModel.formatos.join(', ') + '.'
+          : 'Primeira versão completa produzida por ' + (S.squad.etapas[2] ? S.squad.etapas[2].papel : 'sua equipe') + ' a partir do seu briefing. Estrutura e argumento fechados; refinamento acontece na revisão.',
+        gateChecks: [
+          { t:'Estrutura confere com o plano aprovado' },
+          { t:'Requisitos do briefing atendidos' },
+          { t: isFinalGate ? 'Validação final sem pendências' : 'Sem pendências bloqueantes para revisão' },
+        ],
+      };
+    }
+    const doing = {
+      'Planejamento':'está estruturando o plano de trabalho a partir do seu briefing',
+      'Produção':'está produzindo a primeira versão completa',
+      'Revisão':'está revisando estilo, consistência e clareza',
+      'Validação':'está validando fatos e requisitos antes da entrega',
+      'Exportação':'está gerando os arquivos finais',
+    };
+    const etapaAtual = S.squad && !S.squad.done ? S.squad.etapas[S.squad.idx] : null;
+
+    // U4 biblioteca
+    const biblioteca = [
+      { squad:'Editorial / SEO', cor:'#b8531f', qtd:'3 entregas', itens:[
+        { fmt:'DOCX', nome:'Artigo — Logística verde no Brasil', versao:'v2 · hoje 10:42', trilha:'Redator → Revisor de estilo → Fact-checker · gate aprovado por Marina' },
+        { fmt:'MD', nome:'Newsletter #34 — edição de julho', versao:'v1 · ontem', trilha:'Redator → Revisor de estilo · gate aprovado por Marina' },
+        { fmt:'HTML', nome:'Landing — página de captação Q3', versao:'v3 · 02 jul', trilha:'Redator → Fact-checker · gate aprovado por Paulo' },
+      ]},
+      { squad:'BI / Dados', cor:'#1d6f63', qtd:'2 entregas', itens:[
+        { fmt:'XLSX', nome:'Margem por praça — 2º trimestre', versao:'v1 · 30 jun', trilha:'Preparador → Analista → Revisor · gate aprovado por Paulo' },
+        { fmt:'HTML', nome:'Relatório executivo — churn mensal', versao:'v4 · 28 jun', trilha:'Analista → Visualizador · gate aprovado por Marina' },
+      ]},
+      { squad:'Música simbólica', cor:'#6b4fae', qtd:'3 entregas', itens:[
+        { fmt:'MusicXML', nome:'Peça em Ré menor — quarteto de cordas', versao:'v2 · 25 jun', trilha:'Compositor → Arranjador → Copista → Revisor técnico · gate aprovado por Marina' },
+        { fmt:'MIDI', nome:'Peça em Ré menor — mockup para DAW', versao:'v2 · 25 jun', trilha:'derivado do MusicXML · conversão validada na sandbox' },
+        { fmt:'PDF', nome:'Partitura — grade e partes', versao:'v2 · 25 jun', trilha:'Copista · gate aprovado por Marina' },
+      ]},
+    ];
+
+    // U5 designer
+    const tipoMeta = { papel:{ cor:'#b8531f', icon:'☺', label:'papel' }, ferramenta:{ cor:'#345f9e', icon:'⚒', label:'ferramenta' }, gate:{ cor:'#c79a1e', icon:'✋', label:'gate humano' }, exportador:{ cor:'#14614f', icon:'↧', label:'exportador' }, api:{ cor:'#2b7a8c', icon:'⇌', label:'chamada de API' }, dados:{ cor:'#345f9e', icon:'⛁', label:'base de dados' }, decisao:{ cor:'#9a6b14', icon:'◇', label:'gateway · decisão' }, paralelo:{ cor:'#6b4fae', icon:'⧓', label:'gateway · paralelo' }, inicio:{ cor:'#3d8b4f', icon:'▷', label:'evento · início' }, fim:{ cor:'#5b5344', icon:'◼', label:'evento · fim' } };
+    const paleta = [
+      { tipo:'papel', nome:'Papel', novo:'Novo papel', hint:'um agente com ofício' },
+      { tipo:'ferramenta', nome:'Ferramenta', novo:'Nova ferramenta', hint:'tool / MCP liberada' },
+      { tipo:'api', nome:'Chamada de API', novo:'Chamada de API', hint:'módulo / serviço externo' },
+      { tipo:'dados', nome:'Base de dados', novo:'Base de dados', hint:'consulta ou gravação' },
+      { tipo:'gate', nome:'Gate humano', novo:'Sua aprovação', hint:'a squad espera você' },
+      { tipo:'decisao', nome:'Decisão ◇', novo:'Decisão', hint:'desvia o fluxo (sim / não)' },
+      { tipo:'paralelo', nome:'Paralelo ⧓', novo:'Ramos paralelos', hint:'divide em ramos simultâneos' },
+      { tipo:'inicio', nome:'Início ○', novo:'Início', hint:'evento de entrada do fluxo' },
+      { tipo:'fim', nome:'Fim ◉', novo:'Fim', hint:'evento de término do fluxo' },
+      { tipo:'exportador', nome:'Exportador', novo:'Exportador', hint:'formato de entrega' },
+    ].map(p => ({ ...p, cor:tipoMeta[p.tipo].cor, icon:tipoMeta[p.tipo].icon,
+      on: () => {
+        T.setState({ blocos:[...S.blocos, { id:S.nextBlocoId, tipo:p.tipo, nome:p.novo, x:60 + (S.nextBlocoId%4)*40, y:300 + (S.nextBlocoId%3)*40 }], nextBlocoId:S.nextBlocoId+1, selBloco:S.nextBlocoId, selEdge:null });
+        T.logFlow('+ bloco "' + p.novo + '" (' + tipoMeta[p.tipo].label + ')');
+      } }));
+    const dzRadii = { papel:'11px', ferramenta:'11px', gate:'11px', exportador:'11px', api:'11px', dados:'14px 14px 14px 14px / 22px 22px 10px 10px' };
+    const isShape = (t) => t === 'decisao' || t === 'paralelo' || t === 'inicio' || t === 'fim';
+    const blocos = S.blocos.map(b => {
+      const meta = tipoMeta[b.tipo];
+      const sel = S.selBloco === b.id;
+      const diamond = b.tipo === 'decisao' || b.tipo === 'paralelo';
+      const circle = b.tipo === 'inicio' || b.tipo === 'fim';
+      const borderCss = b.tipo === 'api' ? 'border:4px double ' : 'border:1.5px solid ';
+      const extra = b.tipo === 'dados' ? ' border-top:5px double ' + (sel ? meta.cor : 'var(--line2)') + ';' : '';
+      return { nome:b.nome, tipo:meta.label, cor:meta.cor, icon:meta.icon,
+        isCard: !diamond && !circle, isDiamond: diamond, isCircle: circle,
+        shapeStyle: diamond
+          ? 'width:36px; height:36px; transform:rotate(45deg); background:var(--card); border:1.5px solid ' + (sel ? meta.cor : 'var(--line2)') + '; border-radius:7px; display:flex; align-items:center; justify-content:center; color:' + meta.cor + '; box-shadow:0 5px 14px -8px #22140a44; flex:none;'
+          : 'width:34px; height:34px; border-radius:50%; background:var(--card); border:' + (b.tipo === 'fim' ? '3px' : '1.5px') + ' solid ' + meta.cor + '; display:flex; align-items:center; justify-content:center; color:' + meta.cor + '; font-size:12px; box-shadow:0 5px 14px -8px #22140a44; flex:none;' + (sel ? ' outline:2px solid ' + meta.cor + '33; outline-offset:2px;' : ''),
+        capStyle: 'font-family:var(--mono); font-size:9.5px; color:' + (sel ? 'var(--ink)' : 'var(--muted)') + '; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; background:var(--white)cc; border-radius:6px; padding:1px 5px;',
+        down: (ev) => {
+          ev.preventDefault();
+          if (S.connectFrom !== null) {
+            if (S.connectFrom !== b.id && !S.edges.some(e => e.from === S.connectFrom && e.to === b.id)) {
+              const de = S.blocos.find(x => x.id === S.connectFrom);
+              T.setState({ edges:[...S.edges, { id:S.nextEdgeId, from:S.connectFrom, to:b.id, tipo:'seq', label:'' }], nextEdgeId:S.nextEdgeId + 1, connectFrom:null, selEdge:S.nextEdgeId, selBloco:null });
+              T.logFlow('seta criada: ' + (de ? de.nome : '?') + ' → ' + b.nome);
+            } else { T.setState({ connectFrom:null }); }
+            return;
+          }
+          const canvas = ev.currentTarget.parentElement.getBoundingClientRect();
+          T.setState({ drag:{ id:b.id, ox: ev.clientX - canvas.left - b.x, oy: ev.clientY - canvas.top - b.y }, selBloco:b.id, selEdge:null });
+        },
+        style: (diamond || circle)
+          ? 'position:absolute; left:' + b.x + 'px; top:' + b.y + 'px; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:grab; user-select:none; z-index:2; padding:2px;'
+          : 'position:absolute; left:' + b.x + 'px; top:' + b.y + 'px; display:flex; align-items:center; gap:9px; background:var(--card); ' + borderCss + (sel ? meta.cor : 'var(--line2)') + '; border-radius:' + (dzRadii[b.tipo] || '11px') + '; padding:9px 13px; cursor:grab; box-shadow:0 6px 16px -8px #22140a44; user-select:none; z-index:2;' + extra };
+    });
+    const sortedBlocos = T.flowOrder();
+    const selB = S.blocos.find(b => b.id === S.selBloco) || null;
+    const dzDef = selB ? T.dzDefaultPrompt(selB.nome) : '';
+    const updBloco = (patch) => T.setState({ blocos: S.blocos.map(b => b.id === S.selBloco ? { ...b, ...patch } : b) });
+    const baseChip = (active) => 'border-radius:999px; padding:6px 13px; font-size:11.5px; font-weight:600; cursor:pointer; font-family:var(--sans); border:1px solid ' + (active ? 'var(--brand); background:var(--brand); color:#fff;' : 'var(--line2); background:var(--white); color:var(--muted);');
+    const dzBases = [['blank','Em branco'],['editorial','Editorial'],['pesquisa','Pesquisa'],['musica','Música']].map(([id, nome]) => ({ nome, on: () => T.loadBase(id), style: baseChip(S.designerBase === id) }));
+    const dzEsteira = [{ n:'⌂ Briefing', cor:'var(--faint)', arrow: sortedBlocos.length > 0 }, ...sortedBlocos.map((b, i) => ({ n: tipoMeta[b.tipo].icon + ' ' + b.nome, cor: tipoMeta[b.tipo].cor, arrow: i < sortedBlocos.length - 1 }))];
+    const tipoCores = { seq:'#8b8171', sim:'#3d8b4f', nao:'#b8531f', dados:'#345f9e' };
+    const edgeTipoNames = { seq:'sequência', sim:'condição: sim', nao:'condição: não', dados:'fluxo de dados' };
+    const edgeLblDefault = { seq:'', sim:'sim ✓', nao:'não ✕', dados:'dados' };
+    const bMap = Object.fromEntries(S.blocos.map(b => [b.id, b]));
+    const center = (b) => isShape(b.tipo) ? { x:b.x + 21, y:b.y + 21 } : { x:b.x + 80, y:b.y + 23 };
+    const designerLines = React.createElement('svg', { key:'lines', style:{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:1 } },
+      React.createElement('defs', { key:'defs' },
+        Object.entries(tipoCores).map(([t, c]) => React.createElement('marker', { key:t, id:'btv-arr-' + t, viewBox:'0 0 10 10', refX:9, refY:5, markerWidth:7, markerHeight:7, orient:'auto-start-reverse' },
+          React.createElement('path', { d:'M0,0 L10,5 L0,10 z', fill:c })))),
+      S.edges.map(e => {
+        const f = bMap[e.from], t = bMap[e.to];
+        if (!f || !t) return null;
+        const a = center(f), d = center(t);
+        const dx = Math.max(40, Math.abs(d.x - a.x) / 2);
+        const path = 'M' + a.x + ',' + a.y + ' C' + (a.x + dx) + ',' + a.y + ' ' + (d.x - dx) + ',' + d.y + ' ' + d.x + ',' + d.y;
+        const selE = S.selEdge === e.id;
+        const cor = tipoCores[e.tipo];
+        const lbl = e.label || edgeLblDefault[e.tipo];
+        return React.createElement('g', { key:e.id },
+          React.createElement('path', { d:path, stroke:cor, strokeWidth: selE ? 3 : 1.8, strokeDasharray: e.tipo === 'dados' ? '6 5' : undefined, fill:'none', markerEnd:'url(#btv-arr-' + e.tipo + ')', opacity: selE ? 1 : 0.85 }),
+          React.createElement('path', { d:path, stroke:'transparent', strokeWidth:16, fill:'none', style:{ pointerEvents:'stroke', cursor:'pointer' }, onMouseDown:(ev) => { ev.stopPropagation(); T.setState({ selEdge:e.id, selBloco:null, connectFrom:null }); } }),
+          lbl ? React.createElement('text', { x:(a.x + d.x) / 2, y:(a.y + d.y) / 2 - 8, textAnchor:'middle', style:{ font:'600 10px "Spline Sans Mono",monospace', fill:cor, paintOrder:'stroke', stroke:'#fbf8f1', strokeWidth:3 } }, lbl) : null);
+      }));
+    const selE = S.edges.find(e => e.id === S.selEdge) || null;
+    const edgeDesc = selE ? ((bMap[selE.from] ? bMap[selE.from].nome : '?') + ' → ' + (bMap[selE.to] ? bMap[selE.to].nome : '?')) : '';
+
+    // admin data
+    const statCards = [
+      { k:'custo do mês', v:'R$ 1.284', delta:'▲ 12% vs. maio', deltaCor:'var(--warn)' },
+      { k:'execuções', v:'312', delta:'▲ 8%', deltaCor:'var(--ok)' },
+      { k:'entregas exportadas', v:'187', delta:'▲ 21%', deltaCor:'var(--ok)' },
+      { k:'squads ativas', v:'9', delta:'3 aguardando gate', deltaCor:'var(--faint)' },
+    ];
+    const custoData = [['editorial',412],['pesquisa',318],['bi',224],['sales',131],['operacoes',96],['musica',62],['imagem',41]];
+    const maxCusto = 412;
+    const custoBars = custoData.map(([id,v]) => { const m = this.byId[id]; return { nome:m.nome, cor:m.cor, pct: Math.round(v/maxCusto*100), valor:'R$ ' + v }; });
+    const ledger = [
+      { ts:'hoje 11:32', ev:'Gate aprovado — entrega final', squad:'Editorial / SEO', cor:'#b8531f', ator:'Marina L.', hash:'a91f…c204' },
+      { ts:'hoje 11:04', ev:'Exportação DOCX gerada', squad:'Editorial / SEO', cor:'#b8531f', ator:'squad', hash:'77b2…09ee' },
+      { ts:'hoje 10:56', ev:'Chamada de tool: busca_web (12 req)', squad:'Pesquisa & Intel.', cor:'#345f9e', ator:'Investigador', hash:'d301…5b7a' },
+      { ts:'hoje 10:41', ev:'Ajuste solicitado no rascunho', squad:'Editorial / SEO', cor:'#b8531f', ator:'Marina L.', hash:'42cc…18f0' },
+      { ts:'hoje 09:58', ev:'Squad ativada a partir do modelo v1.4', squad:'BI / Dados', cor:'#1d6f63', ator:'Paulo R.', hash:'e8a4…77d1' },
+      { ts:'ontem 18:22', ev:'Conversão MusicXML→MIDI na sandbox', squad:'Música simbólica', cor:'#6b4fae', ator:'Copista', hash:'19fe…b6c3' },
+      { ts:'ontem 17:40', ev:'Permissão negada: gerador_imagem', squad:'Jurídico documental', cor:'#6b5744', ator:'política MCP', hash:'c55d…e921' },
+      { ts:'ontem 16:05', ev:'Template publicado: Sales enablement v2.0', squad:'—', cor:'var(--muted)', ator:'admin', hash:'b7e0…4a55' },
+    ];
+    const pill = (ok) => 'font-family:var(--mono); font-size:10px; letter-spacing:.08em; border-radius:999px; padding:5px 12px; ' + (ok ? 'background:#e7efe9; color:#2d6a50;' : 'background:#fdf3e3; color:#9a6b14;');
+    const providers = [
+      { nome:'Anthropic', tipo:'API direta', modelos:'Claude Sonnet (padrão das squads) · Claude Opus (gates e validação)', pct:72, barCor:'#b8531f', status:'operacional', pillStyle:pill(true) },
+      { nome:'OpenRouter', tipo:'gateway', modelos:'fallback automático quando o limite primário satura', pct:31, barCor:'#345f9e', status:'operacional', pillStyle:pill(true) },
+      { nome:'Local · Ollama', tipo:'on-device', modelos:'tarefas de baixo risco: resumos, formatação, conversões', pct:12, barCor:'#57702b', status:'ocioso', pillStyle:pill(false) },
+    ];
+    const toolsData = [
+      { nome:'busca_web', escopo:'rede · somente leitura', desc:'Pesquisa e captura de fontes com citação obrigatória.', squads:['Pesquisa','Editorial','Sales'] },
+      { nome:'sandbox_docker', escopo:'execução confinada', desc:'Roda conversores e scripts sem acesso ao sistema do usuário.', squads:['BI','Música','Operações'] },
+      { nome:'conversor_musicxml', escopo:'sandbox · arquivos', desc:'Toolchain MusicXML ↔ MIDI ↔ PDF de partitura.', squads:['Música'] },
+      { nome:'planilhas', escopo:'arquivos do usuário', desc:'Lê e gera XLSX/CSV a partir das fontes aprovadas.', squads:['BI','Pesquisa'] },
+      { nome:'gerador_imagem', escopo:'MCP externo', desc:'Geração de imagem via serviço conectado; curadoria humana.', squads:['Imagem'] },
+      { nome:'mcp_figma', escopo:'MCP externo', desc:'Exporta wireframes e specs para o Figma do time.', squads:['Design/UX'] },
+    ];
+    const tools = toolsData.map((t, i) => {
+      const off = !!S.toolsOff[i];
+      return { ...t, squads: t.squads.map(n => ({ n })),
+        toggle: () => T.setState({ toolsOff:{ ...S.toolsOff, [i]:!off } }),
+        switchStyle: 'width:40px; height:22px; border-radius:99px; border:none; cursor:pointer; position:relative; background:' + (off ? 'var(--line2)' : 'var(--ok)') + ';',
+        knobStyle: 'position:absolute; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s; left:' + (off ? '3px' : '21px') + ';' };
+    });
+    const tplData = [
+      { id:'editorial', versao:'v1.4', uso:'23 squads', pub:true },
+      { id:'pesquisa', versao:'v1.2', uso:'17 squads', pub:true },
+      { id:'bi', versao:'v2.1', uso:'14 squads', pub:true },
+      { id:'sales', versao:'v2.0', uso:'9 squads', pub:true },
+      { id:'operacoes', versao:'v1.0', uso:'8 squads', pub:true },
+      { id:'musica', versao:'v0.9', uso:'3 squads', pub:true },
+      { id:'video', versao:'v0.4', uso:'—', pub:false },
+      { id:'podcast', versao:'v0.6', uso:'—', pub:false },
+    ];
+    const catLabel = { conteudo:'Conteúdo', analise:'Análise', criativa:'Criativas', operacoes:'Operações' };
+    const templates = tplData.map((t, i) => {
+      const m = this.byId[t.id];
+      const pub = S.tplDraft[i] !== undefined ? S.tplDraft[i] : t.pub;
+      return { nome:m.nome, cor:m.cor, versao:t.versao, cat:catLabel[m.cat], uso:t.uso,
+        status: pub ? 'publicado' : 'rascunho', pillStyle: pill(pub),
+        acao: pub ? 'despublicar' : 'publicar',
+        toggle: () => T.setState({ tplDraft:{ ...S.tplDraft, [i]:!pub } }) };
+    });
+    if (S.designerSaved) {
+      const pubDz = S.tplDraft.dz !== undefined ? S.tplDraft.dz : false;
+      templates.unshift({ nome: S.designerNome + ' (Designer)', cor:'#2b7a8c', versao:'v0.1', cat:'Personalizada', uso:'—',
+        status: pubDz ? 'publicado' : 'rascunho', pillStyle: pill(pubDz), acao: pubDz ? 'despublicar' : 'publicar',
+        toggle: () => T.setState({ tplDraft:{ ...S.tplDraft, dz:!pubDz } }) });
+    }
+
+    // U7 personas & prompts
+    const pM = this.byId[S.personaModelId];
+    const ov = S.promptOv[S.personaModelId] || {};
+    const customs = S.customPersonas[S.personaModelId] || [];
+    const personaModelos = this.SQUADS.map(m => ({ nome:m.nome, cor:m.cor,
+      on: () => T.setState({ personaModelId:m.id }),
+      style: 'display:flex; align-items:center; gap:7px; border-radius:999px; padding:7px 13px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--sans); ' + (S.personaModelId===m.id ? 'border:1px solid ' + m.cor + '; background:var(--white); color:var(--ink);' : 'border:1px solid var(--line2); background:transparent; color:var(--muted);') }));
+    const badgeBase = 'flex:none; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; border-radius:999px; padding:4px 10px; ';
+    const badgeCss = { padrao:'background:var(--paper); color:var(--faint);', editado:'background:#fdf3e3; color:#9a6b14;', propria:'background:#e7efe9; color:#2d6a50;' };
+    const setOv = (key, val) => T.setState({ promptOv: { ...S.promptOv, [S.personaModelId]: { ...ov, [key]: val } } });
+    const personas = [
+      ...pM.papeis.map((nome, i) => {
+        const key = 'd' + i;
+        const def = T.promptPadrao(i, nome, pM);
+        const editado = ov[key] !== undefined && ov[key] !== def;
+        return { nome, inicial:nome[0], cor:pM.cor, papelDesc:papelDescs[i], custom:false, fixo:true,
+          prompt: ov[key] !== undefined ? ov[key] : def, editado,
+          badge: editado ? 'editado' : 'padrão', badgeStyle: badgeBase + (editado ? badgeCss.editado : badgeCss.padrao),
+          onPrompt: (e) => setOv(key, e.target.value),
+          restaurar: () => { const o = { ...ov }; delete o[key]; T.setState({ promptOv:{ ...S.promptOv, [S.personaModelId]:o } }); } };
+      }),
+      ...customs.map(c => ({ nome:c.nome, inicial:(c.nome[0] || 'P').toUpperCase(), cor:pM.cor, papelDesc:'persona criada por você', custom:true, fixo:false,
+        prompt:c.prompt, editado:false, badge:'própria', badgeStyle: badgeBase + badgeCss.propria,
+        onPrompt: (e) => T.setState({ customPersonas:{ ...S.customPersonas, [S.personaModelId]: customs.map(x => x.id===c.id ? { ...x, prompt:e.target.value } : x) } }),
+        onNome: (e) => T.setState({ customPersonas:{ ...S.customPersonas, [S.personaModelId]: customs.map(x => x.id===c.id ? { ...x, nome:e.target.value } : x) } }),
+        remover: () => T.setState({ customPersonas:{ ...S.customPersonas, [S.personaModelId]: customs.filter(x => x.id!==c.id) } }) })),
+    ];
+
+    // U6 minhas squads
+    const spill = (tone) => 'font-family:var(--mono); font-size:10px; letter-spacing:.06em; border-radius:999px; padding:5px 11px; text-align:center; ' + tone;
+    const minhasSquads = [];
+    if (S.squad && sqModel) minhasSquads.push({ nome:'Squad atual — em execução', modelo:sqModel.nome, cor:sqModel.cor,
+      status: S.squad.done ? 'concluída' : (S.squad.gateOpen ? 'aguardando você' : 'em produção'),
+      pillStyle: spill(S.squad.done ? 'background:#e7efe9; color:#2d6a50;' : (S.squad.gateOpen ? 'background:#fdf3e3; color:#9a6b14;' : 'background:var(--paper); color:var(--muted);')),
+      pct: Math.min(100, Math.round(S.squad.idx / S.squad.etapas.length * 100)),
+      acao:'abrir ao vivo', on: () => T.setState({ tela:'vivo' }) });
+    minhasSquads.push(
+      { nome:'Newsletter de julho', modelo:'Editorial / SEO', cor:'#b8531f', status:'concluída', pillStyle:spill('background:#e7efe9; color:#2d6a50;'), pct:100, acao:'ver entregas', on: () => T.setState({ tela:'biblioteca' }) },
+      { nome:'Margem por praça — Q2', modelo:'BI / Dados', cor:'#1d6f63', status:'concluída', pillStyle:spill('background:#e7efe9; color:#2d6a50;'), pct:100, acao:'ver entregas', on: () => T.setState({ tela:'biblioteca' }) },
+      { nome:'Dossiê de concorrentes', modelo:'Pesquisa & Inteligência', cor:'#345f9e', status:'encerrada', pillStyle:spill('background:var(--paper); color:var(--faint);'), pct:45, acao:'reativar', on: () => T.setState({ wizardOpen:true, wizardStep:0, wizardModelId:'pesquisa', papeisOff:{}, wizardRefs:[] }) },
+    );
+
+    // A6 usuários
+    const uCores = ['var(--brand)','#b8531f','#345f9e','#8d3f6a'];
+    const usuarios = [
+      { nome:'Marina Lopes', email:'marina@empresa.com', papel:'admin', squads:'4 squads ativas' },
+      { nome:'Paulo Reis', email:'paulo@empresa.com', papel:'usuário', squads:'3 squads ativas' },
+      { nome:'Ana Ferraz', email:'ana@empresa.com', papel:'usuário', squads:'2 squads ativas' },
+      { nome:'Diego Martins', email:'diego@empresa.com', papel:'usuário', squads:'1 squad ativa' },
+    ].map((u, i) => {
+      const off = !!S.usersOff[i];
+      return { ...u, inicial:u.nome[0], bg:uCores[i],
+        papelStyle: spill(u.papel==='admin' ? 'background:#e7efe9; color:#2d6a50;' : 'background:var(--paper); color:var(--muted);'),
+        acessoLabel: off ? 'suspenso' : 'ativo',
+        toggle: () => T.setState({ usersOff:{ ...S.usersOff, [i]:!off } }),
+        switchStyle: 'width:40px; height:22px; border-radius:99px; border:none; cursor:pointer; position:relative; background:' + (off ? 'var(--line2)' : 'var(--ok)') + ';',
+        knobStyle: 'position:absolute; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s; left:' + (off ? '3px' : '21px') + ';' };
+    });
+
+    // ajustes rápidos (engrenagem)
+    const accentAtual = S.accent ?? (this.props.corMarca ?? '#14614f');
+    const accentSwatches = ['#14614f','#8a3b2a','#2b4a8c','#5b3f8c','#9a6b14'].map(c => ({
+      on: () => T.setState({ accent:c }),
+      style: 'width:26px; height:26px; border-radius:50%; background:' + c + '; cursor:pointer; border:2px solid ' + (accentAtual===c ? 'var(--ink)' : 'var(--card)') + '; outline:1px solid var(--line2);' }));
+    const ritmoAtual = S.ritmo ?? (this.props.ritmoEsteira ?? 1);
+
+    const tabBase = 'border:none; border-radius:8px; padding:7px 15px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:var(--sans); white-space:nowrap; ';
+
+    return {
+      rootRef: this.rootRef, ajusteRef: this.ajusteRef,
+      // topbar
+      setUser: () => T.setState({ perfil:'user', tela: S.squad ? 'vivo' : 'inicio' }),
+      setAdmin: () => T.setState({ perfil:'admin', tela:'telemetria' }),
+      userTabStyle: tabBase + (S.perfil==='user' ? 'background:var(--brand); color:#fff;' : 'background:transparent; color:var(--muted);'),
+      adminTabStyle: tabBase + (S.perfil==='admin' ? 'background:var(--brand); color:#fff;' : 'background:transparent; color:var(--muted);'),
+      hasSquad: !!S.squad && S.perfil==='user',
+      squadNome: sqModel ? sqModel.nome : '', squadCor: sqModel ? sqModel.cor : 'var(--brand)',
+      squadStatusLabel: S.squad ? (S.squad.done ? '· concluída' : S.squad.gateOpen ? '· aguardando você' : '· em produção') : '',
+      squadMeta: S.squad ? 'etapa ' + Math.min(S.squad.idx+1, S.squad.etapas.length) + ' de ' + S.squad.etapas.length : '',
+      // sidebar
+      showSquadSection: navSquad.length > 0, navSquad, navMain,
+      navHeading: S.perfil==='user' ? 'geral' : 'administração',
+      perfilLabel: S.perfil==='user' ? 'perfil usuário' : 'perfil admin',
+      // header
+      screenKicker:h[0], screenTitle:h[1], screenNote:h[2], screenAccent:h[3],
+      // telas flags
+      isInicio: S.tela==='inicio' && S.perfil==='user',
+      isVivo: S.tela==='vivo' && S.perfil==='user' && !!S.squad,
+      isBiblioteca: S.tela==='biblioteca' && S.perfil==='user',
+      isDesigner: S.tela==='designer' && S.perfil==='user',
+      isTelemetria: S.tela==='telemetria' && S.perfil==='admin',
+      isLedger: S.tela==='ledger' && S.perfil==='admin',
+      isProviders: S.tela==='providers' && S.perfil==='admin',
+      isPermissoes: S.tela==='permissoes' && S.perfil==='admin',
+      isModelos: S.tela==='modelos' && S.perfil==='admin',
+      isMinhas: S.tela==='minhas' && S.perfil==='user',
+      isPersonas: S.tela==='personas' && S.perfil==='user',
+      isUsuarios: S.tela==='usuarios' && S.perfil==='admin',
+      // U1
+      catChips, galeria,
+      // U3
+      esteira, feed,
+      gateOpen: !!(S.squad && S.squad.gateOpen),
+      showPainelAtivo: !!(S.squad && !S.squad.gateOpen && !S.squad.done),
+      squadDone: !!(S.squad && S.squad.done),
+      ativoPapel: etapaAtual ? etapaAtual.papel : '', ativoInicial: etapaAtual ? (etapaAtual.papel[0] || 'B') : 'B',
+      ativoStatus:'trabalhando agora',
+      ativoFazendo: etapaAtual ? (doing[etapaAtual.nome] || ('está trabalhando em "' + etapaAtual.nome.toLowerCase() + '"')) : '',
+      ...gateVals,
+      ajusteMode: S.ajusteMode,
+      ajusteBtnLabel: S.ajusteMode ? 'Enviar ajuste' : 'Pedir ajuste',
+      aprovarGate: () => T.approveGate(false),
+      pedirAjuste: () => {
+        if (!S.ajusteMode) { T.setState({ ajusteMode:true }); return; }
+        const sq = S.squad; if (!sq) return;
+        const txt = (T.ajusteRef.current && T.ajusteRef.current.value.trim()) || 'ajustar conforme conversa';
+        const backIdx = Math.max(1, sq.idx - 2);
+        T.setState({ ajusteMode:false, squad:{ ...sq, idx:backIdx, prog:0, gateOpen:false,
+          feed:[T.fitem(sq.etapas[backIdx].papel + ' retomou com sua instrução: "' + txt.slice(0,60) + '"'), T.fitem('↩ ajuste solicitado no gate'), ...sq.feed] } });
+      },
+      encerrarSquad: () => T.setState({ squad:null, tela:'inicio', ajusteMode:false, chat:[] }),
+      // cockpit
+      chatRef: this.chatRef, chatBodyRef: this.chatBodyRef,
+      sendChat: () => T.sendChatMsg(),
+      chatKey: (e) => { if (e.key === 'Enter') T.sendChatMsg(); },
+      chat: S.chat.map(m => {
+        const me = m.from === 'Você';
+        return { from:m.from, ts:m.ts, txt:m.txt,
+          rowStyle: 'display:flex; justify-content:' + (me ? 'flex-end' : 'flex-start') + ';',
+          bubbleStyle: 'max-width:85%; padding:9px 13px; font-size:12.5px; line-height:1.55; ' + (me ? 'background:var(--brand); color:#fff; border-radius:12px 12px 4px 12px;' : 'background:var(--paper); color:var(--ink); border:1px solid var(--line); border-radius:12px 12px 12px 4px;') };
+      }),
+      roster: S.squad ? [...new Set(S.squad.etapas.map(e => e.papel).filter(p => p !== 'Você' && p !== 'BuildToValue' && p !== 'ferramenta' && p !== 'API' && p !== 'base de dados' && p.indexOf('gateway') !== 0))].map(p => ({ n:p, style:'font-family:var(--mono); font-size:9px; letter-spacing:.05em; border-radius:999px; padding:3px 8px; background:var(--paper); color:var(--muted); border:1px solid var(--line);' })).concat([{ n:'Você', style:'font-family:var(--mono); font-size:9px; letter-spacing:.05em; border-radius:999px; padding:3px 8px; background:var(--brand); color:#fff;' }]) : [],
+      irBiblioteca: (e) => { e.preventDefault(); T.setState({ tela:'biblioteca' }); },
+      // U4
+      biblioteca,
+      // U5
+      paleta, blocos, designerLines, blocosQtd: S.blocos.length,
+      canvasDown: (ev) => { if (ev.target === ev.currentTarget) T.setState({ selBloco:null, selEdge:null, connectFrom:null }); },
+      canvasMove: (ev) => {
+        if (!S.drag) return;
+        const r = ev.currentTarget.getBoundingClientRect();
+        const nx = Math.max(0, Math.min(ev.clientX - r.left - S.drag.ox, 1200 - 175));
+        const ny = Math.max(0, Math.min(ev.clientY - r.top - S.drag.oy, 480 - 48));
+        T.setState({ blocos: S.blocos.map(b => b.id === S.drag.id ? { ...b, x:nx, y:ny } : b) });
+      },
+      canvasUp: () => { if (S.drag) T.setState({ drag:null }); },
+      dzNome: S.designerNome, dzNomeOn: (e) => T.setState({ designerNome:e.target.value }),
+      dzBases, dzEsteira,
+      dzLimpar: () => { T.setState({ blocos:[], edges:[], selBloco:null, selEdge:null, connectFrom:null, designerBase:'blank' }); T.logFlow('fluxo limpo — todos os blocos e setas removidos'); },
+      dzSalvar: () => { T.setState({ designerSaved:true }); T.logFlow('fluxo salvo como modelo "' + S.designerNome + '"'); },
+      dzSalvarLabel: S.designerSaved ? '✓ salvo como modelo' : 'salvar como modelo',
+      dzTestar: () => {
+        if (sortedBlocos.length === 0) return;
+        const etapas = [{ nome:'Briefing', papel:'Você' }];
+        sortedBlocos.forEach(b => {
+          if (b.tipo === 'inicio' || b.tipo === 'fim') return;
+          if (b.tipo === 'papel') etapas.push({ nome:b.nome, papel:b.nome });
+          else if (b.tipo === 'ferramenta') etapas.push({ nome:b.nome, papel:'ferramenta' });
+          else if (b.tipo === 'api') etapas.push({ nome:b.nome, papel:'API' });
+          else if (b.tipo === 'dados') etapas.push({ nome:b.nome, papel:'base de dados' });
+          else if (b.tipo === 'gate') etapas.push({ nome:b.nome, papel:'Você', gate:true });
+          else if (b.tipo === 'decisao') etapas.push({ nome:(b.cond || b.nome), papel:'gateway ◇' });
+          else if (b.tipo === 'paralelo') etapas.push({ nome:b.nome, papel:'gateway ⧓' });
+          else etapas.push({ nome:'Exportação', papel:'BuildToValue' });
+        });
+        if (etapas.length < 2) return;
+        T.logFlow('execução de teste iniciada — ' + (etapas.length - 1) + ' etapas');
+        T.byId.designer.nome = S.designerNome;
+        const first = etapas[1];
+        T.setState({ tela:'vivo', ajusteMode:false,
+          chat:[ { from:(first.papel === 'Você' ? 'Squad' : first.papel), ts:T.fitem('').ts, txt:'Squad de teste no ar. Você é parte da equipe — direcione por aqui a qualquer momento.' } ],
+          squad:{ modelId:'designer', etapas, idx:1, prog:0, gateOpen: !!(first && first.gate), done:false,
+          feed:[ T.fitem(first.papel + ' assumiu: ' + first.nome.toLowerCase()), T.fitem('execução de teste — nada é exportado sem sua aprovação'), T.fitem('squad "' + S.designerNome + '" ativada em modo teste') ] } });
+      },
+      dzSel: !!selB,
+      dzSelTipo: selB ? ({ papel:'papel', ferramenta:'ferramenta', gate:'gate humano', exportador:'exportador' })[selB.tipo] : '',
+      dzSelNome: selB ? selB.nome : '',
+      dzSelNomeOn: (e) => updBloco({ nome:e.target.value }),
+      dzSelIsPapel: !!selB && selB.tipo === 'papel',
+      dzSelPrompt: selB ? (selB.prompt !== undefined ? selB.prompt : dzDef) : '',
+      dzSelPromptOn: (e) => updBloco({ prompt:e.target.value }),
+      dzSelPromptEditado: !!selB && selB.prompt !== undefined && selB.prompt !== dzDef,
+      dzSelPromptReset: () => updBloco({ prompt:undefined }),
+      dzDuplicar: () => { if (!selB) return; T.setState({ blocos:[...S.blocos, { ...selB, id:S.nextBlocoId, x:Math.min(selB.x + 28, 1000), y:Math.min(selB.y + 28, 420) }], nextBlocoId:S.nextBlocoId + 1, selBloco:S.nextBlocoId }); T.logFlow('bloco duplicado: "' + selB.nome + '"'); },
+      dzDuplicarFluxo: () => {
+        if (S.blocos.length === 0) return;
+        let nid = S.nextBlocoId; const idMap = {};
+        const clones = S.blocos.map(b => { idMap[b.id] = nid; return { ...b, id:nid++, x:Math.min(b.x + 34, 1020), y:Math.min(b.y + 34, 430) }; });
+        let eid = S.nextEdgeId;
+        const edgeClones = S.edges.map(e => ({ ...e, id:eid++, from:idMap[e.from], to:idMap[e.to] }));
+        T.setState({ blocos:[...S.blocos, ...clones], edges:[...S.edges, ...edgeClones], nextBlocoId:nid, nextEdgeId:eid, selBloco:null, selEdge:null });
+        T.logFlow('fluxo duplicado — ' + clones.length + ' blocos e ' + edgeClones.length + ' setas clonados');
+      },
+      dzSelIsGateway: !!selB && (selB.tipo === 'decisao' || selB.tipo === 'paralelo'),
+      dzSelCond: selB ? (selB.cond || '') : '',
+      dzSelCondOn: (e) => updBloco({ cond:e.target.value }),
+      dzSelIsApi: !!selB && selB.tipo === 'api',
+      dzSelEndpoint: selB ? (selB.endpoint || '') : '',
+      dzSelEndpointOn: (e) => updBloco({ endpoint:e.target.value }),
+      dzSelIsDados: !!selB && selB.tipo === 'dados',
+      dzSelFonte: selB ? (selB.fonte || '') : '',
+      dzSelFonteOn: (e) => updBloco({ fonte:e.target.value }),
+      dzConectar: () => { if (S.selBloco !== null) T.setState({ connectFrom:S.selBloco, selEdge:null }); },
+      dzConectando: S.connectFrom !== null,
+      dzEdgeSel: !!selE,
+      dzEdgeDesc: selE ? edgeDesc + ' · ' + edgeTipoNames[selE.tipo] : '',
+      dzEdgeLabel: selE ? (selE.label || '') : '',
+      dzEdgeLabelOn: (e) => { if (selE) T.setState({ edges:S.edges.map(x => x.id === selE.id ? { ...x, label:e.target.value } : x) }); },
+      dzEdgeTipos: selE ? [['seq','sequência'],['sim','sim ✓'],['nao','não ✕'],['dados','dados ⛁']].map(([t, n]) => ({ n,
+        on: () => { T.setState({ edges:S.edges.map(x => x.id === selE.id ? { ...x, tipo:t } : x) }); T.logFlow('seta "' + edgeDesc + '" mudou de finalidade: ' + edgeTipoNames[t]); },
+        style: 'border-radius:999px; padding:6px 11px; font-size:10px; font-weight:600; cursor:pointer; font-family:var(--mono); border:1px solid ' + (selE.tipo === t ? tipoCores[t] + '; background:' + tipoCores[t] + '; color:#fff;' : 'var(--line2); background:var(--white); color:var(--muted);') })) : [],
+      dzEdgeInverter: () => { if (!selE) return; T.setState({ edges:S.edges.map(x => x.id === selE.id ? { ...x, from:selE.to, to:selE.from } : x) }); T.logFlow('seta invertida: agora ' + (bMap[selE.to] ? bMap[selE.to].nome : '?') + ' → ' + (bMap[selE.from] ? bMap[selE.from].nome : '?')); },
+      dzEdgeRemover: () => { if (!selE) return; T.setState({ edges:S.edges.filter(x => x.id !== selE.id), selEdge:null }); T.logFlow('seta apagada: ' + edgeDesc); },
+      dzLog: S.dzLog.slice(0, 8),
+      dzLogQtd: S.dzLog.length,
+      edgesQtd: S.edges.length,
+      dzRemover: () => { if (!selB) return; T.setState({ blocos:S.blocos.filter(b => b.id !== S.selBloco), edges:S.edges.filter(e => e.from !== S.selBloco && e.to !== S.selBloco), selBloco:null }); T.logFlow('bloco removido: "' + selB.nome + '" (setas ligadas apagadas)'); },
+      // admin
+      statCards, custoBars, ledger, providers, tools, templates,
+      // wizard
+      wizardOpen: S.wizardOpen,
+      wizCor: wm ? wm.cor : 'var(--brand)',
+      wizTitulo: wm ? 'Montar squad · ' + wm.nome : '',
+      wizSteps,
+      wizIsBriefing: S.wizardStep===0, wizIsEquipe: S.wizardStep===1, wizIsEntregas: S.wizardStep===2,
+      wizPerguntas: wm ? wm.perguntas.map(([label, ph]) => ({ label, ph })) : [],
+      wizPapeis,
+      wizFormatos: wm ? wm.formatos.map(n => ({ n })) : [],
+      wizCanBack: S.wizardStep > 0,
+      wizBack: () => T.setState({ wizardStep: S.wizardStep - 1 }),
+      wizNext: () => { if (S.wizardStep < 2) T.setState({ wizardStep: S.wizardStep + 1 }); else T.ativarSquad(); },
+      wizNextLabel: S.wizardStep < 2 ? 'Continuar →' : '⚑ Ativar squad',
+      fecharWizard: () => T.setState({ wizardOpen:false }),
+      // briefing rico
+      refInputRef: this.refInputRef,
+      addRef: () => { const el = T.refInputRef.current; const v = el && el.value.trim(); if (!v) return; el.value = ''; T.setState({ wizardRefs:[...S.wizardRefs, { t:'link', label:v }] }); },
+      addFile: () => T.setState({ wizardRefs:[...S.wizardRefs, { t:'arquivo', label:'material-0' + (S.wizardRefs.length + 1) + '.pdf' }] }),
+      refsExist: S.wizardRefs.length > 0,
+      wizardRefsChips: S.wizardRefs.map((r, i) => ({ label:(r.t === 'arquivo' ? '⎘ ' : '↗ ') + r.label, rm: () => T.setState({ wizardRefs:S.wizardRefs.filter((x, j) => j !== i) }) })),
+      // U6 / U7 / A6
+      minhasSquads, usuarios,
+      personaModelos, personas,
+      personaResumo: personas.length + ' personas · ' + pM.nome,
+      restaurarTodos: () => T.setState({ promptOv:{ ...S.promptOv, [S.personaModelId]:{} } }),
+      novaPersona: () => T.setState({ customPersonas:{ ...S.customPersonas, [S.personaModelId]:[...customs, { id:S.nextPersonaId, nome:'Nova persona', prompt:'Você é uma nova persona da squad ' + pM.nome + '. Descreva aqui o ofício, as responsabilidades e os limites deste papel — e quando ele deve passar o trabalho adiante.' }] }, nextPersonaId:S.nextPersonaId + 1 }),
+      // engrenagem
+      gearOpen: S.gearOpen,
+      toggleGear: () => T.setState({ gearOpen:!S.gearOpen }),
+      closeGear: () => T.setState({ gearOpen:false }),
+      accentSwatches,
+      ritmoVal: ritmoAtual, ritmoLabel: ritmoAtual.toFixed(1) + '×',
+      setRitmo: (e) => T.setState({ ritmo:parseFloat(e.target.value) }),
+      toggleAutoGates: () => T.setState({ autoGates:!S.autoGates }),
+      autoGatesSwitch: 'flex:none; width:40px; height:22px; border-radius:99px; border:none; cursor:pointer; position:relative; background:' + (S.autoGates ? 'var(--ok)' : 'var(--line2)') + ';',
+      autoGatesKnob: 'position:absolute; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .15s; left:' + (S.autoGates ? '21px' : '3px') + ';',
+      gearGoPersonas: () => T.setState({ gearOpen:false, perfil:'user', tela:'personas' }),
+      gearGoMinhas: () => T.setState({ gearOpen:false, perfil:'user', tela:'minhas' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

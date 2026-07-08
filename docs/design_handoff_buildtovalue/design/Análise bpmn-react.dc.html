@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #efe9de; }
+  a { color: #14614f; } a:hover { color: #0c4237; }
+  @media print { body { background: #fff; } }
+</style>
+</helmet>
+
+<div style="min-height:100vh; background:#efe9de; color:#221d15; font-family:'Instrument Sans',sans-serif; padding:56px 24px 96px; display:flex; justify-content:center;">
+<div style="width:100%; max-width:880px;">
+
+  <header style="background:#14614f; color:#f2ede2; border-radius:18px 18px 0 0; padding:56px 64px 48px; position:relative; overflow:hidden;">
+    <div style="position:absolute; inset:0; opacity:.14; background-image:radial-gradient(#f2ede2 1px, transparent 1px); background-size:22px 22px;"></div>
+    <div style="position:relative; display:flex; flex-direction:column; gap:20px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:34px; height:34px; border-radius:10px; background:#f2b63c; color:#1e1503; display:flex; align-items:center; justify-content:center; font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:17px;">◇</div>
+        <span style="font-family:'Spline Sans Mono',monospace; font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:#a8cfc2;">análise de repositório · biblioteca agnóstica</span>
+      </div>
+      <h1 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:44px; line-height:1.06; letter-spacing:-.025em; margin:0; max-width:18ch;">bpmn-react como motor do Squad Designer</h1>
+      <p style="font-size:16.5px; line-height:1.6; color:#cfe2da; max-width:58ch; margin:0;"><a href="https://github.com/danzeroum/bpmn" style="color:#f2b63c;">danzeroum/bpmn</a> — validação de cobertura contra as necessidades do Squad Designer e contra o modelo de versionamento/vigência discutido, com proposta de módulos novos. A biblioteca permanece 100% agnóstica: nenhuma referência ao produto que a motivou.</p>
+      <div style="display:flex; gap:24px; font-family:'Spline Sans Mono',monospace; font-size:11.5px; color:#a8cfc2;">
+        <span>5 pacotes · monorepo pnpm</span><span>zero dependências no core</span><span>Apache 2.0</span><span>julho 2026</span>
+      </div>
+    </div>
+  </header>
+
+  <div style="background:#fbf8f1; border:1px solid #ddd4c2; border-top:none; border-radius:0 0 18px 18px; padding:52px 64px 68px; display:flex; flex-direction:column; gap:52px;">
+
+  <!-- 1 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">01</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">O que o repositório já é</h2>
+    </div>
+    <p style="font-size:15px; line-height:1.7; color:#4a4336; margin:0;">Não é um wrapper de bpmn-js: é uma implementação própria (SVG nativo + TypeScript puro) em três camadas — <strong>core headless</strong> (modelo, comandos com undo, eventos com veto, lifecycle, regras, validação, diff, ledger, geometria, XML BPMN 2.0 com DI), <strong>camada React</strong> (canvas, formas, gestos, paleta, inspetor, minimap, DiffView) e <strong>plugin de domínio</strong> de exemplo. O vocabulário do Squad Designer (papéis, gates, conectores, entregas) entra por plugin declarativo — exatamente a arquitetura certa para manter a biblioteca agnóstica.</p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px;">
+      <sc-for list="{{ pacotes }}" as="p" hint-placeholder-count="5">
+        <div style="background:#fff; border:1px solid #e4dccb; border-radius:12px; padding:16px 18px;">
+          <div style="font-family:'Spline Sans Mono',monospace; font-size:11px; font-weight:600; color:#14614f;">{{ p.nome }}</div>
+          <div style="font-size:12.5px; color:#4a4336; line-height:1.6; margin-top:6px;">{{ p.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">02</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">Achado central: o versionamento discutido já existe no core</h2>
+    </div>
+    <p style="font-size:15px; line-height:1.7; color:#4a4336; margin:0;">A discussão anexada propõe estados <code style="font-family:'Spline Sans Mono',monospace; font-size:12.5px; background:#f0ebdf; border-radius:5px; padding:2px 6px;">draft → test → candidate → active → deprecated → retired</code>, revisões imutáveis, setas nunca apagadas, SemVer de negócio, aprovação multi-papel, vigência temporal e ledger. <strong>Cerca de 80% disso já está implementado</strong> no <code style="font-family:'Spline Sans Mono',monospace; font-size:12.5px; background:#f0ebdf; border-radius:5px; padding:2px 6px;">LifecycleEngine</code>, no modelo (<code style="font-family:'Spline Sans Mono',monospace; font-size:12.5px; background:#f0ebdf; border-radius:5px; padding:2px 6px;">removedInVersion</code>, <code style="font-family:'Spline Sans Mono',monospace; font-size:12.5px; background:#f0ebdf; border-radius:5px; padding:2px 6px;">supersedesEdgeId</code>) e no <code style="font-family:'Spline Sans Mono',monospace; font-size:12.5px; background:#f0ebdf; border-radius:5px; padding:2px 6px;">AuditLedger</code> com cadeia SHA-256. O trabalho, portanto, não é criar um módulo de versionamento do zero — é <strong>completar as 4 lacunas</strong> e expor tudo de forma fácil.</p>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <sc-for list="{{ cobertura }}" as="c" hint-placeholder-count="8">
+        <div style="display:grid; grid-template-columns:110px 1fr 1fr; gap:16px; background:#fff; border:1px solid #e4dccb; border-radius:11px; padding:13px 18px; align-items:start;">
+          <span style="{{ c.pillStyle }}">{{ c.status }}</span>
+          <span style="font-size:13.5px; font-weight:600; line-height:1.5;">{{ c.req }}</span>
+          <span style="font-size:12.5px; color:#4a4336; line-height:1.6;">{{ c.onde }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">03</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">Cobertura do Squad Designer</h2>
+    </div>
+    <p style="font-size:15px; line-height:1.7; color:#4a4336; margin:0;">Mapeando cada capacidade do Designer (protótipo <a href="BuildToValue.dc.html">BuildToValue</a>) para a biblioteca. O que falta é quase todo UX de host, não motor:</p>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <sc-for list="{{ designer }}" as="d" hint-placeholder-count="9">
+        <div style="display:grid; grid-template-columns:110px 1fr 1fr; gap:16px; background:#fff; border:1px solid #e4dccb; border-radius:11px; padding:13px 18px; align-items:start;">
+          <span style="{{ d.pillStyle }}">{{ d.status }}</span>
+          <span style="font-size:13.5px; font-weight:600; line-height:1.5;">{{ d.req }}</span>
+          <span style="font-size:12.5px; color:#4a4336; line-height:1.6;">{{ d.onde }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">04</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">Proposta: 2 módulos novos + melhorias pontuais</h2>
+    </div>
+    <p style="font-size:15px; line-height:1.7; color:#4a4336; margin:0;">Sim, vale um módulo para "tratar versionamento mais fácil" — mas como <strong>camada de registro sobre o LifecycleEngine</strong>, não substituto. Nomes agnósticos, seguindo o padrão do repo:</p>
+
+    <div style="background:#e7efe9; border:1px solid #bcd4c8; border-radius:14px; padding:22px 26px; display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-family:'Spline Sans Mono',monospace; font-size:12px; font-weight:600; color:#14614f;">@bpmn-react/registry</span>
+        <span style="font-family:'Spline Sans Mono',monospace; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; background:#14614f; color:#fff; border-radius:999px; padding:3px 10px;">novo · prioridade 1</span>
+      </div>
+      <p style="font-size:14px; line-height:1.7; color:#2d4a3f; margin:0;">O elo que falta entre versões soltas e governança consultável. Um <strong>VersionRegistry</strong> headless (mesmo padrão sink do ledger) que guarda a cadeia de versões + snapshots e responde as perguntas de auditoria da discussão:</p>
+      <ul style="margin:0; padding-left:20px; font-size:13.5px; line-height:1.9; color:#2d4a3f;">
+        <li><code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">activeAt(date)</code> — "qual versão estava em vigor no dia X?" (linha do tempo por <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">effectiveFrom/Until</code>)</li>
+        <li><code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">history()</code> / <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">diffBetween(v1, v2)</code> — cadeia completa com snapshot + diff estruturado (snapshot para executar, diff para explicar)</li>
+        <li><strong>Canais e ambientes</strong> — <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">publish(version, { channel: 'internal' | 'pilot' | 'general', environment })</code>: uma versão pode estar active no piloto e candidate na geral, cobrindo rollout gradual sem flag solta</li>
+        <li><strong>Changelog dual</strong> — <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">changeSummary</code> (negócio) + <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">technicalNotes</code> ligado ao diff (auditoria)</li>
+      </ul>
+    </div>
+
+    <div style="background:#fdf3e3; border:1px solid #ecd9b4; border-radius:14px; padding:22px 26px; display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-family:'Spline Sans Mono',monospace; font-size:12px; font-weight:600; color:#9a6b14;">@bpmn-react/run-binding</span>
+        <span style="font-family:'Spline Sans Mono',monospace; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; background:#9a6b14; color:#fff; border-radius:999px; padding:3px 10px;">novo · prioridade 2</span>
+      </div>
+      <p style="font-size:14px; line-height:1.7; color:#5c4a24; margin:0;">Pinagem de execução — o "commit hash do deploy" aplicado a processo: <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">bindRun(diagram)</code> devolve um registro imutável { versionId, semanticVersion, snapshotHash, channel } para o host gravar em cada execução/entrega. Regra embutida: execução nasce presa à versão; mudança de versão nunca altera run em andamento. Pequeno o suficiente para talvez viver dentro do registry — decidir na implementação; o contrato é o que importa.</p>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="font-family:'Spline Sans Mono',monospace; font-size:10.5px; letter-spacing:.15em; text-transform:uppercase; color:#8b8171; padding-top:6px;">melhorias em pacotes existentes</div>
+      <sc-for list="{{ melhorias }}" as="m" hint-placeholder-count="6">
+        <div style="display:grid; grid-template-columns:190px 1fr; gap:16px; background:#fff; border:1px solid #e4dccb; border-radius:11px; padding:13px 18px; align-items:start;">
+          <span style="font-family:'Spline Sans Mono',monospace; font-size:11px; font-weight:600; color:#14614f;">{{ m.pacote }}</span>
+          <span style="font-size:13px; color:#4a4336; line-height:1.65;">{{ m.desc }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">05</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">Agnosticismo e fronteira biblioteca × produto</h2>
+    </div>
+    <p style="font-size:15px; line-height:1.7; color:#4a4336; margin:0;">O repositório já está limpo: nomes genéricos (<em>bpmn-react</em>, <em>domain-example</em>), vocabulário de domínio isolado em plugin, e o README não menciona o produto de origem. Para manter assim, a fronteira recomendada:</p>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+      <div style="background:#e7efe9; border:1px solid #bcd4c8; border-radius:12px; padding:18px 22px;">
+        <div style="font-family:'Spline Sans Mono',monospace; font-size:10.5px; letter-spacing:.15em; text-transform:uppercase; color:#14614f; margin-bottom:10px;">fica na biblioteca</div>
+        <ul style="margin:0; padding-left:18px; font-size:13.5px; line-height:1.85; color:#2d4a3f;">
+          <li>Canvas, formas, gestos, paleta, inspetor</li>
+          <li>Lifecycle, registry, canais, run-binding</li>
+          <li>Ledger, diff, XML BPMN 2.0</li>
+          <li>Selo de status + timeline (componentes genéricos)</li>
+        </ul>
+      </div>
+      <div style="background:#fff; border:1px solid #e4dccb; border-radius:12px; padding:18px 22px;">
+        <div style="font-family:'Spline Sans Mono',monospace; font-size:10.5px; letter-spacing:.15em; text-transform:uppercase; color:#8b8171; margin-bottom:10px;">fica no produto (plugin/host)</div>
+        <ul style="margin:0; padding-left:18px; font-size:13.5px; line-height:1.85; color:#4a4336;">
+          <li>Vocabulário: papéis, personas, gates, entregas</li>
+          <li>Prompts padrão e restauração ao padrão</li>
+          <li>Execução das squads (esteira ao vivo, cockpit)</li>
+          <li>Autenticação, papéis de aprovador, notificação a cliente</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section style="display:flex; flex-direction:column; gap:16px;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15px; color:#b8531f;">06</span>
+      <h2 style="font-family:'Bricolage Grotesque',sans-serif; font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0;">Roadmap sugerido</h2>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <sc-for list="{{ roadmap }}" as="r" hint-placeholder-count="4">
+        <div style="display:grid; grid-template-columns:100px 1fr; gap:16px; background:#fff; border:1px solid #e4dccb; border-radius:11px; padding:14px 18px; align-items:start;">
+          <span style="font-family:'Spline Sans Mono',monospace; font-size:12px; font-weight:600; color:#14614f;">{{ r.fase }}</span>
+          <span style="font-size:13.5px; color:#4a4336; line-height:1.65;"><strong style="color:#221d15;">{{ r.titulo }}</strong> — {{ r.desc }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:#14614f; color:#e9f2ee; border-radius:12px; padding:20px 26px; font-size:14px; line-height:1.7;">
+      <strong>Veredito:</strong> o repositório atende à motivação. O núcleo de versionamento pedido na discussão já existe e é mais rígido que o usual (active imutável, setas com lineage, ledger criptográfico). Um único módulo novo de peso — <strong>registry</strong> (histórico consultável + canais + vigência + changelog dual), com <strong>run-binding</strong> como complemento — fecha as lacunas. O Squad Designer vira um consumidor: plugin de domínio próprio + UI própria por cima do <code style="font-family:'Spline Sans Mono',monospace; font-size:12px;">BpmnEditor</code>.
+    </div>
+  </section>
+
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const pill = (tone) => {
+      const css = {
+        ok: 'background:#e7efe9; color:#2d6a50;',
+        parcial: 'background:#fdf3e3; color:#9a6b14;',
+        falta: 'background:#f7e7e3; color:#a54334;',
+      }[tone];
+      return 'font-family:"Spline Sans Mono",monospace; font-size:10px; letter-spacing:.08em; border-radius:999px; padding:5px 0; text-align:center; ' + css;
+    };
+    return {
+      pacotes: [
+        { nome: 'core', desc: 'Motor headless zero-deps: modelo, comandos+undo, lifecycle, regras, validação, diff, ledger SHA-256, geometria, XML BPMN 2.0 + DI.' },
+        { nome: 'react', desc: 'Canvas SVG, formas, gestos (drag/connect/zoom/pan/lasso), paleta, inspetor, minimap, DiffView, StatusBadge.' },
+        { nome: 'domain-example', desc: 'Plugin de exemplo com squads, personas, gates, prompts, conectores e entregas — o gabarito para o plugin do produto.' },
+        { nome: 'cli', desc: 'Headless: validate, export, diff — base para CI de fluxos.' },
+        { nome: 'example', desc: 'Demo Vite com o designer completo + testes e2e Playwright.' },
+      ],
+      cobertura: [
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Estados draft→test→candidate→active→deprecated→retired', onde: 'LifecycleEngine com tabela de transições configurável; deprecated→active proibido por design, como a discussão pede.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Revisão imutável + "nada active é editado"', onde: 'Regra embutida veta todo comando em active; mudança = createDraftFrom() com bump SemVer.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Setas auditáveis, nunca apagadas', onde: 'createdInVersion / removedInVersion / supersedesEdgeId + getEdgeChain — o modelo exato proposto.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Aprovação multi-papel + changelog obrigatório + diff', onde: 'minApprovalRoles (2), minChangeSummaryLength (20), requireDiff — tudo configurável por plugin.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Vigência temporal e snapshot + diff', onde: 'effectiveFrom/Until no BpmnVersion; snapshotHash SHA-256; computeDiff estruturado (add/remove/update/supersede).' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Ledger à prova de adulteração', onde: 'AuditLedger encadeado por hash; verify() aponta a entrada exata violada; export/import recusa cadeia inválida.' },
+        { status: 'falta', pillStyle: pill('falta'), req: 'Ambientes e canais (dev/test/prod · internal/pilot/general)', onde: 'Não existe — motivação do módulo registry (seção 04).' },
+        { status: 'falta', pillStyle: pill('falta'), req: 'Registro consultável: "qual versão valia no dia X?"', onde: 'Versões são encadeadas mas não há repositório/consulta temporal — registry.' },
+        { status: 'falta', pillStyle: pill('falta'), req: 'Execução presa à versão (run pinning)', onde: 'Fora do escopo atual — módulo run-binding.' },
+        { status: 'parcial', pillStyle: pill('parcial'), req: 'Changelog dual (técnico + negócio)', onde: 'Só changeSummary hoje; acrescentar technicalNotes ligado ao diff no registry.' },
+      ],
+      designer: [
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Formas BPMN reais + tipos custom (API, dados, gate)', onde: 'nodeTypes/shapes por plugin, mapeados a tags BPMN interoperáveis (serviceTask, dataObjectReference…).' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Conexões com finalidade, inversão, supersede', onde: 'BpmnEdge.purpose + supersedeEdgeCommand; veto de conexão via RuleEngine.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Duplicação, undo/redo, validação de fluxo', onde: 'CommandStack + CompositeCommand; ValidationEngine + regras do plugin; CLI valida em CI.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Interoperabilidade (Camunda / bpmn.io)', onde: 'Import/export BPMN 2.0 com DI; metadados em extensionElements; parser XXE-safe.' },
+        { status: 'coberto', pillStyle: pill('ok'), req: 'Selo visual de status e diff visual', onde: 'StatusBadge + DiffView já existem na camada react.' },
+        { status: 'parcial', pillStyle: pill('parcial'), req: 'Edição de rótulo direto no canvas', onde: 'Hoje só no painel de propriedades — melhoria proposta (seção 04).' },
+        { status: 'parcial', pillStyle: pill('parcial'), req: 'Roteamento que desvia de obstáculos', onde: 'Bézier/ortogonal simples; router com desvio é melhoria.' },
+        { status: 'parcial', pillStyle: pill('parcial'), req: 'Toque (pinch-zoom, long-press)', onde: 'Pointer events básicos funcionam; gestos móveis completos são roadmap.' },
+        { status: 'falta', pillStyle: pill('falta'), req: 'Pools/lanes e subprocesso aninhado', onde: 'Ignorados com warning no import; primeiro item do roadmap BPMN do próprio repo.' },
+      ],
+      melhorias: [
+        { pacote: 'core / lifecycle', desc: 'Hook de notificação pré-ativação (promotionRules já permite; documentar receita de "aviso obrigatório antes de virar active" para mudanças major).' },
+        { pacote: 'core / xml', desc: 'Pools/lanes no perfil MVP (já é o próximo passo declarado) — necessário quando uma squad tiver raias por papel.' },
+        { pacote: 'react / canvas', desc: 'Edição de rótulo inline no canvas e gestos de toque — as duas maiores fricções de UX para usuários não técnicos.' },
+        { pacote: 'react / ui', desc: 'VersionTimeline: componente de linha do tempo de vigência (consome o registry) com selo, aprovadores e canal — o "selo visual" da discussão.' },
+        { pacote: 'cli', desc: 'Comandos promote e history integrados ao registry, permitindo governança via pipeline (o "PR de processo").' },
+        { pacote: 'domain-example', desc: 'Estender com defaultPrompt/restauração e canais de publicação como referência de implementação para hosts.' },
+      ],
+      roadmap: [
+        { fase: 'Fase 1', titulo: '@bpmn-react/registry', desc: 'VersionRegistry com sink plugável, consultas temporais (activeAt, history, diffBetween), canais/ambientes e changelog dual. Destrava governança completa.' },
+        { fase: 'Fase 2', titulo: 'run-binding + CLI', desc: 'Pinagem de execução e comandos promote/history no CLI — cada entrega passa a carregar a versão exata que a produziu.' },
+        { fase: 'Fase 3', titulo: 'UX do editor', desc: 'Rótulo inline, gestos de toque, VersionTimeline na camada react.' },
+        { fase: 'Fase 4', titulo: 'BPMN ampliado', desc: 'Pools/lanes, subprocesso aninhado, router com desvio de obstáculos.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
