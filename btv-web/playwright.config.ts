@@ -20,9 +20,14 @@ export default defineConfig({
   webServer: {
     // Nota: sem `--` antes de `--port` — o pnpm repassa flags direto ao vite;
     // com `--` o vite recebe o argumento como posicional e ignora a porta.
-    command: 'pnpm dev --port 5174',
+    // `--host 127.0.0.1` explícito: o health-check do Playwright bate em
+    // 127.0.0.1 e o bind default ("localhost") depende da resolução do runner.
+    command: 'pnpm dev --port 5174 --host 127.0.0.1',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    // 120s + stdout no log: runners frios do CI estouravam os 30s sem deixar
+    // rastro do que o vite imprimiu.
+    timeout: 120_000,
+    stdout: 'pipe',
   },
 })
