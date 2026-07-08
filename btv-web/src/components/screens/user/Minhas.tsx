@@ -4,9 +4,10 @@ import { useTemplates } from '../../../state/TemplatesContext'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
 
+// "aguardando você" NÃO está aqui de propósito: gate é decisão humana, sempre
+// terracota (renderizado com .status-gate abaixo). Âmbar seria erro semântico.
 const PILL: Record<string, CSSProperties> = {
   'em produção': { background: 'var(--paper)', color: 'var(--muted)' },
-  'aguardando você': { background: '#fdf3e3', color: '#9a6b14' },
   concluída: { background: '#e7efe9', color: '#2d6a50' },
   encerrada: { background: 'var(--paper)', color: 'var(--faint)' },
   erro: { background: '#f7e7e3', color: '#a54334' },
@@ -94,12 +95,18 @@ export function Minhas() {
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {template?.nome ?? r.template_id} · {r.template_versao}
             </span>
-            <span
-              className="mono"
-              style={{ fontSize: 10, letterSpacing: '0.06em', borderRadius: 999, padding: '5px 11px', textAlign: 'center', ...(PILL[status] ?? PILL['em produção']) }}
-            >
-              {status}
-            </span>
+            {status === 'aguardando você' ? (
+              <span className="status-gate" style={{ fontSize: 10, letterSpacing: '0.06em', justifyContent: 'center' }}>
+                {status}
+              </span>
+            ) : (
+              <span
+                className="mono"
+                style={{ fontSize: 10, letterSpacing: '0.06em', borderRadius: 999, padding: '5px 11px', textAlign: 'center', ...(PILL[status] ?? PILL['em produção']) }}
+              >
+                {status}
+              </span>
+            )}
             <div style={{ height: 7, background: 'var(--paper)', borderRadius: 99, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: cor, borderRadius: 99 }} />
             </div>

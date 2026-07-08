@@ -200,7 +200,7 @@ export function Vivo() {
                     ? 'Entrega final pronta para sua aprovação'
                     : 'Rascunho pronto para sua aprovação'}
                 </span>
-                <span className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--faint)', letterSpacing: '0.1em' }}>
+                <span className="status-gate" style={{ marginLeft: 'auto', fontSize: 10, letterSpacing: '0.1em' }}>
                   gate humano
                 </span>
               </div>
