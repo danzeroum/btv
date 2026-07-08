@@ -37,6 +37,40 @@ just test | just lint | just verify    # atalhos (requer just)
 - Ledger é append-only com hash-chain (`crates/forge-store/src/ledger.rs`) —
   nunca UPDATE/DELETE; overrides são novas entradas marcadas.
 
+## BuildToValue (produto novo sobre o motor Forge)
+
+**BuildToValue** — plataforma de squads de IA para profissionais não
+técnicos (handoff completo em `docs/design_handoff_buildtovalue/`) — está
+implementado em 6 ondas: frontend novo `btv-web/` (React 19, tokens hifi do
+handoff §4) servido pelo `forge dashboard` como SPA **raiz** (o console
+Forge `web/` continua em `/dev`, com `base: './'`). Contrato novo
+`squad-template.v1` (12 modelos em `schemas/squad-templates/`, embutidos no
+binário, `GET /api/btv/templates`). Ativação pela galeria/wizard roda o
+motor REAL do squad (`btv_agent::start_squad_task` compartilhado com
+`/api/squad/run`): esteira U3 mapeada aos eventos reais (função pura
+`esteiraFromEvents`, posições inferidas rotuladas), gates = HITL real
+("pedir ajuste" aprova COM a instrução em contexto — negar abortaria a
+tarefa), cockpit REAL (`inject_cockpit_context`: a orientação do usuário
+vira turno `user` no próximo `Generate` do agente ativo). Biblioteca (U4) =
+arquivos reais gravados pelas ferramentas (`SquadHub::tool_runs`, captura
+de `edit` exit 0 na conclusão) com trilha de procedência e export honesto
+(binários "em breve" até existir conversor na sandbox); personas (U7) são
+overrides REAIS (prompt efetivo entra na descrição da ativação e no hash de
+procedência do ledger). Squad Designer (U5) é construído SOBRE a lib
+agnóstica `danzeroum/bpmn` (submodule pinado `vendor/bpmn`, consumida pelo
+dist ESM via alias + `resolve.dedupe` de react): plugin de domínio no
+PRODUTO (`btv-web/src/designer/btvPlugin.tsx` — a lib nunca menciona BTV),
+registry/run-binding da lib usados no salvar/testar, auditoria com o
+`AuditLedger` hash-encadeado espelhada no ledger Forge (`btv.flow_saved`).
+Admin A1–A6 sobre rotas reais (custo monetário e uso ao vivo de rate limit
+NÃO são fabricados — notas explícitas). Storage do produto:
+`forge-store::btv` (`.forge/btv.db` — runs, entregas, personas, publicação
+de templates, perfis locais SEM auth). Kinds novos de ledger: `btv.*`.
+Testes: 16 specs Playwright de integração (`btv-web/tests/e2e-integration`,
+harness próprio na porta 7998 com orquestrador Python real sem key), 28
+vitest, testes Rust por módulo; CI ganhou o job `btv-web` (checkout com
+submodules + uv).
+
 ## Roadmap e estado
 
 Plano completo em `docs/PLANO-PLATAFORMA-FORGE.md` (6 fases). Estado atual:
