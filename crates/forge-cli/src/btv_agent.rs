@@ -882,6 +882,142 @@ async fn salvar_fluxo_handler(
     }
 }
 
+// ── admin (A5 publicação de templates · A6 perfis locais) ──
+
+#[derive(Deserialize)]
+struct PublicacaoBody {
+    publicado: bool,
+}
+
+/// `POST /api/btv/templates/{id}/publicacao` — publicar/despublicar um
+/// modelo (A5). Override persistido sobre o `publicado` embutido; auditado.
+async fn set_publicacao_handler(
+    State(state): State<BtvAgentState>,
+    Path(template_id): Path<String>,
+    Json(body): Json<PublicacaoBody>,
+) -> Response {
+    if !forge_server::btv::builtin_templates()
+        .iter()
+        .any(|t| t.id == template_id)
+    {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("unknown_template", "modelo desconhecido")),
+        )
+            .into_response();
+    }
+    {
+        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = store.set_template_publicado(
+            &template_id,
+            body.publicado,
+            &crate::session::now_rfc3339(),
+        ) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("store_error", e.to_string())),
+            )
+                .into_response();
+        }
+    }
+    if let Err(e) = append_ledger(
+        &state.ledger,
+        "btv.template_published",
+        serde_json::json!({ "template_id": template_id, "publicado": body.publicado }),
+    ) {
+        eprintln!("btv: falha ao registrar publicação no ledger: {e}");
+    }
+    StatusCode::OK.into_response()
+}
+
+/// `GET /api/btv/templates/publicacao` — overrides persistidos (a tela A5
+/// mescla com o `publicado` embutido dos templates).
+async fn list_publicacao_handler(State(state): State<BtvAgentState>) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.list_template_pub() {
+        Ok(list) => Json(
+            list.into_iter()
+                .map(|(id, publicado)| serde_json::json!({ "template_id": id, "publicado": publicado }))
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct NovoUsuarioBody {
+    nome: String,
+    email: String,
+    #[serde(default)]
+    papel: Option<String>,
+}
+
+async fn list_users_handler(State(state): State<BtvAgentState>) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.list_users() {
+        Ok(users) => Json(users).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+async fn create_user_handler(
+    State(state): State<BtvAgentState>,
+    Json(body): Json<NovoUsuarioBody>,
+) -> Response {
+    if body.nome.trim().is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorBody::new("empty_name", "nome obrigatório")),
+        )
+            .into_response();
+    }
+    let papel = body.papel.unwrap_or_else(|| "usuario".into());
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.insert_user(
+        body.nome.trim(),
+        body.email.trim(),
+        &papel,
+        &crate::session::now_rfc3339(),
+    ) {
+        Ok(id) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct AtivoBody {
+    ativo: bool,
+}
+
+async fn set_user_ativo_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+    Json(body): Json<AtivoBody>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.set_user_ativo(id, body.ativo) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
 /// Router aditivo do BuildToValue — `.merge()`ado ao router do agente web
 /// (mesma guarda de `Origin`/`Host` do `merged_router`).
 pub fn router(
@@ -902,6 +1038,19 @@ pub fn router(
             post(pedir_ajuste_handler),
         )
         .route("/api/btv/designer/flows", post(salvar_fluxo_handler))
+        .route(
+            "/api/btv/templates/publicacao",
+            get(list_publicacao_handler),
+        )
+        .route(
+            "/api/btv/templates/{id}/publicacao",
+            post(set_publicacao_handler),
+        )
+        .route(
+            "/api/btv/users",
+            get(list_users_handler).post(create_user_handler),
+        )
+        .route("/api/btv/users/{id}/ativo", post(set_user_ativo_handler))
         .route("/api/btv/deliverables", get(list_deliverables_handler))
         .route(
             "/api/btv/deliverables/{id}/download",

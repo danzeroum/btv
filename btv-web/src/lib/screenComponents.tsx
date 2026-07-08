@@ -6,34 +6,13 @@ import { Biblioteca } from '../components/screens/user/Biblioteca'
 import { Minhas } from '../components/screens/user/Minhas'
 import { Personas } from '../components/screens/user/Personas'
 import { Designer } from '../components/screens/user/Designer'
+import { Telemetria } from '../components/screens/admin/Telemetria'
+import { Ledger } from '../components/screens/admin/Ledger'
+import { Providers } from '../components/screens/admin/Providers'
+import { Permissoes } from '../components/screens/admin/Permissoes'
+import { Modelos } from '../components/screens/admin/Modelos'
+import { Usuarios } from '../components/screens/admin/Usuarios'
 
-/** Placeholder honesto de tela ainda não construída — substituído onda a onda
- *  (ordem da seção 16 do handoff). Nunca simula dado ou comportamento. */
-function EmConstrucao({ onda }: { onda: string }) {
-  return (
-    <div
-      style={{
-        background: 'var(--white)',
-        border: '1px dashed var(--line2)',
-        borderRadius: 14,
-        padding: '28px 30px',
-        color: 'var(--muted)',
-        fontSize: 13.5,
-        lineHeight: 1.6,
-      }}
-    >
-      Esta tela chega na <strong>{onda}</strong> da implementação — o shell, a navegação e os ajustes
-      rápidos já são reais.
-    </div>
-  )
-}
-
-const Telemetria = () => <EmConstrucao onda="Onda 6 (Admin)" />
-const Ledger = () => <EmConstrucao onda="Onda 6 (Admin)" />
-const Providers = () => <EmConstrucao onda="Onda 6 (Admin)" />
-const Permissoes = () => <EmConstrucao onda="Onda 6 (Admin)" />
-const Modelos = () => <EmConstrucao onda="Onda 6 (Admin)" />
-const Usuarios = () => <EmConstrucao onda="Onda 6 (Admin)" />
 
 export const SCREEN_COMPONENTS: Record<ScreenId, ComponentType> = {
   inicio: Inicio,

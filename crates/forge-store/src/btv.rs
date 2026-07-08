@@ -89,6 +89,19 @@ impl BtvStore {
                 updated_ts TEXT NOT NULL,
                 PRIMARY KEY (template_id, papel)
             );
+            CREATE TABLE IF NOT EXISTS template_pub (
+                template_id TEXT PRIMARY KEY,
+                publicado INTEGER NOT NULL,
+                updated_ts TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                email TEXT NOT NULL,
+                papel TEXT NOT NULL,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                created_ts TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS custom_personas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 template_id TEXT NOT NULL,
@@ -331,6 +344,82 @@ impl BtvStore {
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
+    // ── A5: publicação de templates (override sobre o `publicado` embutido) ──
+
+    pub fn set_template_publicado(
+        &self,
+        template_id: &str,
+        publicado: bool,
+        now: &str,
+    ) -> Result<(), BtvStoreError> {
+        self.conn.execute(
+            "INSERT INTO template_pub (template_id, publicado, updated_ts) VALUES (?1, ?2, ?3)
+             ON CONFLICT(template_id) DO UPDATE SET publicado = ?2, updated_ts = ?3",
+            params![template_id, publicado as i64, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_template_pub(&self) -> Result<Vec<(String, bool)>, BtvStoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT template_id, publicado FROM template_pub")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    // ── A6: perfis locais (sem senha/auth — atribuição de ator, local-first) ──
+
+    pub fn insert_user(
+        &self,
+        nome: &str,
+        email: &str,
+        papel: &str,
+        now: &str,
+    ) -> Result<i64, BtvStoreError> {
+        self.conn.execute(
+            "INSERT INTO users (nome, email, papel, ativo, created_ts) VALUES (?1, ?2, ?3, 1, ?4)",
+            params![nome, email, papel, now],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn set_user_ativo(&self, id: i64, ativo: bool) -> Result<(), BtvStoreError> {
+        self.conn.execute(
+            "UPDATE users SET ativo = ?2 WHERE id = ?1",
+            params![id, ativo as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_users(&self) -> Result<Vec<BtvUser>, BtvStoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, nome, email, papel, ativo FROM users ORDER BY id")?;
+        let rows = stmt.query_map([], |row| {
+            Ok(BtvUser {
+                id: row.get(0)?,
+                nome: row.get(1)?,
+                email: row.get(2)?,
+                papel: row.get(3)?,
+                ativo: row.get::<_, i64>(4)? != 0,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+}
+
+/// Perfil local (A6): identidade nomeada para atribuição — SEM autenticação
+/// (local-first, 127.0.0.1). Auth real é trabalho futuro explícito.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BtvUser {
+    pub id: i64,
+    pub nome: String,
+    pub email: String,
+    pub papel: String,
+    pub ativo: bool,
 }
 
 /// Artefato exportado — linha da Biblioteca de entregas (U4), com trilha de
