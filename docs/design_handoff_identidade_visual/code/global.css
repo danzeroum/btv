@@ -1,0 +1,223 @@
+/* Design tokens do BuildToValue — atualizado conforme o Plano Geral de Identidade (jul/2026).
+   Substitui btv-web/src/styles/global.css. Mudanças vs. versão anterior:
+   - Estrutura/texto migram para o grafite da marca (#2B2B28) e cinzas quentes.
+   - Novo token --decision (terracota #A85B3F): EXCLUSIVO de gates e aprovações humanas.
+     Nunca usar como alerta ou decoração; no máximo um botão cheio por tela.
+   - --brand (#14614F) permanece a cor de EXECUÇÃO: links, agentes, ações operacionais.
+   - --gold descontinuado no produto (reservado à variante institucional da marca:
+     --inst-navy / --inst-brass, uso só em materiais formais, nunca na UI).
+   - Feedback: --ok (sucesso), --warn (atenção âmbar), --err (erro). Terracota ≠ alerta. */
+#btv-root {
+  --paper: #efe9de;
+  --card: #fbf8f1;
+  --white: #ffffff;
+  --ink: #2b2b28;
+  --muted: #6f675a;
+  --faint: #a89e8b;
+  --line: #e0d7c4;
+  --line2: #d2c7ae;
+
+  --brand: #14614f;      /* execução — sistema, agentes, links */
+  --brandink: #0c4237;   /* execução :hover / ênfase */
+  --decision: #a85b3f;   /* decisão humana — gates, aprovações */
+  --decisionink: #8a4832;/* decisão :hover */
+  --bone: #f1eee8;       /* estrutura do logo/texto em fundo escuro */
+
+  --ok: #3d8b4f;
+  --warn: #b3893b;
+  --err: #c0392b;
+
+  /* variante institucional da marca — NÃO usar na UI do produto */
+  --inst-navy: #1e2a44;
+  --inst-brass: #b98a2f;
+
+  /* console técnico (/dev) — escuro quente */
+  --dark-bg: #201e1b;
+  --dark-surf: #2b2b28;
+  --dark-line: #3c3934;
+  --dark-brand: #3e8c74;
+  --dark-decision: #c0765a;
+
+  --mono: 'Spline Sans Mono', ui-monospace, monospace;
+  --sans: 'Instrument Sans', system-ui, sans-serif;
+  --disp: 'Bricolage Grotesque', 'Instrument Sans', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #efe9de;
+}
+
+#btv-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+a {
+  color: var(--brand);
+}
+
+a:hover {
+  color: var(--brandink);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: var(--sans);
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--brand) 20%, transparent);
+  border-color: var(--brand) !important;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cfc5b0;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes btvPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes btvBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.disp {
+  font-family: var(--disp);
+}
+
+/* Kicker mono uppercase — padrão de cabeçalho de tela e seções. */
+.kicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Botão de decisão humana — o único cheio em terracota; máx. 1 por tela. */
+.btn-decision {
+  background: var(--decision);
+  color: var(--card);
+  border: none;
+  border-radius: 9px;
+  padding: 10px 16px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.btn-decision:hover {
+  background: var(--decisionink);
+}
+
+/* Chip de status "aguardando gate" — ponto QUADRADO, eco do bloco do logo. */
+.status-gate {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--decision);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.status-gate::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--decision);
+}
+
+.btv-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.btv-stage {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--paper);
+}
+
+.btv-stage-inner {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 30px 34px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.screen-title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 30px;
+  margin: 6px 0 0;
+  letter-spacing: -0.02em;
+}
+
+.screen-note {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 340px;
+  text-align: right;
+  line-height: 1.55;
+  flex: none;
+}

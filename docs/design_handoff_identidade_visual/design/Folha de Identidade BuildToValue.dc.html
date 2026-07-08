@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #E9E5DC; font-family: 'Instrument Sans', system-ui, sans-serif; color: #2B2B28; }
+    a { color: #A85B3F; } a:hover { color: #8A4832; }
+  </style>
+</helmet>
+
+<div style="max-width: 1180px; margin: 0 auto; padding: 56px 48px 96px; display: flex; flex-direction: column; gap: 56px;" data-screen-label="Folha de identidade">
+
+  <!-- Capa -->
+  <header style="background: #2B2B28; border-radius: 20px; padding: 64px 56px; display: flex; align-items: center; gap: 48px; color: #F1EEE8;">
+    <svg width="150" height="150" viewBox="0 0 120 120" style="flex: none;">
+      <path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#F1EEE8" stroke-width="4" stroke-linecap="round"></path>
+      <g stroke="#F1EEE8" stroke-width="2.2">
+        <line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line>
+        <line x1="60" y1="60" x2="60" y2="94"></line>
+        <line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line>
+        <line x1="60" y1="60" x2="60" y2="40"></line>
+      </g>
+      <circle cx="60" cy="60" r="5" fill="#F1EEE8"></circle>
+      <rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect>
+    </svg>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #A89E8B;">Identidade visual · v1 · Julho 2026</div>
+      <div style="font-family: 'Instrument Sans', sans-serif; font-weight: 600; font-size: 44px; letter-spacing: -0.01em;">BuildToValue</div>
+      <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #C8C2B4; max-width: 560px;">A inteligência gira; a consciência governa. O aro interrompido é o sistema em movimento — aberto, não fechado em si. O bloco terracota no vão é o gate: a decisão humana por onde todo ciclo passa.</p>
+    </div>
+  </header>
+
+  <!-- O símbolo -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">01 · O símbolo</div>
+    <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 320px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 16px; display: flex; align-items: center; justify-content: center; padding: 40px;">
+        <svg width="230" height="230" viewBox="0 0 120 120">
+          <path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path>
+          <g stroke="#2B2B28" stroke-width="2.2">
+            <line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line>
+            <line x1="60" y1="60" x2="60" y2="94"></line>
+            <line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line>
+            <line x1="60" y1="60" x2="60" y2="40"></line>
+          </g>
+          <circle cx="60" cy="60" r="5" fill="#2B2B28"></circle>
+          <rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect>
+        </svg>
+      </div>
+      <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 14px; justify-content: center;">
+        <div style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #A85B3F; flex: none; width: 90px;">Gate</span><span style="font-size: 14px; line-height: 1.55; color: #4A443A;">O bloco terracota ocupa a abertura do aro: a aprovação humana. Nada fecha o ciclo sem passar por ele.</span></div>
+        <div style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a; flex: none; width: 90px;">Aro</span><span style="font-size: 14px; line-height: 1.55; color: #4A443A;">O sistema em movimento — interrompido de propósito: existe passagem, critério, governança.</span></div>
+        <div style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a; flex: none; width: 90px;">Raios</span><span style="font-size: 14px; line-height: 1.55; color: #4A443A;">A orquestração: cinco raios completos (os squads) e um que aponta ao gate mas para antes — a decisão não é automática.</span></div>
+        <div style="display: flex; gap: 12px; align-items: baseline;"><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a; flex: none; width: 90px;">Centro</span><span style="font-size: 14px; line-height: 1.55; color: #4A443A;">O eixo estável enquanto a periferia gira: propósito, ética, verdade operacional.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Versões -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">02 · Versões</div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="92" height="92" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a;">Principal</span>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="92" height="92" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#2B2B28"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a;">Monocromática</span>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="92" height="92" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#1E2A44" stroke-width="4" stroke-linecap="round"></path><g stroke="#1E2A44" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#1E2A44"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#B98A2F"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a;">Institucional</span>
+      </div>
+      <div style="background: #2B2B28; border-radius: 14px; padding: 24px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="92" height="92" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#F1EEE8" stroke-width="4" stroke-linecap="round"></path><g stroke="#F1EEE8" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#F1EEE8"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #A89E8B;">Fundo escuro</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #6f675a; max-width: 720px;">A principal (grafite + terracota) é a assinatura padrão. A monocromática valida qualquer aplicação de uma cor (carimbo, gravação, marca d'água). A institucional (marinho + latão) é reservada a contextos corporativos formais — contratos, parcerias, apresentações executivas.</p>
+  </section>
+
+  <!-- Assinaturas -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">03 · Assinaturas</div>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+      <div style="flex: 2; min-width: 380px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 36px; display: flex; align-items: center; justify-content: center; gap: 18px;">
+        <svg width="64" height="64" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Instrument Sans', sans-serif; font-weight: 600; font-size: 30px; letter-spacing: 0.01em; color: #2B2B28;">BuildToValue</span>
+      </div>
+      <div style="flex: 1; min-width: 240px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;">
+        <svg width="72" height="72" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Instrument Sans', sans-serif; font-weight: 600; font-size: 19px; color: #2B2B28;">BuildToValue</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #6f675a; max-width: 720px;">Wordmark em Instrument Sans SemiBold, sempre em uma cor só — o acento vive exclusivamente no símbolo. Área de proteção: a altura do gate em todos os lados. Tamanho mínimo do símbolo: 20 px; abaixo disso, usar a redução (aro + centro + gate, sem raios).</p>
+  </section>
+
+  <!-- Redução -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">04 · Redução e favicon</div>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: stretch;">
+      <div style="flex: 2; min-width: 380px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 32px; display: flex; align-items: flex-end; justify-content: center; gap: 32px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="96" height="96" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: #a89e8b;">96 px</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="48" height="48" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="5.5" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="3.5"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line></g><circle cx="60" cy="60" r="6.5" fill="#2B2B28"></circle><rect x="53" y="19" width="14" height="14" rx="3" fill="#A85B3F"></rect></svg>
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: #a89e8b;">48 px</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="28" height="28" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="8" stroke-linecap="round"></path><circle cx="60" cy="60" r="9" fill="#2B2B28"></circle><rect x="51" y="17" width="18" height="18" rx="4" fill="#A85B3F"></rect></svg>
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: #a89e8b;">28 px</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <svg width="16" height="16" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="11" stroke-linecap="round"></path><rect x="47" y="13" width="26" height="26" rx="6" fill="#A85B3F"></rect></svg>
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: #a89e8b;">16 px</span>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 260px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;">
+        <div style="display: flex; gap: 12px;">
+          <span style="width: 44px; height: 44px; border-radius: 10px; background: #2B2B28; display: inline-flex; align-items: center; justify-content: center;"><svg width="30" height="30" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#F1EEE8" stroke-width="8" stroke-linecap="round"></path><circle cx="60" cy="60" r="9" fill="#F1EEE8"></circle><rect x="51" y="17" width="18" height="18" rx="4" fill="#A85B3F"></rect></svg></span>
+          <span style="width: 44px; height: 44px; border-radius: 10px; background: #FFFFFF; border: 1px solid #DDD5C6; display: inline-flex; align-items: center; justify-content: center;"><svg width="30" height="30" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="8" stroke-linecap="round"></path><circle cx="60" cy="60" r="9" fill="#2B2B28"></circle><rect x="51" y="17" width="18" height="18" rx="4" fill="#A85B3F"></rect></svg></span>
+        </div>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a; text-align: center;">Favicon escuro / claro<br>arquivo: favicon.svg</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cores -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">05 · Cores</div>
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #2B2B28;"></span><span style="font-size: 12px; font-weight: 600;">Grafite</span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#2B2B28</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #A85B3F;"></span><span style="font-size: 12px; font-weight: 600;">Terracota</span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#A85B3F</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #F1EEE8; border: 1px solid #DDD5C6;"></span><span style="font-size: 12px; font-weight: 600;">Osso</span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#F1EEE8</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #6F675A;"></span><span style="font-size: 12px; font-weight: 600;">Cinza quente</span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#6F675A</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #1E2A44;"></span><span style="font-size: 12px; font-weight: 600;">Marinho <span style="font-weight: 400; color: #a89e8b;">(inst.)</span></span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#1E2A44</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;"><span style="height: 84px; border-radius: 12px; background: #B98A2F;"></span><span style="font-size: 12px; font-weight: 600;">Latão <span style="font-weight: 400; color: #a89e8b;">(inst.)</span></span><span style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; color: #6f675a;">#B98A2F</span></div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #6f675a; max-width: 720px;">Terracota é acento exclusivo do gate e de detalhes de decisão humana (nunca massa principal, nunca texto longo). Marinho + latão só aparecem juntos, na variante institucional.</p>
+  </section>
+
+  <!-- Tipografia -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">06 · Tipografia</div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 34px; letter-spacing: -0.02em;">Aa Gg 09</span>
+        <span style="font-size: 13px; font-weight: 600;">Bricolage Grotesque</span>
+        <span style="font-size: 12.5px; line-height: 1.5; color: #6f675a;">Display: títulos, capas, números grandes.</span>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'Instrument Sans', sans-serif; font-weight: 500; font-size: 34px;">Aa Gg 09</span>
+        <span style="font-size: 13px; font-weight: 600;">Instrument Sans</span>
+        <span style="font-size: 12.5px; line-height: 1.5; color: #6f675a;">Texto e UI — e o wordmark, em SemiBold.</span>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'Spline Sans Mono', monospace; font-weight: 500; font-size: 32px;">Aa Gg 09</span>
+        <span style="font-size: 13px; font-weight: 600;">Spline Sans Mono</span>
+        <span style="font-size: 12.5px; line-height: 1.5; color: #6f675a;">Dados, kickers, procedência, ledger.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Aplicações -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">07 · Aplicações</div>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+      <div style="flex: 2; min-width: 420px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="background: #EFE9DE; border-bottom: 1px solid #E0D7C4; padding: 12px 18px; display: flex; align-items: center; gap: 12px;">
+          <svg width="26" height="26" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="8" stroke-linecap="round"></path><circle cx="60" cy="60" r="9" fill="#2B2B28"></circle><rect x="51" y="17" width="18" height="18" rx="4" fill="#A85B3F"></rect></svg>
+          <span style="font-family: 'Instrument Sans', sans-serif; font-weight: 600; font-size: 15px; color: #2B2B28;">BuildToValue</span>
+          <span style="margin-left: auto; display: flex; gap: 14px; font-size: 12.5px; color: #6f675a;"><span>Meu espaço</span><span>Galeria</span><span>Entregas</span></span>
+        </div>
+        <div style="padding: 22px 18px 26px; display: flex; flex-direction: column; gap: 8px;">
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #a89e8b;">Squad ao vivo</span>
+          <span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 20px; color: #2B2B28;">Editorial / SEO — aguardando seu gate</span>
+        </div>
+        <span style="padding: 0 18px 14px; font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #a89e8b;">Header do app (btv-web)</span>
+      </div>
+      <div style="flex: 1; min-width: 240px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;">
+        <span style="width: 88px; height: 88px; border-radius: 50%; background: #2B2B28; display: inline-flex; align-items: center; justify-content: center;">
+          <svg width="52" height="52" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#F1EEE8" stroke-width="6" stroke-linecap="round"></path><circle cx="60" cy="60" r="7" fill="#F1EEE8"></circle><rect x="52.5" y="18.5" width="15" height="15" rx="3.5" fill="#A85B3F"></rect></svg>
+        </span>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a; text-align: center;">Avatar<br>redes / GitHub</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #6f675a; max-width: 780px;">Não fazer: rotacionar o símbolo (o gate vive no topo); fechar o aro; usar gradientes; aplicar o acento no wordmark; usar dourado fora da variante institucional; recolorir o gate por contexto.</p>
+  </section>
+
+  <!-- Prioridade e contexto -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">08 · Prioridade e contexto de uso</div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; background: #A85B3F; color: #F7F5F0; border-radius: 6px; padding: 3px 8px;">1º</span>
+          <span style="font-size: 14px; font-weight: 600;">Principal</span>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #4A443A;">Escolha padrão em comunicação de marca, produto e presença digital.</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #6f675a;">Site, interface, apresentações gerais, redes sociais, materiais promocionais.</p>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; background: #2B2B28; color: #F7F5F0; border-radius: 6px; padding: 3px 8px;">2º</span>
+          <span style="font-size: 14px; font-weight: 600;">Monocromática</span>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #4A443A;">Reprodução limitada a uma cor — nunca por preferência estética.</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #6f675a;">Carimbo, gravação, marca d'água, impressão em uma cor, documentos técnicos, rodapés.</p>
+      </div>
+      <div style="background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; background: #1E2A44; color: #F7F5F0; border-radius: 6px; padding: 3px 8px;">3º</span>
+          <span style="font-size: 14px; font-weight: 600;">Institucional</span>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #4A443A;">Reservada a contextos corporativos formais — nunca no produto.</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.55; color: #6f675a;">Decks de negócios, propostas formais, contratos, parcerias, contextos enterprise.</p>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #6f675a; max-width: 780px;">Em caso de dúvida, use a principal. A decisão entre versões nunca é subjetiva: monocromática só quando a reprodução impõe uma cor; institucional só quando o contexto é formal-executivo.</p>
+  </section>
+
+  <!-- Contraste -->
+  <section style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="font-family: 'Spline Sans Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f675a;">09 · Regra de contraste</div>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 260px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="76" height="76" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#2B2B28" stroke-width="4" stroke-linecap="round"></path><g stroke="#2B2B28" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#2B2B28"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #6f675a;">Fundo claro → estrutura grafite</span>
+      </div>
+      <div style="flex: 1; min-width: 260px; background: #2B2B28; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <svg width="76" height="76" viewBox="0 0 120 120"><path d="M 45 29.5 A 34 34 0 1 0 75 29.5" fill="none" stroke="#F1EEE8" stroke-width="4" stroke-linecap="round"></path><g stroke="#F1EEE8" stroke-width="2.2"><line x1="60" y1="60" x2="89.4" y2="43"></line><line x1="60" y1="60" x2="89.4" y2="77"></line><line x1="60" y1="60" x2="60" y2="94"></line><line x1="60" y1="60" x2="30.6" y2="77"></line><line x1="60" y1="60" x2="30.6" y2="43"></line><line x1="60" y1="60" x2="60" y2="40"></line></g><circle cx="60" cy="60" r="5" fill="#F1EEE8"></circle><rect x="55.5" y="21.5" width="9" height="9" rx="2" fill="#A85B3F"></rect></svg>
+        <span style="font-family: 'Spline Sans Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #A89E8B;">Fundo escuro → estrutura osso</span>
+      </div>
+      <div style="flex: 1.2; min-width: 280px; background: #F7F5F0; border: 1px solid #DDD5C6; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4A443A;">A estrutura troca de cor conforme o fundo (grafite no claro, osso no escuro); a terracota do gate permanece <strong>constante</strong> nos dois mundos — é o elemento fixo da marca.</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #6f675a;">Nunca aplicar sobre fundos de contraste intermediário (tons médios, fotos sem tratamento): usar a versão sobre bloco de cor sólida ou a monocromática.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+</body>
+</html>
