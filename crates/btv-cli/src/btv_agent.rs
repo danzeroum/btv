@@ -174,7 +174,7 @@ async fn ativar_squad_handler(
     State(state): State<BtvAgentState>,
     Json(body): Json<AtivarSquadBody>,
 ) -> Response {
-    let Some(template) = btv_server::btv::builtin_templates()
+    let Some(template) = btv_schemas::squad_template::builtin_templates()
         .iter()
         .find(|t| t.id == body.template_id)
     else {
@@ -631,7 +631,7 @@ async fn download_deliverable_handler(
             }
         }
     };
-    let binario = btv_server::btv::builtin_templates()
+    let binario = btv_schemas::squad_template::builtin_templates()
         .iter()
         .find(|t| t.id == deliverable.template_id)
         .and_then(|t| t.formatos.iter().find(|f| f.nome == deliverable.formato))
@@ -725,7 +725,7 @@ async fn list_personas_handler(
     State(state): State<BtvAgentState>,
     Path(template_id): Path<String>,
 ) -> Response {
-    let Some(template) = btv_server::btv::builtin_templates()
+    let Some(template) = btv_schemas::squad_template::builtin_templates()
         .iter()
         .find(|t| t.id == template_id)
     else {
@@ -997,7 +997,7 @@ async fn set_publicacao_handler(
     Path(template_id): Path<String>,
     Json(body): Json<PublicacaoBody>,
 ) -> Response {
-    if !btv_server::btv::builtin_templates()
+    if !btv_schemas::squad_template::builtin_templates()
         .iter()
         .any(|t| t.id == template_id)
     {
@@ -1298,7 +1298,7 @@ mod tests {
     use super::*;
 
     fn template_editorial() -> &'static SquadTemplate {
-        btv_server::btv::builtin_templates()
+        btv_schemas::squad_template::builtin_templates()
             .iter()
             .find(|t| t.id == "editorial")
             .unwrap()
