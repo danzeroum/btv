@@ -46,3 +46,40 @@ fn mcp_nomes_namespaced_nao_colidem() {
     let n2 = register_mcp_server(&mut registry, &fixture_config()).unwrap();
     assert_eq!(n2, 0, "segundo registro do mesmo servidor não duplica");
 }
+
+/// Sessão persistente: a MESMA tool registrada é chamada várias vezes e a
+/// conexão é reusada (não reconecta a cada chamada). Se a sessão não fosse
+/// persistente, o processo teria sido encerrado após a 1ª chamada e a 2ª
+/// falharia; aqui as três voltam corretas pela conexão viva.
+#[test]
+fn mcp_sessao_persistente_reusa_conexao_entre_chamadas() {
+    let mut registry = ToolRegistry::default_set(std::path::Path::new("."));
+    register_mcp_server(&mut registry, &fixture_config()).unwrap();
+    let tool = registry.get("mcp__fixture__echo").unwrap();
+    for palavra in ["um", "dois", "tres"] {
+        let out = tool.run(&serde_json::json!({ "input": palavra })).unwrap();
+        assert!(
+            out.content.contains(&format!("ECHO:{palavra}")),
+            "chamada reusando a conexão persistente deveria voltar; veio: {}",
+            out.content
+        );
+    }
+}
+
+/// Um servidor cujo comando não existe falha ao conectar (a thread da sessão
+/// NÃO fica pendurada) — a operação é bounded e devolve erro. Prova o fim do
+/// "thread leak": mesmo o caminho de falha termina.
+#[test]
+fn mcp_servidor_inexistente_falha_sem_pendurar() {
+    let config = McpServerConfig {
+        id: "morto".to_string(),
+        command: "/caminho/inexistente/btv-mcp-xyz".to_string(),
+        args: vec![],
+    };
+    let mut registry = ToolRegistry::default_set(std::path::Path::new("."));
+    let res = register_mcp_server(&mut registry, &config);
+    assert!(
+        res.is_err(),
+        "servidor inexistente deve falhar, não pendurar"
+    );
+}
