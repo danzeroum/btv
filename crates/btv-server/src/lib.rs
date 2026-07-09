@@ -245,8 +245,10 @@ fn is_local_origin(origin: &str) -> bool {
 }
 
 /// Núcleo testável da guarda: a `Origin` é aceita se for loopback OU se seu
-/// host estiver na lista de confiança `extra`.
-fn origin_allowed(origin: &str, extra: &[String]) -> bool {
+/// host estiver na lista de confiança `extra`. `pub` para que o agente web
+/// (`btv-cli::web_agent`), que tem a sua própria cópia da guarda nas rotas que
+/// aprovam execução, aplique EXATAMENTE a mesma regra.
+pub fn origin_allowed(origin: &str, extra: &[String]) -> bool {
     if is_local_origin(origin) {
         return true;
     }
@@ -267,7 +269,7 @@ fn origin_allowed(origin: &str, extra: &[String]) -> bool {
 /// **Segurança:** afrouxar esta guarda reabre o vetor de CSRF que o ADR 0015
 /// fecha. Só use ao hospedar o dashboard atrás de um proxy/ingress **com
 /// autenticação na borda** — o dashboard executa código e guarda API keys.
-fn trusted_origin_hosts() -> Vec<String> {
+pub fn trusted_origin_hosts() -> Vec<String> {
     std::env::var("BTV_TRUSTED_ORIGINS")
         .ok()
         .into_iter()
