@@ -401,10 +401,13 @@ impl BtvStore {
     }
 
     pub fn set_user_ativo(&self, id: i64, ativo: bool) -> Result<(), BtvStoreError> {
-        self.conn.execute(
+        let afetadas = self.conn.execute(
             "UPDATE users SET ativo = ?2 WHERE id = ?1",
             params![id, ativo as i64],
         )?;
+        if afetadas == 0 {
+            return Err(BtvStoreError::NotFound);
+        }
         Ok(())
     }
 
@@ -714,5 +717,20 @@ mod tests {
         store.set_user_pin(id, None).unwrap();
         assert!(!store.list_users().unwrap()[0].has_pin);
         assert_eq!(store.verify_user_pin(id, "42").unwrap(), PinCheck::NoPin);
+    }
+
+    #[test]
+    fn set_ativo_em_id_inexistente_e_not_found() {
+        let store = BtvStore::open_in_memory().unwrap();
+        let id = store
+            .insert_user("Ana", "ana@x", "usuario", None, "t1")
+            .unwrap();
+        // Perfil real: alterna sem erro.
+        store.set_user_ativo(id, false).unwrap();
+        // Id inexistente: NotFound (não mais no-op silencioso com 200).
+        assert!(matches!(
+            store.set_user_ativo(999_999, false),
+            Err(BtvStoreError::NotFound)
+        ));
     }
 }

@@ -1583,3 +1583,26 @@ offline-first; um backend neural exige API de embeddings/modelo, opt-in de
 deploy); `PNG`/`MIDI` (exigem renderização/mídia real); a certificação plena de
 "Review por valor" (média ponderada das 4 dimensões) depende das duas dimensões
 de agente. Todos documentados no código, não escondidos.
+
+## Terceira onda — achados das sondas adversariais (console + bash)
+
+Os scripts `scripts/btv-audit-console.js` (`btvAudit()`) e
+`scripts/btv-adversarial.sh` foram rodados contra a produção real e acharam
+duas decisões silenciosas, ambas fechadas com teste:
+
+1. **`set-ativo` em id inexistente virava 200 (no-op silencioso)** — divergia de
+   `pin`/`verify-pin`, que já davam 404. `BtvStore::set_user_ativo` passa a
+   devolver `NotFound` quando nenhuma linha é afetada e o handler mapeia para
+   **404** (`user_not_found`). Provado por `set_ativo_em_id_inexistente_e_not_found`.
+2. **`/api/*` desconhecida caía no `index.html` da SPA (200 HTML)** — confundia
+   clientes de API. O fallback do `btv_server::router` ficou esperto: rota que
+   começa com `/api/` devolve **404 JSON** (`route_not_found`); qualquer outra
+   segue caindo no SPA (navegação client-side). Provado por
+   `rota_api_desconhecida_e_404_json_nao_o_spa` (e o SPA de `/designer` segue 200).
+
+Observações não-bug registradas pelas sondas (por design/dado herdado, não
+código): o ledger de produção acusa `ok=false` (quebra de hash-chain no volume
+antigo — o caminho de escrita produz cadeia válida, provado por uma instância
+limpa com `ok=true`); perfis de teste `(SMOKE|FULL)·pin·…` acumulam (não há rota
+de delete de usuário); custo `$0` até tráfego novo com tokens; rodapé "Marina L."
+é placeholder (não há sessão/login real).

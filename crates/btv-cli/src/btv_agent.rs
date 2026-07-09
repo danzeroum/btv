@@ -1044,6 +1044,11 @@ async fn set_user_ativo_handler(
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
     match store.set_user_ativo(id, body.ativo) {
         Ok(()) => StatusCode::OK.into_response(),
+        Err(btv_store::BtvStoreError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody::new("store_error", e.to_string())),
