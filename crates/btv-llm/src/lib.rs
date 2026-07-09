@@ -20,6 +20,6 @@ pub use chat::{
 };
 pub use gateway::{Gateway, GatewayError, Generator};
 pub use model_tier::{tier_from_id, ModelTier};
-pub use provider::{FallbackChain, LlmRequest, ProviderId};
+pub use provider::{LlmRequest, ProviderId};
 pub use rate_limit::{RateLimitError, RateLimiter};
 pub use scripted::ScriptedGenerator;

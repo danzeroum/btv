@@ -1,8 +1,7 @@
-//! Contrato de provider e cadeia de fallback do gateway.
+//! Contrato de provider do gateway (ids + request com chave de cache).
 //!
 //! Origem: proxy seguro do prompte (DeepSeek → OpenAI, keys só no servidor).
-//! A cadeia é configurável; a implementação HTTP real (streaming SSE, retry)
-//! completa a Fase 1 do roadmap.
+//! A ordem de fallback real mora em `Gateway::from_env`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -36,45 +35,14 @@ impl LlmRequest {
     }
 }
 
-/// Ordem de tentativa de providers; o primeiro que responder vence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FallbackChain {
-    pub providers: Vec<ProviderId>,
-}
-
-impl Default for FallbackChain {
-    fn default() -> Self {
-        Self {
-            providers: vec![
-                ProviderId::Anthropic,
-                ProviderId::Deepseek,
-                ProviderId::Openai,
-            ],
-        }
-    }
-}
-
-impl FallbackChain {
-    /// Próximo provider após uma falha, se houver.
-    pub fn next_after(&self, failed: &ProviderId) -> Option<&ProviderId> {
-        let idx = self.providers.iter().position(|p| p == failed)?;
-        self.providers.get(idx + 1)
-    }
-}
+// `FallbackChain` foi removida (validação de pendencias.md): era código morto
+// desde a origem — `Gateway::generate` itera `self.providers` direto e nunca
+// consultou `next_after`. A ordem real de fallback vive em `Gateway::from_env`
+// (Anthropic → DeepSeek → OpenAI).
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fallback_avanca_na_cadeia() {
-        let chain = FallbackChain::default();
-        assert_eq!(
-            chain.next_after(&ProviderId::Anthropic),
-            Some(&ProviderId::Deepseek)
-        );
-        assert_eq!(chain.next_after(&ProviderId::Openai), None);
-    }
 
     #[test]
     fn cache_key_e_estavel() {

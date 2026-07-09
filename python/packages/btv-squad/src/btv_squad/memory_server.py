@@ -38,7 +38,8 @@ def _summarize_by_agent(records: list[dict[str, Any]]) -> list[memory_pb2.Memory
     recente primeiro) por agente — contagem real, decisão mais recente real
     (primeira ocorrência, já que a lista chega nessa ordem) e a de maior
     confiança real. Nenhuma tendência de esquecimento: não há cálculo disso
-    no código (`forgetting.py` é código morto, não consultado aqui)."""
+    no código (o antigo `forgetting.py` era código morto e foi removido —
+    descope registrado na ADR 0022)."""
     by_agent: dict[str, list[dict[str, Any]]] = {}
     for rec in records:
         by_agent.setdefault(rec.get("agent") or "?", []).append(rec)

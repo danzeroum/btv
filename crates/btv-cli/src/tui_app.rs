@@ -175,8 +175,11 @@ pub async fn run_tui<G: Generator + Send + Sync + 'static>(
     let agent_root = root.clone();
     let agent = tokio::spawn(async move {
         let run = async {
-            let tools = crate::skills::build_registry(&agent_root);
+            let (tools, skill_vetting) = crate::skills::build_registry_with_vetting(&agent_root);
             let mut ledger = Session::open(&agent_root, "<tui>", &agent_opts.model)?;
+            // Mesma auditoria de vetting do `run_once`/`chat` — antes o TUI
+            // não registrava (lacuna anotada na pendência da Fase 6 Onda 3).
+            crate::record_skill_vetting(&skill_vetting, &mut ledger);
             let mut durable = open_durable(&agent_root, &agent_opts, "<tui>")?;
             if durable.resumed_messages() > 0 {
                 let _ = agent_evt_tx.send(TuiMsg::Notice(format!(

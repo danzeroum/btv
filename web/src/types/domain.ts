@@ -35,7 +35,6 @@ export interface NavItem {
 
 export type AgentProfile = 'build' | 'plan'
 export type ModelTierId = 'small' | 'medium' | 'large'
-export type AutonomyLevel = 'interativo' | 'automatico' | 'somente_leitura'
 
 export interface ModelTier {
   id: ModelTierId

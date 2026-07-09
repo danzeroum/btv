@@ -39,6 +39,12 @@ export function Verify() {
         setProgress({ step: status.step, total: status.total })
         return
       }
+      if (status.status === 'failed') {
+        setProgress(null)
+        setActiveRunId(null)
+        toast.push('error', `pipeline /verify falhou internamente: ${status.message}`)
+        return
+      }
       setEvidence(status.evidence)
       setProgress(null)
       setActiveRunId(null)

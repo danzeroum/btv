@@ -69,6 +69,13 @@ enum VerifyJobStatus {
     Done {
         evidence: btv_schemas::verification::VerificationEvidence,
     },
+    /// Panic dentro do pipeline (bug interno no glue — os passos em si nunca
+    /// panicam, devolvem `Result`). Sem este estado o slot ficaria "running"
+    /// para sempre, sem crash visível em lugar nenhum (risco aceito na Onda
+    /// 11, fechado na validação de pendencias.md).
+    Failed {
+        message: String,
+    },
 }
 
 /// Corpo de erro uniforme das rotas mutáveis — mesma forma que `btv-cli`'s
@@ -400,10 +407,8 @@ async fn rate_limits() -> impl IntoResponse {
 }
 
 /// Ordem fixa de fallback que `btv_llm::gateway::Gateway::from_env` usa
-/// (Anthropic → DeepSeek → OpenAI) — não `btv_llm::FallbackChain`
-/// (`provider.rs`), que é código morto: `Gateway::generate` itera
-/// `self.providers` direto, nunca consulta `FallbackChain::next_after`
-/// (confirmado lendo o código antes de expor isto).
+/// (Anthropic → DeepSeek → OpenAI). A antiga `btv_llm::FallbackChain` era
+/// código morto (`Gateway::generate` nunca a consultava) e foi removida.
 const KNOWN_PROVIDERS: [&str; 3] = ["anthropic", "deepseek", "openai"];
 
 #[derive(Serialize)]
@@ -486,25 +491,53 @@ async fn run_verify_start(State(state): State<AppState>) -> Response {
         let sha = verify_git_sha(&root).unwrap_or_else(|| "unknown".to_string());
         let produced_at = now_rfc3339();
         let progress_slot = Arc::clone(&job_slot);
-        let evidence = btv_verify::run_pipeline_with_progress(
-            &run_id_for_task,
-            &sha,
-            &produced_at,
-            &steps,
-            move |step, total, _completed| {
-                let mut guard = progress_slot.lock().unwrap_or_else(|e| e.into_inner());
-                if let Some(job) = guard.as_mut() {
-                    job.status = VerifyJobStatus::Running { step, total };
-                }
-            },
-        );
-        let mut guard = job_slot.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(job) = guard.as_mut() {
-            job.status = VerifyJobStatus::Done { evidence };
-        }
+        // `catch_unwind`: um panic aqui seria engolido pelo `JoinHandle`
+        // descartado do `spawn_blocking` e o job ficaria "running" eterno.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            btv_verify::run_pipeline_with_progress(
+                &run_id_for_task,
+                &sha,
+                &produced_at,
+                &steps,
+                move |step, total, _completed| {
+                    let mut guard = progress_slot.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(job) = guard.as_mut() {
+                        job.status = VerifyJobStatus::Running { step, total };
+                    }
+                },
+            )
+        }));
+        settle_verify_job(&job_slot, result);
     });
 
     (StatusCode::ACCEPTED, Json(VerifyRunStarted { run_id })).into_response()
+}
+
+/// Registra o desfecho do job no slot — inclusive um panic capturado por
+/// `catch_unwind` (vira `Failed`, nunca "running" eterno).
+fn settle_verify_job(
+    job_slot: &VerifyJobSlot,
+    result: std::thread::Result<btv_schemas::verification::VerificationEvidence>,
+) {
+    let mut guard = job_slot.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(job) = guard.as_mut() {
+        job.status = match result {
+            Ok(evidence) => VerifyJobStatus::Done { evidence },
+            Err(panic) => VerifyJobStatus::Failed {
+                message: panic_to_message(panic.as_ref()),
+            },
+        };
+    }
+}
+
+fn panic_to_message(panic: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = panic.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = panic.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "panic sem mensagem".to_string()
+    }
 }
 
 /// `GET /api/verify/:id` — status do job (polling). `404` se não houver
@@ -528,6 +561,12 @@ async fn get_verify_status(
                 "status": "done",
                 "run_id": job.run_id,
                 "evidence": evidence,
+            }))
+            .into_response(),
+            VerifyJobStatus::Failed { message } => Json(serde_json::json!({
+                "status": "failed",
+                "run_id": job.run_id,
+                "message": message,
             }))
             .into_response(),
         },
@@ -2036,6 +2075,29 @@ mod tests {
             .unwrap();
         let second_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(second_json["run_id"], first_run_id);
+    }
+
+    /// Um panic dentro do pipeline (bug interno de glue) assenta o slot em
+    /// `Failed` com a mensagem do panic — nunca um "running" eterno que o
+    /// polling não consegue distinguir de um job vivo.
+    #[test]
+    fn panic_no_pipeline_assenta_o_job_em_failed_nao_running_eterno() {
+        let slot: VerifyJobSlot = Arc::new(Mutex::new(Some(VerifyJob {
+            run_id: "vrun-panic".into(),
+            status: VerifyJobStatus::Running { step: 0, total: 0 },
+        })));
+        let result =
+            std::panic::catch_unwind(|| -> btv_schemas::verification::VerificationEvidence {
+                panic!("bug interno de glue")
+            });
+        settle_verify_job(&slot, result);
+        let guard = slot.lock().unwrap();
+        match &guard.as_ref().unwrap().status {
+            VerifyJobStatus::Failed { message } => {
+                assert!(message.contains("bug interno de glue"));
+            }
+            _ => panic!("esperava VerifyJobStatus::Failed"),
+        }
     }
 
     /// `id` que não bate com nenhum job (ou nunca existiu) é `404` — não um

@@ -71,6 +71,12 @@ esquecimento — nenhum campo do tipo (`decay`, "esquecendo", "reforçando")
 existe na resposta; só `agent`, contagem real, decisão mais recente real e a
 de maior confiança real, todos derivados de `list_memories`/`_load_corpus()`.
 
+> **Atualização (validação de pendencias.md, 2026-07):** em vez de manter o
+> módulo morto, `forgetting.py` foi **removido** (junto com o teste e o
+> re-export em `__init__.py`) — a decisão de não-escopo acima permanece; só o
+> resíduo de código deixou de existir. O scaffolding chromadb no-op de
+> `memory.py` foi removido pelo mesmo motivo.
+
 ## Compromisso de honestidade carregado à UI
 
 Rótulo/nav dizem "RAG"/"busca"; a tela e a rota HTTP mantêm a mesma tensão

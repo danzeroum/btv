@@ -24,6 +24,10 @@
   zero-ripple. **Futuro:** `load_skills` devolver as decisões e registrar sem
   re-vetar. Além disso, só `run_once` registra hoje; `chat`/`tui` não (fácil de
   estender com o mesmo helper, deixei fora para não alargar o diff).
+  **Resolvido (validação 2026-07):** exatamente o "futuro" proposto —
+  `load_skills` devolve `Vec<SkillStatus>`, `build_registry_with_vetting`
+  os expõe e `record_skill_vetting` só registra (zero re-vet); `chat` e `tui`
+  agora registram com o mesmo helper.
 
 ## Onda 4 — MCP (rmcp)
 
@@ -48,6 +52,8 @@
 - **[dúvida/defer] Frontend MCP não ligado.** `MCP_SERVERS`/`reconnectMcp`
   seguem mock. O wiring real (`/api/mcp` + `fetchMcpServers`) espelha o que fiz
   no `/api/skills` da cauda da Onda 3 — deixei para depois para não inflar a PR.
+  **Resolvido (Fase 7 Onda 7):** tela real `Mcp.tsx` + `GET /api/mcp` +
+  `fetchMcpServers` existem; o mock saiu de `skills.ts` na mesma onda.
 - **[nota] `rmcp` v2.1.0** entrou como dep direta de `forge-tools` (features
   `client,server,transport-child-process,transport-io`), não em
   `[workspace.dependencies]`. Dep pesada, mas é a lib nomeada pelo PLANO. Passou
@@ -129,7 +135,10 @@
   resolve a posição), tirando o peso de encontrar a coluna do agente. Nenhuma
   das duas é urgente — o agente sempre chegou na resposta certa via grep/read;
   é sobre a ferramenta LSP ser efetivamente usada, não sobre correção do
-  resultado.
+  resultado. **Resolvido parcialmente (validação 2026-07):** a mitigação (a)
+  foi feita — `grep` devolve `caminho:linha:coluna:conteúdo` (1-based, com a
+  instrução de subtrair 1 para as tools `lsp__*` na própria descrição da
+  tool); a (b) segue como ideia futura.
 
 ## Onda 6 — RAG (recuperação semântica da memória)
 
@@ -302,6 +311,14 @@ preferir um ADR para o LSP ou para o k6/infra, é rápido de adicionar.
    permanente. **Não escrevi** esse e2e (cross-process novo, no último passo, risco
    de flaky no fecho verde). Quer que eu faça numa próxima iteração? É a forma mais
    honesta de fechar a pendência sem key.
+   **Resolvido (validação 2026-07):** teste
+   `consenso_do_stream_e_registrado_no_ledger_com_cadeia_integra`
+   (`btv-cli/src/squad.rs`): um `SquadService` roteirizado (Rust, sem key, sem
+   Python) servido sobre UDS emite proposta→Consensus→passo; o MESMO
+   `render_and_record` de produção drena o stream e a asserção confirma a
+   entrada `squad.consensus` no ledger real com cadeia íntegra. O gêmeo
+   cross-process (Python real emitindo `Consensus`) já vivia em
+   `squad_e2e.rs` — juntos fecham a pendência de exercício da Fase 4.
 2. **[dúvida] RAG léxico é suficiente?** Onda 6 entregou TF-IDF léxico (real, zero-
    dep, offline). Não faz ponte de sinônimo (isso é neural). Se você quer semântica
    de verdade, é uma onda futura (modelo local ou gateway Rust). Documentado no ADR
@@ -309,8 +326,13 @@ preferir um ADR para o LSP ou para o k6/infra, é rápido de adicionar.
 3. **[dúvida/defer] Frontends não ligados:** MCP (`/api/mcp`) e LSP não têm UI; A/B
    não tem tela. São tools/CLI hoje. Wiring de frontend espelha o que fiz no
    `/api/skills` — deixei para não inflar as PRs.
+   **Resolvido (Fase 7):** os três ganharam tela real — MCP (Onda 7),
+   Experimentos A/B (Onda 9), Language servers (Onda 10).
 4. **[dúvida] Double-vet no ledger (`skill.vetting`)** e consumo do recall no
    planejamento do squad: follow-ups registrados nas seções das Ondas 3 e 6 acima.
+   **Atualização (validação 2026-07):** o double-vet foi resolvido (ver Onda 3
+   acima); o consumo do recall no planejamento segue aberto por decisão
+   (mexe na lógica de consenso — fora do escopo de uma correção pontual).
 
 Nada aqui bloqueia declarar o roadmap concluído — são refinamentos e um exercício,
 não lacunas de código.
@@ -367,6 +389,9 @@ não lacunas de código.
   fora do escopo desta entrega (que é fechar a Onda 2, não auditar a cobertura de
   teste da Onda 1). Se você quiser essa cobertura de navegador para (1)/(2)
   também, é um item pontual e localizado — me avise.
+  **Atualização (validação 2026-07):** o cenário (1) ganhou Playwright de
+  navegador na Onda 15 (`sessao-real-backend.spec.ts`: mensagem → SSE →
+  Permitir → ledger íntegro); só o (2) (duas abas → 409) segue Rust-only.
 - **[nota] `web/scripts/run-integration-server.mjs` ganhou `--web-agent`** (a
   suíte de integração de telemetria e a nova de permissões agora sobem o MESMO
   servidor com o agente web ligado; puramente aditivo, não mudei nenhuma rota
@@ -395,6 +420,10 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   tarefa no proto + `core_socket` por slot) é escopo maior, fora desta onda. Se
   quiser, o remendo barato para a próxima iteração é a UI mostrar "aguardando
   slot livre" quando nenhum evento chegar depois de N segundos do `202`.
+  **Resolvido parcialmente (validação 2026-07):** o remendo barato foi feito
+  nas DUAS telas (`Squad.tsx` do console e `Vivo.tsx` do produto): 5s sem
+  evento após o `202` → aviso honesto de fila/slot único. A correlação de
+  tarefa no proto (concorrência real) segue como trabalho futuro.
 - **[decisão] Frontend fecha o `EventSource` no primeiro `onerror`, não deixa o
   navegador reconectar sozinho.** Diferente de `connectSessionEvents` (sessão de
   chat, vida útil da aba inteira, reconectar faz sentido), uma tarefa de squad é
@@ -909,6 +938,11 @@ ADR 0019, sem decisão em aberto que precisasse deste arquivo.
   um panic só viria de um bug de verdade no meu código novo de glue, que os
   testes desta onda já exercitam. Aceitei o risco residual em vez de
   adicionar `catch_unwind` só por precaução; documentado aqui, não escondido.
+  **Resolvido (validação 2026-07):** `catch_unwind` + estado novo
+  `VerifyJobStatus::Failed` (o polling devolve `status:"failed"` com a
+  mensagem do panic; a tela trata como terminal) — o job nunca mais fica
+  "running" eterno; teste dedicado
+  (`panic_no_pipeline_assenta_o_job_em_failed_nao_running_eterno`).
 - **[decisão] Teste de fronteira do progresso usa polling REAL (sleep de
   20ms entre tentativas, até 200 iterações), não tempo mockado.** O job roda
   de verdade em `spawn_blocking` (thread real, subprocessos reais via `sh -c
@@ -1443,3 +1477,70 @@ regenerados; screenshots do console dev regeneradas (strings mudaram).
 - **[fixes de UI da auditoria]** os 3 vazamentos de nome de motor na UI do
   produto foram reescritos (erro da galeria sem citar comando; auditoria do
   Designer "ledger da plataforma"; nota do A4 sem nome de crate).
+
+# Validação profunda deste arquivo (2026-07-09)
+
+Auditoria item a item de TODAS as decisões e dúvidas acima contra o código
+real (três varreduras: motor Rust, Python/squad, frontend/rename/CI).
+Veredito geral: **o arquivo é honesto** — nenhum "resolvido" declarado se
+mostrou falso e as dúvidas abertas se sustentavam no código. O que a
+validação mudou:
+
+**Dúvidas fechadas nesta entrega (marcadas [resolvido] inline acima):**
+
+- **Double-vet de skills** (F6 Onda 3): `load_skills` devolve as decisões,
+  `record_skill_vetting` registra sem re-vetar; `chat`/`tui` agora também
+  registram `skill.vetting`.
+- **Grep sem coluna** (F6 Onda 5, achado de dogfooding): mitigação (a) feita
+  — `caminho:linha:coluna:conteúdo`; a (b) (LSP por nome de símbolo) segue
+  futura.
+- **Consenso→ledger** (F6 Onda 9, item nº 1 — "a maior"): teste de regressão
+  permanente novo em `btv-cli/src/squad.rs` (SquadService roteirizado sobre
+  UDS → `render_and_record` real → `squad.consensus` no ledger íntegro).
+- **Verify job preso em "running" após panic** (F7 Onda 11): `catch_unwind`
+  + `Failed` + teste.
+- **UI "aguardando slot livre"** (F7 Onda 4): o remendo barato proposto foi
+  aplicado nas duas telas (console e produto).
+- **Frontends MCP/LSP/A-B** (F6 Ondas 4 e 9): já estavam resolvidos pela
+  Fase 7 (Ondas 7/9/10) — o registro acima é que estava desatualizado.
+- **Playwright da F7 Onda 2**: cenário (1) já coberto pela Onda 15; só o
+  (2) (duas abas → 409) segue Rust-only.
+
+**Estranhezas reais encontradas (fora do que este arquivo registrava) e
+corrigidas:**
+
+- **`.forge/` estava RASTREADO no git** — 5 bancos de runtime da era Forge
+  (`forge.db*`, `prompt_library.db`, `telemetry.db`) commitados; o
+  `.gitignore` só ignorava `.btv/`. Removidos do índice + `.forge/` no
+  `.gitignore`. Era a única sobra real do rename (código-fonte 100% limpo,
+  zero corrupções de sed).
+- **Guarda de origem duplicada divergiu** após `BTV_TRUSTED_ORIGINS`:
+  `web_agent.rs` mantinha um `is_local_origin` próprio, redundante
+  (`btv_server::origin_allowed` já cobre loopback) e com regra diferente
+  (sem exigir esquema). Unificado: o agente web delega 100% à função
+  compartilhada de `btv-server`.
+- **Código morto removido** (decisão do dono): `FallbackChain` (btv-llm —
+  o gateway nunca a consultou), `AutonomyLevel` (domain.ts, zero usos),
+  `forgetting.py` (+ re-export e teste; nota adicionada à ADR 0022) e o
+  scaffolding chromadb no-op de `memory.py` (o recall lê só o JSONL desde a
+  F6 Onda 6).
+
+**Conferências que NÃO exigiram ação:**
+
+- As referências a PRs #14–#32 e commits (83a61c4, 03ce513, 4edbeb4,
+  1c4a241) são todas alcançáveis do HEAD atual — a história NÃO foi achatada
+  (os commits "Add files via upload" são camadas sobre o DAG completo, 130
+  commits).
+- ADR 0023 (RunTool/ReAct/auditor) confirmado 4/4 no código; cockpit vivo
+  nos dois backends; `BTV_SQUAD_MODEL` + docker-compose ok; CI com os 10
+  jobs (deny/sandbox/bench/k6/verify/web/btv-web) pós-rename; infra/
+  esqueleto honesto com `loadgen` real; 3 fixes de marca aplicados e lint de
+  marca passando.
+
+**Segue aberto por decisão (não é esquecimento):** sessão MCP persistente;
+thread leak do probe MCP (rmcp não-cancelável); reader de fundo do LSP; LSP
+por nome de símbolo; recall alimentando o planejamento do squad; embeddings
+neurais no RAG; `model` por tarefa no proto `SquadTask` (tela Modelo →
+squad); A/B multivariante; Playwright do 409 concorrente; custo monetário;
+conversores binários; auth do A6; "Review por valor" mock (não-escopo da
+F7 Onda 11).
