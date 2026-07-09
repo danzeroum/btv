@@ -71,7 +71,7 @@ test('personas: override real com badge, restaurar e auditoria', async ({ page }
 
   // Persona própria: criar e remover.
   await page.getByRole('button', { name: '+ Nova persona' }).click()
-  await expect(page.getByText('persona criada por você')).toBeVisible()
+  await expect(page.getByText('criada por você · trabalha na produção da squad')).toBeVisible()
   await page.getByRole('button', { name: 'remover' }).click()
-  await expect(page.getByText('persona criada por você')).toHaveCount(0)
+  await expect(page.getByText('criada por você · trabalha na produção da squad')).toHaveCount(0)
 })

@@ -1737,7 +1737,29 @@ fabricações que o teste guiado achou num squad de produto (artigo de café):
    planejador_a_nao_fabricar_deploy` + `test_sem_roster_o_prompt_nao_tem_nota_
    de_dominio` e `test_squad_de_produto_nao_fail_closa_por_evidencia_ausente`.
 
-**Fase 3 (próxima PR) — personas customizadas de primeira classe.** A tabela
-`custom_personas` (hoje ignorada na ativação) deve virar agentes do roster
-também, para que uma persona criada do zero pelo usuário (não só override de
-papel de template) trabalhe com o prompt dela.
+**Fase 3 (esta PR) — personas customizadas de primeira classe.** A tabela
+`custom_personas` era ignorada na ativação: uma persona criada do zero pelo
+usuário no frontend aparecia com o badge "própria" mas NUNCA trabalhava.
+Fechado: `ativar_squad_handler` carrega as personas próprias do template e as
+anexa ao roster como contribuintes de PRODUÇÃO (`funcao="produce"`, `custom=
+true`, ordem após os papéis do template) — o prompt delas entra na descrição
+("Equipe"), no hash de procedência (`prompt_hashes`) e no ledger
+(`personas_proprias`). O motor tem um elenco FIXO de agentes, então várias
+personas na mesma função (o papel de produção do template + N próprias, todas
+"produce"→developer) teriam colapsado no último com o `persona_prompt = prompt`
+da Fase 1 — decisão silenciosa que descartaria personas que o usuário criou. O
+`_apply_persona_roster` passou a COMBINAR os prompts por agente, rotulados por
+`[Persona: <papel>]`, em vez de sobrescrever. Provado por
+`descricao_inclui_personas_proprias_com_o_prompt_delas` (Rust) e
+`test_apply_persona_roster_combina_varias_personas_na_mesma_funcao` +
+`test_apply_persona_roster_injeta_o_prompt_nos_agentes_por_funcao` (Python). A
+tela Personas passou a dizer "criada por você · trabalha na produção da squad".
+
+**Limite honesto (registrado, não escondido):** o motor Python continua com 5
+agentes fixos; "de primeira classe" aqui significa que o prompt da persona de
+fato roda (combinado no agente da função), NÃO que cada persona vira um processo
+de agente separado com identidade própria no grafo de consenso. Um roster
+verdadeiramente dinâmico (N agentes instanciados do roster, cada um votando no
+consenso) seria uma reescrita do orquestrador — fora do escopo destas três
+fases, que fecharam o pedido central: "as personas criadas no frontend são as
+que trabalham, com o prompt delas".

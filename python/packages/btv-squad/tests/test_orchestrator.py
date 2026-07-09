@@ -363,9 +363,31 @@ def test_apply_persona_roster_injeta_o_prompt_nos_agentes_por_funcao(tmp_path):
             {"papel": "Fact-checker", "prompt": "P-validate", "funcao": "validate", "ordem": 3, "custom": False},
         ]
     )
-    assert orch.agents["architect"].persona_prompt == "P-plan"
-    assert orch.agents["developer"].persona_prompt == "P-produce"
-    assert orch.agents["auditor"].persona_prompt == "P-validate"
+    # Cada persona é rotulada por papel no system prompt do agente da sua funcao.
+    assert orch.agents["architect"].persona_prompt == "[Persona: Pauteiro]\nP-plan"
+    assert orch.agents["developer"].persona_prompt == "[Persona: Redator]\nP-produce"
+    assert orch.agents["auditor"].persona_prompt == "[Persona: Fact-checker]\nP-validate"
     # ops/designer sem funcao mapeada → seguem no comportamento default.
     assert orch.agents["ops"].persona_prompt is None
     assert orch.agents["designer"].persona_prompt is None
+
+
+def test_apply_persona_roster_combina_varias_personas_na_mesma_funcao(tmp_path):
+    """Fase 3: o papel de produção do template + N personas próprias caem todas
+    em "produce"→developer. Os prompts são COMBINADOS (rotulados por papel), não
+    sobrescritos — nenhuma persona criada pelo usuário é descartada em silêncio."""
+    orch = UnifiedOrchestrator(
+        _gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path)
+    )
+    orch._apply_persona_roster(
+        [
+            {"papel": "Redator", "prompt": "P-produce", "funcao": "produce", "ordem": 1, "custom": False},
+            {"papel": "Curador", "prompt": "P-curador", "funcao": "produce", "ordem": 4, "custom": True},
+            {"papel": "Ilustrador", "prompt": "P-ilustra", "funcao": "produce", "ordem": 5, "custom": True},
+        ]
+    )
+    combinado = orch.agents["developer"].persona_prompt
+    # As três personas de produção aparecem, cada uma rotulada — nada perdido.
+    assert "[Persona: Redator]\nP-produce" in combinado
+    assert "[Persona: Curador]\nP-curador" in combinado
+    assert "[Persona: Ilustrador]\nP-ilustra" in combinado

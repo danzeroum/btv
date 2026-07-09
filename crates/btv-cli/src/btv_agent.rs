@@ -102,6 +102,7 @@ fn montar_descricao(
     body: &AtivarSquadBody,
     papeis_ativos: &[(usize, &str)],
     prompt_efetivo: &dyn Fn(usize, &str) -> String,
+    proprias: &[btv_store::CustomPersona],
 ) -> String {
     let mut out = format!(
         "Squad \"{}\" (modelo {} {}) ativada pelo BuildToValue.\n\n## Briefing\n",
@@ -123,6 +124,12 @@ fn montar_descricao(
     out.push_str("\n## Equipe (papéis e responsabilidades)\n");
     for (i, papel) in papeis_ativos {
         out.push_str(&format!("- {}: {}\n", papel, prompt_efetivo(*i, papel)));
+    }
+    // Personas próprias (U7, Fase 3): criadas do zero pelo usuário no frontend,
+    // entram na equipe como contribuintes de PRODUÇÃO com o prompt delas — não
+    // são mais só linhas mortas no banco.
+    for cp in proprias {
+        out.push_str(&format!("- {} (persona própria): {}\n", cp.nome, cp.prompt));
     }
     out.push_str("\n## Entrega esperada\n");
     let formatos: Vec<&str> = template.formatos.iter().map(|f| f.nome.as_str()).collect();
@@ -201,14 +208,22 @@ async fn ativar_squad_handler(
 
     // Overrides de persona (U7) em vigor NESTA ativação — o prompt efetivo
     // (override ?? padrão) entra na descrição real e no hash de procedência.
-    let overrides: std::collections::HashMap<String, String> = {
+    // Personas próprias (Fase 3): criadas do zero pelo usuário, entram na squad
+    // como agentes de produção de primeira classe (com o prompt delas), não só
+    // como texto — antes eram ignoradas na ativação.
+    let (overrides, proprias): (
+        std::collections::HashMap<String, String>,
+        Vec<btv_store::CustomPersona>,
+    ) = {
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        store
+        let overrides = store
             .list_persona_overrides(&template.id)
             .unwrap_or_default()
             .into_iter()
             .map(|o| (o.papel, o.prompt))
-            .collect()
+            .collect();
+        let proprias = store.list_custom_personas(&template.id).unwrap_or_default();
+        (overrides, proprias)
     };
     let template_nome = template.nome.clone();
     let prompt_efetivo = move |i: usize, papel: &str| -> String {
@@ -218,11 +233,13 @@ async fn ativar_squad_handler(
             .unwrap_or_else(|| prompt_padrao(i, papel, &template_nome))
     };
 
-    let descricao = montar_descricao(template, &body, &papeis_ativos, &prompt_efetivo);
+    let descricao = montar_descricao(template, &body, &papeis_ativos, &prompt_efetivo, &proprias);
 
     // Procedência dos prompts (aprovação obs. 5): hash de cada prompt
     // efetivo em vigor na ativação — fecha U7 (personas) ↔ U4 (trilha).
-    let prompt_hashes: Vec<serde_json::Value> = papeis_ativos
+    // Inclui as personas próprias (Fase 3): o prompt delas de fato roda, então
+    // o hash entra na trilha como o dos papéis de template.
+    let mut prompt_hashes: Vec<serde_json::Value> = papeis_ativos
         .iter()
         .map(|(i, papel)| {
             serde_json::json!({
@@ -231,6 +248,13 @@ async fn ativar_squad_handler(
             })
         })
         .collect();
+    for cp in &proprias {
+        prompt_hashes.push(serde_json::json!({
+            "papel": cp.nome,
+            "custom": true,
+            "prompt_sha256": btv_schemas::sha256_hex(&cp.prompt),
+        }));
+    }
 
     // Roster de personas (Fase 1): cada papel ativo vira uma PersonaSpec cujo
     // `prompt` (override de U7 ?? padrão do arquétipo) o Python usa como system
@@ -238,7 +262,7 @@ async fn ativar_squad_handler(
     // trabalha e como — não mais só texto no briefing. `funcao`/`ordem` guiam o
     // encaixe no pipeline (personas próprias e roster por domínio vêm nas
     // fases 2/3).
-    let roster: Vec<btv_proto::squad::PersonaSpec> = papeis_ativos
+    let mut roster: Vec<btv_proto::squad::PersonaSpec> = papeis_ativos
         .iter()
         .map(|(i, papel)| btv_proto::squad::PersonaSpec {
             papel: papel.to_string(),
@@ -248,6 +272,20 @@ async fn ativar_squad_handler(
             custom: false,
         })
         .collect();
+    // Personas próprias (Fase 3): entram como contribuintes de PRODUÇÃO
+    // (`funcao="produce"`) — o motor tem um elenco fixo, então o lado Python
+    // combina os prompts das personas que caem no mesmo agente (não descarta
+    // silenciosamente). `ordem` continua após os papéis do template.
+    let base_ordem = template.papeis.len() as u32;
+    for (j, cp) in proprias.iter().enumerate() {
+        roster.push(btv_proto::squad::PersonaSpec {
+            papel: cp.nome.clone(),
+            prompt: cp.prompt.clone(),
+            funcao: "produce".to_string(),
+            ordem: base_ordem + j as u32,
+            custom: true,
+        });
+    }
 
     // A galeria BuildToValue não tem seletor de modelo por ativação (o produto
     // usa o default do deploy, `BTV_SQUAD_MODEL`); `None` = herda esse default.
@@ -301,6 +339,7 @@ async fn ativar_squad_handler(
             "template_versao": template.versao,
             "nome": nome,
             "papeis": papeis_ativos.iter().map(|(_, p)| *p).collect::<Vec<_>>(),
+            "personas_proprias": proprias.iter().map(|c| c.nome.as_str()).collect::<Vec<_>>(),
             "prompt_hashes": prompt_hashes,
             "refs": body.refs,
         }),
@@ -1285,9 +1324,13 @@ mod tests {
             .filter(|(i, _)| !body.papeis_off.contains(i))
             .map(|(i, p)| (i, p.as_str()))
             .collect();
-        let d = montar_descricao(template, &body, &papeis, &|i, papel| {
-            prompt_padrao(i, papel, &template.nome)
-        });
+        let d = montar_descricao(
+            template,
+            &body,
+            &papeis,
+            &|i, papel| prompt_padrao(i, papel, &template.nome),
+            &[],
+        );
         assert!(d.contains("Newsletter de julho"));
         assert!(d.contains("logística verde no Brasil"));
         assert!(d.contains("https://exemplo.com/estudo"));
@@ -1359,14 +1402,55 @@ mod tests {
             .enumerate()
             .map(|(i, p)| (i, p.as_str()))
             .collect();
-        let d = montar_descricao(template, &body, &papeis, &|i, papel| {
-            if papel == "Redator" {
-                "PROMPT CUSTOMIZADO DO REDATOR".into()
-            } else {
-                prompt_padrao(i, papel, &template.nome)
-            }
-        });
+        let d = montar_descricao(
+            template,
+            &body,
+            &papeis,
+            &|i, papel| {
+                if papel == "Redator" {
+                    "PROMPT CUSTOMIZADO DO REDATOR".into()
+                } else {
+                    prompt_padrao(i, papel, &template.nome)
+                }
+            },
+            &[],
+        );
         assert!(d.contains("PROMPT CUSTOMIZADO DO REDATOR"));
         assert!(!d.contains("Redator: Você é Redator da squad"));
+    }
+
+    #[test]
+    fn descricao_inclui_personas_proprias_com_o_prompt_delas() {
+        // Fase 3: uma persona criada do zero pelo usuário entra na equipe da
+        // descrição com o prompt dela (antes era ignorada na ativação).
+        let body = AtivarSquadBody {
+            template_id: "editorial".into(),
+            nome: None,
+            briefing: vec![],
+            refs: vec![],
+            papeis_off: vec![],
+        };
+        let template = template_editorial();
+        let papeis: Vec<(usize, &str)> = template
+            .papeis
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, p.as_str()))
+            .collect();
+        let proprias = vec![btv_store::CustomPersona {
+            id: 1,
+            template_id: "editorial".into(),
+            nome: "Curador de fontes".into(),
+            prompt: "VOZ DA PERSONA PRÓPRIA: seleciono fontes confiáveis".into(),
+        }];
+        let d = montar_descricao(
+            template,
+            &body,
+            &papeis,
+            &|i, papel| prompt_padrao(i, papel, &template.nome),
+            &proprias,
+        );
+        assert!(d.contains("Curador de fontes (persona própria)"));
+        assert!(d.contains("VOZ DA PERSONA PRÓPRIA"));
     }
 }

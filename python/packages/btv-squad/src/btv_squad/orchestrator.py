@@ -129,12 +129,20 @@ class UnifiedOrchestrator:
             await self._event_sink(event)
 
     def _apply_persona_roster(self, roster: list[dict[str, Any]]) -> None:
-        """Fase 1 (personas operacionais): usa o `prompt` de cada persona (U7)
+        """Fase 1/3 (personas operacionais): usa o `prompt` de cada persona (U7)
         como system prompt do agente do motor correspondente à sua `funcao`.
-        Mapeamento APROXIMADO (o roster por domínio da Fase 2 substitui isto):
-        plan→architect, produce→developer, review/validate→auditor. Roster
-        vazio = elenco fixo do motor, sem override. Editar a persona no frontend
-        passa a mudar de fato como o agente trabalha."""
+        Mapeamento: plan→architect, produce→developer, review/validate→auditor.
+        Roster vazio = elenco fixo do motor, sem override. Editar/criar persona
+        no frontend passa a mudar de fato como o agente trabalha.
+
+        O motor tem um elenco FIXO de agentes, mas o roster pode trazer VÁRIAS
+        personas na mesma `funcao` (Fase 3: o papel de produção do template + N
+        personas próprias criadas pelo usuário — todas "produce"→developer).
+        Nesse caso os prompts são COMBINADOS num só (o agente encarna a equipe
+        de personas daquela função), rotulados por `papel` — em vez de o último
+        sobrescrever silenciosamente os outros (o que descartaria personas que
+        o usuário criou, uma decisão silenciosa que a régua "Nada Fake" proíbe).
+        """
 
         funcao_para_agente = {
             "plan": "architect",
@@ -142,11 +150,17 @@ class UnifiedOrchestrator:
             "review": "auditor",
             "validate": "auditor",
         }
+        acumulado: dict[str, list[str]] = {}
         for persona in roster:
             agente = funcao_para_agente.get(str(persona.get("funcao", "")))
             prompt = str(persona.get("prompt", "")).strip()
-            if agente and prompt and agente in self.agents:
-                self.agents[agente].persona_prompt = prompt
+            if not (agente and prompt and agente in self.agents):
+                continue
+            papel = str(persona.get("papel", "")).strip()
+            bloco = f"[Persona: {papel}]\n{prompt}" if papel else prompt
+            acumulado.setdefault(agente, []).append(bloco)
+        for agente, blocos in acumulado.items():
+            self.agents[agente].persona_prompt = "\n\n".join(blocos)
 
     async def execute_complex_task(
         self, task: dict[str, Any], event_sink: Optional[Any] = None
