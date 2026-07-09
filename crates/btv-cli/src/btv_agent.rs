@@ -1442,6 +1442,7 @@ mod tests {
             template_id: "editorial".into(),
             nome: "Curador de fontes".into(),
             prompt: "VOZ DA PERSONA PRÓPRIA: seleciono fontes confiáveis".into(),
+            tenant: btv_domain::TenantId::LOCAL,
         }];
         let d = montar_descricao(
             template,
