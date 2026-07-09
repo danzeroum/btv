@@ -35,15 +35,27 @@ impl<G: Generator + Sync> Generator for RateLimitedGenerator<G> {
             .acquire()
             .await
             .map_err(|e| GatewayError::RateLimited(e.to_string()))?;
-        if let Some(t) = &self.telemetry {
+        // `model` capturado antes de `req` ser movido para `generate`; o
+        // `llm.call` é registrado DEPOIS, com os tokens reais da resposta —
+        // é o que permite estimar custo por modelo (tokens × preço). Só
+        // chamadas bem-sucedidas contam (as que consomem tokens de verdade;
+        // um hit de cache nem chega aqui, pois o `CachedGenerator` fica por
+        // cima).
+        let model = req.model.clone();
+        let result = self.inner.generate(req, on_delta).await;
+        if let (Some(t), Ok(turn)) = (&self.telemetry, &result) {
             t.record(
                 "llm.call",
                 "cli",
-                serde_json::json!({"model": req.model}),
+                serde_json::json!({
+                    "model": model,
+                    "input_tokens": turn.usage.input_tokens,
+                    "output_tokens": turn.usage.output_tokens,
+                }),
                 &now_rfc3339(),
             );
         }
-        self.inner.generate(req, on_delta).await
+        result
     }
 }
 

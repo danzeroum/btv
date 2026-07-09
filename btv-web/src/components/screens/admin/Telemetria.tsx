@@ -1,25 +1,27 @@
 import { useEffect, useState } from 'react'
-import { fetchSummary, type TelemetrySummary } from '../../../api/admin'
+import { fetchSummary, fetchModelUsage, type TelemetrySummary, type ModelUsageResponse } from '../../../api/admin'
 import { listRuns, listDeliverables, type BtvRun } from '../../../api/btv'
 import { useTemplates } from '../../../state/TemplatesContext'
 import { ErroBox, NotaHonesta, StatCard } from './comum'
 
 /** A1 · Telemetria & custos — números REAIS (telemetria SQLite + runs do
- *  BtvStore). Custo monetário não é fabricado: exige tabela de preços por
- *  modelo (trabalho futuro, dito na nota). */
+ *  BtvStore). Custo monetário é uma ESTIMATIVA a partir de tokens reais ×
+ *  tabela de preços estática (nunca fabricado; modelo sem preço não entra). */
 export function Telemetria() {
   const [summary, setSummary] = useState<TelemetrySummary | null>(null)
   const [runs, setRuns] = useState<BtvRun[] | null>(null)
   const [entregas, setEntregas] = useState<number | null>(null)
+  const [uso, setUso] = useState<ModelUsageResponse | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const templates = useTemplates()
 
   useEffect(() => {
-    Promise.all([fetchSummary(), listRuns(), listDeliverables()])
-      .then(([s, r, d]) => {
+    Promise.all([fetchSummary(), listRuns(), listDeliverables(), fetchModelUsage()])
+      .then(([s, r, d, u]) => {
         setSummary(s)
         setRuns(r)
         setEntregas(d.length)
+        setUso(u)
       })
       .catch((e: Error) => setErro(e.message))
   }, [])
@@ -37,7 +39,7 @@ export function Telemetria() {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <StatCard k="eventos de telemetria" v={String(summary.total_events)} />
         <StatCard
           k="chamadas llm"
@@ -51,6 +53,12 @@ export function Telemetria() {
         />
         <StatCard k="squads ativadas" v={String(runs.length)} delta={`${ativas} rodando agora`} />
         <StatCard k="entregas exportadas" v={String(entregas ?? 0)} />
+        <StatCard
+          k="custo estimado (USD)"
+          v={uso ? `$${uso.total_estimated_cost_usd.toFixed(uso.total_estimated_cost_usd < 1 ? 4 : 2)}` : '—'}
+          delta={uso ? `tabela ${uso.pricing_as_of} · estimativa` : undefined}
+          deltaCor="var(--muted)"
+        />
       </div>
       <div style={{ background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 14, padding: '22px 24px' }}>
         <div className="kicker" style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 16 }}>
@@ -82,8 +90,10 @@ export function Telemetria() {
         </div>
       </div>
       <NotaHonesta>
-        Custo monetário por squad exige tabela de preços por modelo/provider — trabalho futuro
-        explícito; nada aqui é estimado ou fabricado.
+        Custo é uma <strong>estimativa</strong>: tokens reais gravados na telemetria × uma tabela de
+        preços por modelo/provider embutida (referência {uso?.pricing_as_of ?? '—'} — envelhece, não é
+        o valor cobrado pelo provedor). Modelo sem preço tabelado não entra na soma — nunca um custo
+        fabricado.
       </NotaHonesta>
     </>
   )

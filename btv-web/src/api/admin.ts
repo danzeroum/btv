@@ -12,6 +12,23 @@ export interface TelemetrySummary {
 }
 export const fetchSummary = () => fetchJson<TelemetrySummary>('/api/summary')
 
+// A1 · custo estimado por modelo (tokens reais × tabela de preços estática)
+export interface ModelUsageEntry {
+  model: string
+  tier: string
+  calls: number
+  input_tokens: number
+  output_tokens: number
+  provider?: string
+  estimated_cost_usd?: number
+}
+export interface ModelUsageResponse {
+  entries: ModelUsageEntry[]
+  total_estimated_cost_usd: number
+  pricing_as_of: string
+}
+export const fetchModelUsage = () => fetchJson<ModelUsageResponse>('/api/models/usage')
+
 // A2 · ledger
 export interface LedgerEntry {
   seq: number

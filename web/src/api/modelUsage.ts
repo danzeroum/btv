@@ -14,8 +14,21 @@ export interface ModelUsageEntry {
   calls: number
   cache_hits: number
   cache_misses: number
+  input_tokens: number
+  output_tokens: number
+  /** Provider do preço tabelado; ausente quando o modelo não tem preço. */
+  provider?: string
+  /** Custo estimado (USD) = tokens reais × preço tabelado; ausente sem preço. */
+  estimated_cost_usd?: number
 }
 
-export async function fetchModelUsage(): Promise<ModelUsageEntry[]> {
-  return fetchJson<ModelUsageEntry[]>('/api/models/usage')
+export interface ModelUsageResponse {
+  entries: ModelUsageEntry[]
+  total_estimated_cost_usd: number
+  /** Data de referência da tabela de preços estática (a estimativa envelhece). */
+  pricing_as_of: string
+}
+
+export async function fetchModelUsage(): Promise<ModelUsageResponse> {
+  return fetchJson<ModelUsageResponse>('/api/models/usage')
 }

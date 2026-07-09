@@ -17,7 +17,9 @@ test('telemetria mostra números reais e execuções por squad', async ({ page }
   await expect(page.getByText('squads ativadas')).toBeVisible()
   // Seed do harness: 2 runs (editorial + juridico).
   await expect(page.getByText('execuções por squad')).toBeVisible()
-  await expect(page.getByText('Custo monetário por squad exige tabela de preços')).toBeVisible()
+  // Custo agora é estimativa real (tokens × tabela de preços), com nota honesta.
+  await expect(page.getByText('custo estimado (USD)')).toBeVisible()
+  await expect(page.getByText(/Custo é uma.*estimativa/)).toBeVisible()
 })
 
 test('ledger lista entradas reais e verifica a integridade sob demanda', async ({ page }) => {

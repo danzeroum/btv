@@ -308,28 +308,62 @@ struct ModelUsageEntry {
     calls: u64,
     cache_hits: u64,
     cache_misses: u64,
+    input_tokens: u64,
+    output_tokens: u64,
+    /// Provider dono do preço tabelado (rótulo), `None` se sem preço.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<&'static str>,
+    /// Custo estimado em USD (tokens reais × preço tabelado). `None` quando o
+    /// modelo não tem preço na tabela — nunca fabricado.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    estimated_cost_usd: Option<f64>,
 }
 
-/// `GET /api/models/usage` (Fase 7 Onda 7, A5) — agrega os eventos reais
-/// (`llm.call`/`cache.hit`/`cache.miss`, todos já gravados com `props.model`
-/// por `RateLimitedGenerator`/`CachedGenerator`) por modelo; `tier` é
-/// derivado aqui (não em `btv-store`, que não depende de `btv-llm`) via
-/// `model_tier::tier_from_id`, a mesma classificação real usada para
-/// compaction antecipada.
+#[derive(Serialize)]
+struct ModelUsageResponse {
+    entries: Vec<ModelUsageEntry>,
+    /// Soma dos custos estimados dos modelos COM preço tabelado (USD).
+    total_estimated_cost_usd: f64,
+    /// Data de referência da tabela de preços (a estimativa envelhece).
+    pricing_as_of: &'static str,
+}
+
+/// `GET /api/models/usage` (Fase 7 Onda 7, A5; custo na validação de
+/// pendencias.md) — agrega os eventos reais (`llm.call`/`cache.hit`/
+/// `cache.miss`, gravados com `props.model` e, no `llm.call`, os tokens reais
+/// da resposta) por modelo. `tier` é derivado aqui via `tier_from_id`; o custo
+/// estimado vem de `pricing::estimate_cost_usd` (tokens reais × preço tabelado
+/// estático — uma ESTIMATIVA, com `pricing_as_of`, nunca um custo ao vivo).
 async fn model_usage(State(state): State<AppState>) -> impl IntoResponse {
+    let mut total = 0.0;
     let entries: Vec<ModelUsageEntry> = state
         .telemetry
         .model_usage()
         .into_iter()
-        .map(|u| ModelUsageEntry {
-            tier: tier_from_id(&u.model),
-            model: u.model,
-            calls: u.calls,
-            cache_hits: u.cache_hits,
-            cache_misses: u.cache_misses,
+        .map(|u| {
+            let cost =
+                btv_llm::pricing::estimate_cost_usd(&u.model, u.input_tokens, u.output_tokens);
+            if let Some(c) = cost {
+                total += c;
+            }
+            ModelUsageEntry {
+                tier: tier_from_id(&u.model),
+                provider: btv_llm::pricing::price_for(&u.model).map(|p| p.provider),
+                estimated_cost_usd: cost,
+                model: u.model,
+                calls: u.calls,
+                cache_hits: u.cache_hits,
+                cache_misses: u.cache_misses,
+                input_tokens: u.input_tokens,
+                output_tokens: u.output_tokens,
+            }
         })
         .collect();
-    Json(entries)
+    Json(ModelUsageResponse {
+        entries,
+        total_estimated_cost_usd: total,
+        pricing_as_of: btv_llm::pricing::AS_OF,
+    })
 }
 
 /// `GET /api/experiment/:nome` (Fase 7 Onda 9, A2) — relatório de A/B sobre a
@@ -1688,7 +1722,7 @@ mod tests {
             telemetry.record(
                 "llm.call",
                 "s1",
-                serde_json::json!({"model": "claude-sonnet-5"}),
+                serde_json::json!({"model": "claude-sonnet-5", "input_tokens": 1_000_000, "output_tokens": 0}),
                 "t",
             );
         }
@@ -1701,7 +1735,7 @@ mod tests {
         telemetry.record(
             "llm.call",
             "s1",
-            serde_json::json!({"model": "claude-haiku-4-5"}),
+            serde_json::json!({"model": "claude-haiku-4-5", "input_tokens": 500_000, "output_tokens": 0}),
             "t",
         );
         telemetry.record("cache.hit", "s1", serde_json::json!({}), "t");
@@ -1729,7 +1763,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let arr = json.as_array().unwrap();
+        let arr = json["entries"].as_array().unwrap();
         assert_eq!(
             arr.len(),
             2,
@@ -1743,6 +1777,9 @@ mod tests {
         assert_eq!(haiku["tier"], "small");
         assert_eq!(haiku["calls"], 1);
         assert_eq!(haiku["cache_hits"], 0);
+        // 0.5M in × $0.80/Mtok (haiku) = $0.40, estimativa a partir de tokens reais.
+        assert!((haiku["estimated_cost_usd"].as_f64().unwrap() - 0.40).abs() < 1e-9);
+        assert_eq!(haiku["provider"], "anthropic");
 
         let sonnet = arr
             .iter()
@@ -1752,6 +1789,13 @@ mod tests {
         assert_eq!(sonnet["calls"], 2);
         assert_eq!(sonnet["cache_hits"], 1);
         assert_eq!(sonnet["cache_misses"], 0);
+        assert_eq!(sonnet["input_tokens"], 2_000_000);
+        // 2M in × $3/Mtok (sonnet) = $6.00.
+        assert!((sonnet["estimated_cost_usd"].as_f64().unwrap() - 6.00).abs() < 1e-9);
+
+        // Total = $6.00 (sonnet) + $0.40 (haiku) = $6.40; data de referência presente.
+        assert!((json["total_estimated_cost_usd"].as_f64().unwrap() - 6.40).abs() < 1e-9);
+        assert!(json["pricing_as_of"].as_str().unwrap().len() >= 4);
     }
 
     /// Fronteira da Onda 9 (A2): 2 variantes com >= `MIN_SAMPLES` cada batem
