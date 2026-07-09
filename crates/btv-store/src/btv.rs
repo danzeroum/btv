@@ -148,6 +148,27 @@ impl BtvStore {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Maior número de `task_id` no formato `sq{hex}` já persistido (0 se não
+    /// houver). O contador de `task_id` da squad é POR-PROCESSO e reinicia a
+    /// cada restart; o volume sobrevive. Sem semear o contador a partir daqui,
+    /// a primeira ativação após um redeploy geraria `sq1` de novo e bateria em
+    /// `UNIQUE constraint failed: runs.task_id`. Usado no arranque do dashboard.
+    pub fn max_run_task_seq(&self) -> u64 {
+        let Ok(mut stmt) = self.conn.prepare("SELECT task_id FROM runs") else {
+            return 0;
+        };
+        let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else {
+            return 0;
+        };
+        rows.flatten()
+            .filter_map(|id| {
+                id.strip_prefix("sq")
+                    .and_then(|h| u64::from_str_radix(h, 16).ok())
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     /// Transição de status ao fim da execução (`concluida`/`erro`) ou no
     /// kill-switch (`encerrada`). Silencioso para task_id desconhecido — o
     /// watcher pode sobreviver a um run apagado.
@@ -730,6 +751,23 @@ mod tests {
         store.set_user_pin(id, None).unwrap();
         assert!(!store.list_users().unwrap()[0].has_pin);
         assert_eq!(store.verify_user_pin(id, "42").unwrap(), PinCheck::NoPin);
+    }
+
+    #[test]
+    fn max_run_task_seq_le_o_maior_sq_hex() {
+        let store = BtvStore::open_in_memory().unwrap();
+        assert_eq!(store.max_run_task_seq(), 0, "vazio → 0");
+        store
+            .insert_run("sq1", "editorial", "v1", "R1", "[]", "[]", "t1")
+            .unwrap();
+        store
+            .insert_run("sqa", "editorial", "v1", "R2", "[]", "[]", "t2")
+            .unwrap(); // 0xa = 10
+        store
+            .insert_run("sq3", "editorial", "v1", "R3", "[]", "[]", "t3")
+            .unwrap();
+        // Pega o MAIOR valor hex (10), não o último inserido nem a ordem textual.
+        assert_eq!(store.max_run_task_seq(), 10);
     }
 
     #[test]

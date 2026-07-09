@@ -307,6 +307,17 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
         let btv_store = std::sync::Arc::new(std::sync::Mutex::new(btv_store::BtvStore::open(
             btv_dir.join("btv.db").to_str().unwrap_or(".btv/btv.db"),
         )?));
+        // O contador de `task_id` da squad é por-processo e reinicia a cada
+        // restart; o volume das runs sobrevive. Semeia o contador acima do maior
+        // `sq{n}` já persistido para a primeira ativação após um redeploy não
+        // colidir (`UNIQUE constraint failed: runs.task_id`).
+        {
+            let maior = btv_store
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .max_run_task_seq();
+            squad_hub.seed_task_seq(maior);
+        }
         let btv_router = btv_agent::router(
             squad_hub.clone(),
             squad_pool.clone(),

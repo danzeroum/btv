@@ -511,8 +511,16 @@ struct VerifyRunStarted {
 /// 1 job por vez — `409` com o `run_id` já em andamento em vez de dois
 /// pipelines disputando o mesmo `target/`.
 async fn run_verify_start(State(state): State<AppState>) -> Response {
+    let run_id = new_verify_run_id();
     {
-        let guard = state.verify_job.lock().unwrap_or_else(|e| e.into_inner());
+        // Check-and-reserve ATÔMICO sob um ÚNICO lock: verifica se há job
+        // rodando e, no mesmo escopo, reserva o slot. Antes eram dois locks
+        // separados — entre eles o mutex era liberado, então dois POST
+        // concorrentes liam `None` e AMBOS reservavam (dois pipelines no mesmo
+        // `target/` + o slot do primeiro sobrescrito), retornando os dois `202`.
+        // É a corrida que o teste `verify-concurrency` pegou de forma
+        // intermitente; o `409` só é garantido com a checagem-e-reserva atômica.
+        let mut guard = state.verify_job.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(job) = guard.as_ref() {
             if matches!(job.status, VerifyJobStatus::Running { .. }) {
                 return (
@@ -524,11 +532,6 @@ async fn run_verify_start(State(state): State<AppState>) -> Response {
                     .into_response();
             }
         }
-    }
-
-    let run_id = new_verify_run_id();
-    {
-        let mut guard = state.verify_job.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(VerifyJob {
             run_id: run_id.clone(),
             status: VerifyJobStatus::Running { step: 0, total: 0 },
