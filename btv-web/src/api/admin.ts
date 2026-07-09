@@ -118,6 +118,8 @@ export const setUserAtivo = (id: number, ativo: boolean) =>
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ativo }),
   })
+/** Remove um perfil de vez (o toggle "ativo" só suspende). */
+export const deleteUser = (id: number) => fetchJson(`/api/btv/users/${id}`, { method: 'DELETE' })
 /** Define (ou limpa, com pin vazio) o PIN de um perfil. */
 export const setUserPin = (id: number, pin: string) =>
   fetchJson(`/api/btv/users/${id}/pin`, {

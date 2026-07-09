@@ -1600,9 +1600,18 @@ duas decisões silenciosas, ambas fechadas com teste:
    segue caindo no SPA (navegação client-side). Provado por
    `rota_api_desconhecida_e_404_json_nao_o_spa` (e o SPA de `/designer` segue 200).
 
+3. **Não havia como apagar um perfil (só suspender)** — o toggle "ativo" desativa
+   mas não remove, então os perfis de teste `(SMOKE|FULL)·pin·…` das sondas
+   acumulavam sem volta. Fechado com a capacidade real: `BtvStore::delete_user`
+   (NotFound em id inexistente), `DELETE /api/btv/users/:id` (200/404, registra
+   `btv.user_removed` no ledger) e o botão **remover** no A6 (`Usuarios.tsx`, com
+   confirmação; limpa o perfil ativo se for ele). Provado por
+   `delete_user_remove_de_vez_e_404_em_id_inexistente`. Os scripts de smoke/
+   auditoria passaram a **remover** o perfil de teste ao fim (fallback gracioso a
+   "suspender" em backend sem a rota) — não geram mais resíduo.
+
 Observações não-bug registradas pelas sondas (por design/dado herdado, não
 código): o ledger de produção acusa `ok=false` (quebra de hash-chain no volume
 antigo — o caminho de escrita produz cadeia válida, provado por uma instância
-limpa com `ok=true`); perfis de teste `(SMOKE|FULL)·pin·…` acumulam (não há rota
-de delete de usuário); custo `$0` até tráfego novo com tokens; rodapé "Marina L."
+limpa com `ok=true`); custo `$0` até tráfego novo com tokens; rodapé "Marina L."
 é placeholder (não há sessão/login real).

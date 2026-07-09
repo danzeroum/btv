@@ -411,6 +411,19 @@ impl BtvStore {
         Ok(())
     }
 
+    /// Remove um perfil de vez (o "suspender" só desativa; isto apaga). Id
+    /// inexistente → `NotFound`, para o handler devolver 404 em vez de fingir
+    /// sucesso silencioso.
+    pub fn delete_user(&self, id: i64) -> Result<(), BtvStoreError> {
+        let afetadas = self
+            .conn
+            .execute("DELETE FROM users WHERE id = ?1", params![id])?;
+        if afetadas == 0 {
+            return Err(BtvStoreError::NotFound);
+        }
+        Ok(())
+    }
+
     /// Define (ou limpa, com `None`/vazio) o PIN de um perfil. O salt é
     /// recomputado dos campos já persistidos (`created_ts|email|nome`).
     pub fn set_user_pin(&self, id: i64, pin: Option<&str>) -> Result<(), BtvStoreError> {
@@ -730,6 +743,23 @@ mod tests {
         // Id inexistente: NotFound (não mais no-op silencioso com 200).
         assert!(matches!(
             store.set_user_ativo(999_999, false),
+            Err(BtvStoreError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn delete_user_remove_de_vez_e_404_em_id_inexistente() {
+        let store = BtvStore::open_in_memory().unwrap();
+        let id = store
+            .insert_user("Ana", "ana@x", "usuario", None, "t1")
+            .unwrap();
+        assert_eq!(store.list_users().unwrap().len(), 1);
+        // Remove o perfil real: some da lista.
+        store.delete_user(id).unwrap();
+        assert!(store.list_users().unwrap().is_empty());
+        // Remover de novo (ou id inexistente) → NotFound.
+        assert!(matches!(
+            store.delete_user(id),
             Err(BtvStoreError::NotFound)
         ));
     }

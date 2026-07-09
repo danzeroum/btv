@@ -1031,6 +1031,34 @@ async fn create_user_handler(
     }
 }
 
+/// `DELETE /api/btv/users/:id` — remove um perfil de vez (o toggle "ativo" só
+/// suspende). Registra `btv.user_removed` no ledger para trilha auditável.
+async fn delete_user_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+) -> Response {
+    let resultado = {
+        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        store.delete_user(id)
+    };
+    match resultado {
+        Ok(()) => {
+            let _ = append_ledger(&state.ledger, "btv.user_removed", serde_json::json!({ "id": id }));
+            StatusCode::OK.into_response()
+        }
+        Err(btv_store::BtvStoreError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
 #[derive(Deserialize)]
 struct AtivoBody {
     ativo: bool,
@@ -1154,6 +1182,10 @@ pub fn router(
         .route(
             "/api/btv/users",
             get(list_users_handler).post(create_user_handler),
+        )
+        .route(
+            "/api/btv/users/{id}",
+            axum::routing::delete(delete_user_handler),
         )
         .route("/api/btv/users/{id}/ativo", post(set_user_ativo_handler))
         .route("/api/btv/users/{id}/pin", post(set_user_pin_handler))

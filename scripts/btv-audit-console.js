@@ -192,8 +192,13 @@ window.btvAudit = async function btvAudit(opts = {}) {
         const imgInjetada = !![...document.querySelectorAll('#btv-root img')].find(i=>i.getAttribute('src')==='x')
         if (executou || imgInjetada) F(S,'XSS armazenado',`payload EXECUTOU/injetou <img> (executou=${executou} img=${imgInjetada})`)
         else P(S,'nome é escapado (sem XSS)','React renderizou o payload como texto literal')
-      } finally { if (id!=null) await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false }) }
-      I(S,'resíduo do teste intrusivo',`perfil ${id} criado e suspenso (não há delete) — nome com payload inerte`)
+      } finally {
+        if (id!=null) {
+          const del = await req('DELETE',`/api/btv/users/${id}`)
+          if (del.ok) I(S,'teste intrusivo sem resíduo',`perfil ${id} criado e REMOVIDO (payload inerte)`)
+          else { await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false }); I(S,'resíduo do teste intrusivo',`perfil ${id} suspenso (backend sem delete) — payload inerte`) }
+        }
+      }
     })()
   }
 
