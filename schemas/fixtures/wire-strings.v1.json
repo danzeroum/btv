@@ -1,0 +1,39 @@
+{
+  "comment": "Trilha T3 do plano DDD multitenant: inventário canônico das strings wire que os value objects da Trilha A (A3) devem reproduzir EXATAMENTE. Extraído dos emissores reais de produção (não de testes); consumido por crates/btv-cli/tests/wire_strings.rs. Mudança aqui é mudança de contrato de banco/API — revise como tal.",
+  "run_status": ["ativa", "concluida", "encerrada", "erro"],
+  "task_id": { "prefix": "sq", "radix": 16 },
+  "ledger_kinds": [
+    "btv.adjust_requested",
+    "btv.export_generated",
+    "btv.flow_saved",
+    "btv.gate_approved",
+    "btv.persona_updated",
+    "btv.squad_activated",
+    "btv.template_published",
+    "btv.user_removed",
+    "designer.workflow_saved",
+    "llm.turn",
+    "permission_rule.revoke",
+    "permission_rule.set",
+    "session.end",
+    "session.start",
+    "skill.vetting",
+    "squad.consensus",
+    "squad.tool_run",
+    "tool.denied",
+    "tool.result",
+    "tool.run",
+    "user.turn"
+  ],
+  "event_store_kinds": ["epoch.started.1", "message.1", "session.started.1"],
+  "telemetry_names": ["cache.hit", "cache.miss", "llm.call", "tool.run"],
+  "excluded": {
+    "comment": "Exclusões CONSCIENTES do inventário, com razão — não omissões. Registro exigido na revisão do PR #16 para a A3 decidir com isso na mesa (entrar no enum exaustivo ou não), em vez de exclusão por silêncio. Verificado por teste: item aqui NÃO pode ter emissor de produção; se ganhar um, o teste falha mandando movê-lo para a lista principal.",
+    "ledger_kinds": {
+      "certification": "só existe em módulo de teste (crates/btv-store/src/ledger.rs, certificacao_registra_no_ledger_com_cadeia_integra) — a capacidade de registrar certificação está provada, mas nenhum caminho de produção a emite hoje; decisão de entrar no LedgerKind exaustivo fica para A3"
+    },
+    "telemetry_names": {
+      "rate.limited": "só citado como exemplo em doc-comment (crates/btv-schemas/src/telemetry.rs) — nunca emitido por Telemetry::record em produção; o levantamento original o listava como quinto nome por engano"
+    }
+  }
+}
