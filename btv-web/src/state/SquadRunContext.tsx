@@ -172,19 +172,27 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
     [run],
   )
 
-  const feed = useMemo(() => (run ? feedFromEvents(run.events, run.papeis) : []), [run])
+  // Papéis ativos do template, na ORDEM da esteira (papeis[0..3] = architect,
+  // developer, reviewer, auditor) — derivados de `etapas` (o `RunState` não
+  // guarda `papeis` como campo próprio). Alimenta o mapa agente→papel.
+  const papeisDaRun = (etapas: Etapa[]): string[] => [
+    ...new Set(etapas.map((e) => e.papel).filter((p) => p !== 'Você' && p !== 'BuildToValue')),
+  ]
+
+  const feed = useMemo(() => (run ? feedFromEvents(run.events, papeisDaRun(run.etapas)) : []), [run])
 
   const chat = useMemo(() => {
     if (!run) return []
     // Rotula o autor do agente com o papel do template (Pauteiro/Redator/…),
     // igual à esteira — em vez do nome cru do motor (Arquiteto/Desenvolvedor).
     // "Você"/"Squad" passam direto (papelDoAgente não os mapeia).
+    const papeis = papeisDaRun(run.etapas)
     return run.events.flatMap((e) =>
       e.payload && 'Chat' in e.payload
         ? [
             {
               ...e.payload.Chat,
-              author: papelDoAgente(e.payload.Chat.author, run.papeis),
+              author: papelDoAgente(e.payload.Chat.author, papeis),
               ts: hhmm(e.ts),
             },
           ]
