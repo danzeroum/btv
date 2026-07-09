@@ -33,6 +33,11 @@ gen-proto: gen-proto-py
 gen-proto-py:
     cd python && uv run python ../scripts/gen_proto_py.py
 
+# Checa mudança breaking nos protos contra a main LOCAL (Trilha T5 da
+# migração DDD; no CI o baseline é o commit-base do PR). Requer buf.
+proto-breaking:
+    buf breaking schemas/proto --against '.git#branch=main,subdir=schemas/proto'
+
 # Regenera as fixtures de paridade de hash com a implementação Python de referência.
 gen-fixtures:
     cd python && uv run python ../scripts/gen_fixtures.py

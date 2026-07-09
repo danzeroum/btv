@@ -36,6 +36,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: ./scripts/arch-lint.sh
 
+  # Mudança BREAKING nos protos não passa despercebida (Trilha T5 da migração
+  # DDD; a regra do repo — protos evoluem só aditivamente — vira gate).
+  # Baseline = o commit-base do PR, materializado como branch local porque o
+  # input git do buf clona o .git e um clone só enxerga refs/heads/* (um SHA
+  # cru não estaria alcançável). Só roda em PR: em push para main o baseline
+  # seria o próprio HEAD — comparação decorativa, contra a cultura do repo.
+  # Provado nos dois sentidos ao nascer: remoção de campo falha (exit 100),
+  # campo novo com tag nova passa.
+  buf:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - run: git branch ci-buf-baseline "${{ github.event.pull_request.base.sha }}"
+      - run: buf breaking schemas/proto --against '.git#branch=ci-buf-baseline,subdir=schemas/proto'
+
   # Gate de supply-chain (advisories/licenças) — porte da rust-migration.
   deny:
     runs-on: ubuntu-latest
