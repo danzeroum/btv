@@ -36,9 +36,10 @@ fn lsp_fixture_definicao_via_registry() {
     let mut registry = ToolRegistry::default_set(dir.path());
     let n = register_lsp_server(&mut registry, &fixture_server_config(dir.path()));
     assert_eq!(
-        n, 3,
-        "esperava as 3 tools LSP (definition/references/diagnostics)"
+        n, 4,
+        "esperava as 4 tools LSP (definition/references/diagnostics/symbol)"
     );
+    assert!(registry.get("lsp__fixture__symbol").is_some());
 
     // Namespaced — não sombreia built-ins.
     assert!(registry.get("bash").is_some());
@@ -129,7 +130,7 @@ fn lsp_rust_analyzer_real_definicao_por_igualdade() {
     escreve_fixture_cargo(dir.path());
     let mut registry = ToolRegistry::default_set(dir.path());
     let n = register_lsp_server(&mut registry, &config_rust(dir.path()));
-    assert_eq!(n, 3);
+    assert_eq!(n, 4);
 
     let def = registry.get("lsp__rust__definition").unwrap();
     // Posição do uso de `alvo` no call-site (linha 5, char 4, 0-indexed).
@@ -177,6 +178,19 @@ fn lsp_rust_analyzer_real_referencias_e_diagnosticos() {
     assert!(
         out.content.contains("error"),
         "esperava um erro de sintaxe em ruim.rs; veio: {}",
+        out.content
+    );
+
+    // Busca por NOME (workspace/symbol): sem saber a posição, achar `alvo`
+    // resolve para sua definição real (lib.rs, linha 0) — a mitigação (b) do
+    // achado de dogfooding da Onda 5.
+    let sym = registry.get("lsp__rust__symbol").unwrap();
+    let out = sym
+        .run(&serde_json::json!({ "name": "alvo" }))
+        .expect("symbol deve retornar");
+    assert!(
+        out.content.contains("alvo") && out.content.contains("lib.rs:0:"),
+        "esperava o símbolo `alvo` resolvido em lib.rs:0; veio: {}",
         out.content
     );
 }
