@@ -16,9 +16,10 @@ use axum::http::Request;
 use axum::Router;
 use btv_store::{BtvStore, LedgerStore};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tower::ServiceExt;
 
-use crate::squad_agent::{default_hub, default_squad_pool};
+use crate::squad_agent::{default_hub, default_squad_pool, SquadHub};
 
 fn app_produto(
     dir: &std::path::Path,
@@ -342,4 +343,222 @@ async fn golden_squad_activation_errors() {
         .await,
     ];
     btv_golden::check("squad_activation_errors", steps);
+}
+
+// ── ativação real (orquestrador Python + backend roteirizado, sem API key) ──
+
+fn uv_missing() -> bool {
+    std::process::Command::new("uv")
+        .arg("--version")
+        .output()
+        .is_err()
+}
+
+fn python_workspace_present() -> bool {
+    crate::squad::locate_python_dir().is_some()
+}
+
+/// Espera o gate HITL da tarefa ficar pendente (evento `Hitl` no stream).
+async fn wait_hitl(hub: &SquadHub, task_id: &str) {
+    for _ in 0..900 {
+        let (snapshot, _rx) = hub.subscribe(task_id);
+        let pendente = snapshot.iter().any(|e| {
+            matches!(
+                &e.payload,
+                Some(btv_proto::squad::squad_event::Payload::Hitl(_))
+            )
+        });
+        if pendente {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    panic!("timeout esperando o gate HITL pendente de {task_id}");
+}
+
+/// Drena o stream da tarefa até o fim (canal fechado = tarefa concluída).
+async fn wait_finish(hub: &SquadHub, task_id: &str) {
+    let (_snapshot, rx) = hub.subscribe(task_id);
+    let Some(mut rx) = rx else { return };
+    let drenar = async {
+        loop {
+            match rx.recv().await {
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(300), drenar)
+        .await
+        .unwrap_or_else(|_| panic!("timeout esperando a tarefa {task_id} terminar"));
+}
+
+/// Passo capturado via HTTP real (reqwest) — a ativação sobe um servidor de
+/// porta efêmera porque o fluxo atravessa processos (Rust ⇄ Python via UDS).
+async fn reqwest_step(
+    client: &reqwest::Client,
+    base: &str,
+    name: &str,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+    volatiles: &[btv_golden::Volatile],
+) -> btv_golden::GoldenStep {
+    let url = format!("{base}{path}");
+    let builder = match method {
+        "POST" => client.post(&url),
+        "GET" => client.get(&url),
+        other => panic!("método inesperado: {other}"),
+    };
+    let builder = match &body {
+        Some(json) => builder.json(json),
+        None => builder,
+    };
+    let resp = builder.send().await.unwrap();
+    let status = resp.status().as_u16();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .map(|v| v.to_str().unwrap_or_default().to_string());
+    let bytes = resp.bytes().await.unwrap();
+    let parsed = if bytes.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_slice(&bytes)
+            .unwrap_or_else(|_| serde_json::json!({ "text": String::from_utf8_lossy(&bytes) }))
+    };
+    btv_golden::step(
+        name,
+        method,
+        path,
+        body,
+        status,
+        content_type,
+        None,
+        parsed,
+        volatiles,
+    )
+}
+
+/// T1 — o fluxo crítico inteiro, REAL: ativação pela galeria roda o motor do
+/// squad de verdade (orquestrador Python via `SquadPool`, backend roteirizado
+/// `BTV_SCRIPTED=1` — determinístico e sem API key), o consenso fraco pede
+/// gate, a aprovação e o "pedir ajuste" passam pelos handlers do produto.
+/// Contratos congelados na fixture; efeitos colaterais (ledger, contador de
+/// gates) checados FORA do golden — prova que o fluxo executou, não só que o
+/// HTTP respondeu. Pula (com aviso) sem `uv`/workspace Python — o job `rust`
+/// do CI tem ambos, o caminho real roda lá.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn golden_squad_activation() {
+    if uv_missing() || !python_workspace_present() {
+        eprintln!("uv/workspace Python ausente — pulando golden de ativação real");
+        return;
+    }
+    let _guard = crate::test_support::lock_cwd().await;
+    std::env::set_var("BTV_SCRIPTED", "1");
+    let dir = tempfile::tempdir().unwrap();
+    let orig_cwd = std::env::current_dir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+
+    let hub = default_hub();
+    let store = Arc::new(Mutex::new(BtvStore::open_in_memory().unwrap()));
+    let ledger = Arc::new(Mutex::new(LedgerStore::open_in_memory().unwrap()));
+    let app = crate::btv_agent::router(
+        hub.clone(),
+        default_squad_pool(dir.path()),
+        ledger.clone(),
+        store.clone(),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let client = reqwest::Client::new();
+
+    let ativacao = serde_json::json!({
+        "template_id": "editorial",
+        "nome": "Newsletter de julho",
+        "briefing": [{"label": "Qual é a pauta ou tema?", "resposta": "logística verde no Brasil"}],
+        "refs": [],
+        "papeis_off": [3],
+    });
+
+    // Run A: ativa → espera o gate REAL ficar pendente → aprova.
+    let passo_ativa_a = reqwest_step(
+        &client,
+        &base,
+        "ativação roda o motor real e responde 202",
+        "POST",
+        "/api/btv/squads",
+        Some(ativacao.clone()),
+        &[],
+    )
+    .await;
+    wait_hitl(&hub, "sq1").await;
+    let passo_gate = reqwest_step(
+        &client,
+        &base,
+        "aprovar o gate HITL pendente",
+        "POST",
+        "/api/btv/squads/sq1/gate",
+        Some(serde_json::json!({"etapa": "Aprovar o rascunho antes da revisão"})),
+        &[],
+    )
+    .await;
+    wait_finish(&hub, "sq1").await;
+
+    // Run B: ativa de novo → no gate, pede AJUSTE (instrução vira orientação
+    // real de cockpit e o gate é liberado com ela em contexto).
+    let passo_ativa_b = reqwest_step(
+        &client,
+        &base,
+        "segunda ativação (run B) para o fluxo de ajuste",
+        "POST",
+        "/api/btv/squads",
+        Some(ativacao),
+        &[],
+    )
+    .await;
+    wait_hitl(&hub, "sq2").await;
+    let passo_ajuste = reqwest_step(
+        &client,
+        &base,
+        "pedir ajuste no gate injeta a instrução e libera",
+        "POST",
+        "/api/btv/squads/sq2/ajuste",
+        Some(serde_json::json!({
+            "instrucao": "use tom mais formal na abertura",
+            "etapa": "Aprovar o rascunho antes da revisão",
+        })),
+        &[],
+    )
+    .await;
+    wait_finish(&hub, "sq2").await;
+
+    btv_golden::check(
+        "squad_activation",
+        vec![passo_ativa_a, passo_gate, passo_ativa_b, passo_ajuste],
+    );
+
+    // Anti-fake, fora do golden: o fluxo EXECUTOU — auditoria no ledger e
+    // contador de gates persistido, não só respostas HTTP bem formadas.
+    {
+        let guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+        let entradas = guard.recent(50, None).unwrap();
+        let conta = |kind: &str| entradas.iter().filter(|e| e.kind == kind).count();
+        assert_eq!(conta("btv.squad_activated"), 2);
+        assert_eq!(conta("btv.gate_approved"), 1);
+        assert_eq!(conta("btv.adjust_requested"), 1);
+        guard.verify_chain().unwrap();
+    }
+    {
+        let guard = store.lock().unwrap_or_else(|e| e.into_inner());
+        let run_a = guard.get_run_by_task("sq1").unwrap().unwrap();
+        assert_eq!(run_a.gates_aprovados, 1, "gate aprovado ficou no run A");
+        assert!(guard.get_run_by_task("sq2").unwrap().is_some());
+    }
+
+    std::env::set_current_dir(orig_cwd).unwrap();
 }
