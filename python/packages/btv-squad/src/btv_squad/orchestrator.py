@@ -214,7 +214,14 @@ class UnifiedOrchestrator:
         # chamar o gateway, sem custar uma chamada de LLM que já sabemos que
         # não pode aprovar. Chamadas diretas ao orquestrador (sem esse campo,
         # como nos testes) nunca setam essa flag — comportamento inalterado.
-        if task.get("verification_evidence_missing", False):
+        #
+        # Fase 2 (verificação por domínio): o fail-closed por evidência ausente
+        # é do domínio de CÓDIGO. Um squad de PRODUTO (roster de personas) não
+        # tem código para verificar — o Rust deliberadamente NÃO roda o cargo e
+        # manda evidência vazia; aqui, fail-closar por isso seria FABRICAR uma
+        # reprovação. O auditor valida pelo conteúdo real produzido.
+        is_squad_de_produto = bool(task.get("roster"))
+        if task.get("verification_evidence_missing", False) and not is_squad_de_produto:
             final_validation = {
                 "approved": False,
                 "confidence": 0.0,

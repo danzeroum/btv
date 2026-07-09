@@ -155,3 +155,37 @@ def test_sem_recall_o_prompt_nao_inventa_contexto():
     assert "memória do squad" not in prompt, "sem recall, nenhum bloco de contexto fabricado"
     # Só as duas mensagens originais (system do decompose + user com a task).
     assert len(gw.last_request.messages) == 2
+
+
+def test_roster_de_produto_avisa_o_planejador_a_nao_fabricar_deploy():
+    """Fase 2 (verificação por domínio): tarefa com roster de personas (squad
+    de produto) instrui o planejador a NÃO gerar passos de deploy/infra —
+    corrige o achado do artigo de café que ganhava um passo de deploy."""
+    gw = _RecordingGateway(json.dumps(_decomposition_payload()))
+    planner = AdaptivePlanner()
+    planner.attach_gateway(gw)
+
+    asyncio.run(
+        planner.create_adaptive_plan(
+            {
+                "description": "escrever um artigo sobre café",
+                "roster": [
+                    {"papel": "Redator", "prompt": "Você escreve", "funcao": "produce", "ordem": 0, "custom": False}
+                ],
+            }
+        )
+    )
+    prompt = _prompt_text(gw.last_request)
+    assert "tarefa de PRODUTO" in prompt
+    assert "deploy" in prompt  # a instrução de NÃO gerar deploy
+    assert "Redator" in prompt  # os papéis do roster entram na nota de domínio
+
+
+def test_sem_roster_o_prompt_nao_tem_nota_de_dominio():
+    gw = _RecordingGateway(json.dumps(_decomposition_payload()))
+    planner = AdaptivePlanner()
+    planner.attach_gateway(gw)
+
+    asyncio.run(planner.create_adaptive_plan({"description": "integrar gateway de pagamento"}))
+    prompt = _prompt_text(gw.last_request)
+    assert "tarefa de PRODUTO" not in prompt, "squad de engenharia não deve receber nota de domínio de produto"
