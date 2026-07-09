@@ -592,15 +592,14 @@ async fn maybe_compact<G: Generator>(
 }
 
 /// Registra no ledger o veredito do vetter para cada skill (built-in +
-/// terceiro), como auditoria append-only (Fase 6 Onda 3). Reusa
-/// `list_skill_statuses` (o mesmo que alimenta `/api/skills`).
-fn record_skill_vetting(root: &std::path::Path, session: &mut session::Session) {
-    use btv_verify::vetter::list_skill_statuses;
-    let mut statuses = list_skill_statuses(&root.join("skills"), "builtin");
-    statuses.extend(list_skill_statuses(
-        &root.join(".btv").join("skills"),
-        "third-party",
-    ));
+/// terceiro), como auditoria append-only (Fase 6 Onda 3). Recebe as decisões
+/// que o carregamento do registry JÁ tomou (`build_registry_with_vetting`) —
+/// não re-veta (fechamento do "double-vet" da pendência: os passos
+/// `[[verify]]` de uma skill de terceiro rodavam 2×).
+fn record_skill_vetting(
+    statuses: &[btv_verify::vetter::SkillStatus],
+    session: &mut session::Session,
+) {
     for s in statuses {
         session.note(
             "skill.vetting",
@@ -615,13 +614,13 @@ async fn run_once<G: Generator>(
     root: &std::path::Path,
     task: String,
 ) -> Result<()> {
-    let tools = crate::skills::build_registry(root);
+    let (tools, skill_vetting) = crate::skills::build_registry_with_vetting(root);
     let agent_loop = build_loop(generator, opts, &tools)?;
     let mut session = session::Session::open(root, &task, &opts.model)?;
     // Fase 6 Onda 3: audita no ledger (append-only) o veredito do vetter para
     // cada skill carregada. A execução de skill já entra no ledger pelos
     // LoopEvents; isto registra a decisão de vetting em si.
-    record_skill_vetting(root, &mut session);
+    record_skill_vetting(&skill_vetting, &mut session);
     let mut durable = open_durable(root, opts, &task)?;
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
@@ -672,9 +671,12 @@ async fn chat_repl<G: Generator>(
     opts: &RunOpts,
     root: &std::path::Path,
 ) -> Result<()> {
-    let tools = crate::skills::build_registry(root);
+    let (tools, skill_vetting) = crate::skills::build_registry_with_vetting(root);
     let agent_loop = build_loop(generator, opts, &tools)?;
     let mut session = session::Session::open(root, "<chat>", &opts.model)?;
+    // Mesma auditoria de vetting do `run_once` — antes só ele registrava
+    // (lacuna anotada na própria pendência da Fase 6 Onda 3).
+    record_skill_vetting(&skill_vetting, &mut session);
     let mut resolver = CliResolver { auto_yes: opts.yes };
 
     let mut durable = open_durable(root, opts, "<chat>")?;

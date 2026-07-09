@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
 
@@ -28,6 +28,22 @@ export function Vivo() {
   const ajusteRef = useRef<HTMLTextAreaElement | null>(null)
   const chatRef = useRef<HTMLInputElement | null>(null)
   const chatBodyRef = useRef<HTMLDivElement | null>(null)
+
+  // Só uma squad executa por vez (capacidade 1 do pool): uma ativação feita
+  // enquanto outra roda fica na fila sem emitir evento nenhum. Sem sinal do
+  // backend, inferimos honestamente: run ativo + feed vazio por alguns
+  // segundos → provável fila.
+  const hasFeed = feed.length > 0
+  const runDone = view?.done ?? false
+  const [filaHint, setFilaHint] = useState(false)
+  useEffect(() => {
+    if (!run || hasFeed || runDone) {
+      setFilaHint(false)
+      return
+    }
+    const timer = window.setTimeout(() => setFilaHint(true), 5000)
+    return () => window.clearTimeout(timer)
+  }, [run, hasFeed, runDone])
 
   if (!run || !view) {
     return (
@@ -381,7 +397,9 @@ export function Vivo() {
           </div>
           {feed.length === 0 && (
             <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>
-              aguardando os primeiros eventos do orquestrador…
+              {filaHint
+                ? 'sua squad está na fila — outra squad está trabalhando agora; esta começa sozinha assim que a anterior terminar.'
+                : 'aguardando os primeiros eventos do orquestrador…'}
             </span>
           )}
           {feed.map((f, i) => (

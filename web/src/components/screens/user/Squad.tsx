@@ -91,6 +91,21 @@ export function Squad() {
 
   const active = taskId !== null && !streamEnded
   const busy = active || run.state.status === 'loading'
+  const hasEvents = events.length > 0
+
+  // O pool de squad do agente web tem capacidade 1: um segundo `202` fica
+  // preso em `pool.acquire()` sem emitir NENHUM evento até o slot liberar
+  // (gap de UX registrado na Fase 7 Onda 4). Sem sinal do backend, o melhor
+  // honesto é inferir: task aceita + nenhum evento após alguns segundos.
+  const [slotHint, setSlotHint] = useState(false)
+  useEffect(() => {
+    if (!active || hasEvents) {
+      setSlotHint(false)
+      return
+    }
+    const timer = window.setTimeout(() => setSlotHint(true), 5000)
+    return () => window.clearTimeout(timer)
+  }, [active, hasEvents])
 
   async function handleRunSquad() {
     if (!task.trim() || busy) return
@@ -183,6 +198,13 @@ export function Squad() {
       {taskId && (
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>
           task_id {taskId} · {streamEnded ? 'stream encerrado' : 'ao vivo'}
+        </div>
+      )}
+
+      {slotHint && (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--amber)' }}>
+          nenhum evento ainda — se outra tarefa de squad estiver em execução, esta aguarda o slot
+          único liberar (capacidade 1) e começa sozinha em seguida.
         </div>
       )}
 

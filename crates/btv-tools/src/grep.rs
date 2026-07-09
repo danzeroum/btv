@@ -8,6 +8,7 @@
 use crate::{
     bound_output_managed, required_str, Tool, ToolError, ToolOutput, DEFAULT_OUTPUT_LIMIT,
 };
+use grep::matcher::Matcher;
 use grep::regex::RegexMatcher;
 use grep::searcher::sinks::UTF8;
 use grep::searcher::Searcher;
@@ -26,7 +27,7 @@ impl Tool for GrepTool {
     }
 
     fn description(&self) -> &str {
-        "Busca um padrão (regex) nos arquivos do workspace, respeitando .gitignore. Retorna caminho:linha:conteúdo."
+        "Busca um padrão (regex) nos arquivos do workspace, respeitando .gitignore. Retorna caminho:linha:coluna:conteúdo (linha e coluna 1-based; para as tools lsp__* — que são 0-indexed — subtraia 1 de ambas)."
     }
 
     fn input_schema(&self) -> Value {
@@ -71,10 +72,22 @@ impl Tool for GrepTool {
                 &matcher,
                 path,
                 UTF8(|line_number, line| {
+                    // Coluna do 1º match na linha (1-based, offset de byte —
+                    // mesma convenção do `rg --column`). Sem ela o agente não
+                    // tinha como montar o `{file, line, character}` que as
+                    // tools `lsp__*` exigem sem contar caracteres na mão
+                    // (fricção registrada no dogfooding da Fase 6 Onda 5).
+                    let column = matcher
+                        .find(line.as_bytes())
+                        .ok()
+                        .flatten()
+                        .map(|m| m.start() + 1)
+                        .unwrap_or(1);
                     matches.push(format!(
-                        "{}:{}:{}",
+                        "{}:{}:{}:{}",
                         rel.display(),
                         line_number,
+                        column,
                         line.trim_end()
                     ));
                     if matches.len() >= MAX_MATCHES {
@@ -123,6 +136,21 @@ mod tests {
     }
 
     #[test]
+    fn expoe_coluna_do_primeiro_match_1_based() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "fn alvo() {}\n").unwrap();
+        let tool = GrepTool {
+            root: dir.path().to_path_buf(),
+        };
+        // "alvo" começa no byte 3 (0-based) → coluna 4 (1-based, como rg --column).
+        let out = tool.run(&json!({"pattern": "alvo"})).unwrap();
+        assert!(out.content.contains("a.rs:1:4:fn alvo() {}"));
+        // Match no início da linha → coluna 1.
+        let out = tool.run(&json!({"pattern": "fn"})).unwrap();
+        assert!(out.content.contains("a.rs:1:1:fn alvo() {}"));
+    }
+
+    #[test]
     fn regex_invalida_da_erro_de_args() {
         let dir = tempfile::tempdir().unwrap();
         let tool = GrepTool {
@@ -143,6 +171,6 @@ mod tests {
             root: dir.path().to_path_buf(),
         };
         let out = tool.run(&json!({"pattern": "alvo"})).unwrap();
-        assert!(out.content.contains("ok.txt:1:alvo"));
+        assert!(out.content.contains("ok.txt:1:1:alvo"));
     }
 }

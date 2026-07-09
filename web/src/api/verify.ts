@@ -58,6 +58,9 @@ export interface VerifyRunStarted {
 export type VerifyStatus =
   | { status: 'running'; run_id: string; step: number; total: number }
   | { status: 'done'; run_id: string; evidence: VerificationEvidence }
+  // Panic interno no pipeline (capturado no servidor via catch_unwind) —
+  // terminal como 'done', mas sem evidência para mostrar.
+  | { status: 'failed'; run_id: string; message: string }
 
 export async function startVerifyRun(): Promise<VerifyRunStarted> {
   let response: Response
