@@ -557,12 +557,12 @@ permissions = ["read"]
         assert_eq!(reg.iter().count(), 4, "sem .btv/lsp.toml, só os built-in");
     }
 
-    /// Onda 5 — um language server declarado registra suas 3 consultas
-    /// (definition/references/diagnostics) **sem subir o processo** (é
+    /// Onda 5 — um language server declarado registra suas 4 consultas
+    /// (definition/references/diagnostics/symbol) **sem subir o processo** (é
     /// preguiçoso): as tools existem no registry mesmo que o comando não exista
     /// (só falharia no primeiro uso).
     #[test]
-    fn lsp_server_declarado_registra_tres_consultas_lazy() {
+    fn lsp_server_declarado_registra_as_consultas_lazy() {
         let root = tempfile::tempdir().unwrap();
         let btv = root.path().join(".btv");
         fs::create_dir_all(&btv).unwrap();
@@ -572,11 +572,12 @@ permissions = ["read"]
         )
         .unwrap();
         let reg = build_registry(root.path());
-        // 4 built-in + 3 consultas LSP, sem ter subido processo nenhum.
-        assert_eq!(reg.iter().count(), 7, "4 built-in + 3 consultas LSP");
+        // 4 built-in + 4 consultas LSP, sem ter subido processo nenhum.
+        assert_eq!(reg.iter().count(), 8, "4 built-in + 4 consultas LSP");
         assert!(reg.get("lsp__rust__definition").is_some());
         assert!(reg.get("lsp__rust__references").is_some());
         assert!(reg.get("lsp__rust__diagnostics").is_some());
+        assert!(reg.get("lsp__rust__symbol").is_some());
         assert!(reg.get("bash").is_some());
     }
 }
