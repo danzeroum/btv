@@ -28,10 +28,20 @@ canônico não.
 
 1. **Chave da cadeia `(tenant_id, seq)`** — `seq` monotônico POR tenant;
    `prev_hash` encadeia DENTRO do tenant (primeira entrada de cada tenant:
-   `prev_hash = ""`). O `BEGIN IMMEDIATE` existente continua serializando o
-   read-modify-write; a serialização passa a ser por tenant no Postgres
-   (lock/advisory por tenant), global-mas-barata no SQLite local (um tenant
-   só).
+   `prev_hash = ""`). No SQLite local o `BEGIN IMMEDIATE` existente continua
+   serializando o read-modify-write, global-mas-barato (um tenant só).
+
+   **Decisão diferida para a Trilha B4 (revisão do G0):** o MECANISMO de
+   serialização do append por tenant no Postgres não é decidido aqui — um
+   ADR sobre hash-chain não é o lugar para se comprometer de passagem com
+   advisory locks. Duas alternativas ficam registradas para a comparação ser
+   feita quando o adapter PG nascer, com a suíte de contrato como juiz:
+   (a) lock por tenant (`pg_advisory_xact_lock` sobre hash do tenant) —
+   serializa antes do INSERT, sem retry; (b) constraint
+   `UNIQUE(tenant_id, seq)` + retry no conflito — otimista, mais simples,
+   igualmente correta (o perdedor da corrida relê o topo da cadeia e tenta
+   de novo). A escolha é da B4, com a Definição de Pronto de sempre: cadeias
+   independentes provadas por teste com 2 tenants concorrentes.
 2. **Tenant DENTRO do corpo hasheado** (endurecimento aceito na revisão do
    G0): `LedgerEntry` ganha `tenant: Option<TenantId>` serializado no corpo, e
    `hash_body()` passa a incluí-lo quando presente. Reatribuir a entrada a
