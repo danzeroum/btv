@@ -1005,7 +1005,12 @@ pub async fn require_local_origin(req: Request, next: Next) -> Response {
     if req.method() != Method::GET {
         if let Some(origin) = req.headers().get(header::ORIGIN) {
             let origin_str = origin.to_str().unwrap_or("");
-            if !is_local_origin(origin_str) {
+            // Loopback (rápido) OU hosts liberados por `BTV_TRUSTED_ORIGINS` —
+            // MESMA regra da guarda do btv-server, para hospedagem atrás de
+            // ingress com auth (opt-in; vazio = só localhost). Ver ADR 0015.
+            if !is_local_origin(origin_str)
+                && !btv_server::origin_allowed(origin_str, &btv_server::trusted_origin_hosts())
+            {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(ErrorBody::new("forbidden_origin", "origin não permitida")),

@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 #
-# Imagem de TESTE / homologação do BuildToValue — NÃO é deploy de produção.
-# O produto é local-first (ver infra/README.md): isto apenas empacota o CLI
-# `btv` + o sidecar Python numa imagem, para você rodar o BuildToValue como
-# FERRAMENTA dentro de um container (na sua VPS, via SSH). Não expõe um serviço
-# web multiusuário; o `btv dashboard` segue amarrado a 127.0.0.1.
+# Imagem do BuildToValue — CLI `btv` + sidecar Python + as duas SPAs (produto
+# btv-web na raiz, console web em /dev). O produto é local-first (ver
+# infra/README.md): por padrão o `btv dashboard` amarra em 127.0.0.1 e você o
+# usa como FERRAMENTA via SSH. A MESMA imagem serve o caminho de hospedagem
+# opt-in (atrás de ingress COM auth): `btv dashboard --host 0.0.0.0` +
+# `BTV_TRUSTED_ORIGINS` — ver "Hospedagem atrás de um ingress" no README e
+# infra/docker/docker-compose.prod.yml. Nunca exponha a porta direto na internet.
 #
 # Build (a partir da RAIZ do repositório):
 #   docker build -f infra/docker/Dockerfile -t btv:test .
@@ -32,6 +34,21 @@ COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build
+
+# ---------- build (SPA primária: o produto BuildToValue em btv-web/) ----------
+# O produto (galeria/wizard/squad ao vivo) é servido na RAIZ; o console `web/`
+# vai para `/dev`. Depende do submódulo `vendor/bpmn` (Designer), buildado por
+# `scripts/ensure-bpmn.mjs`. Requer `git submodule update --init --recursive`
+# na VPS antes do build (o conteúdo de vendor/bpmn precisa estar no contexto).
+# Layout recriado para os aliases relativos: btv-web em /btv-web, submódulo em
+# /vendor/bpmn (ensure-bpmn resolve ../../vendor/bpmn; vite/tsconfig ../vendor/bpmn).
+FROM node:22-bookworm-slim AS btvweb-build
+RUN npm install -g pnpm@10
+WORKDIR /btv-web
+COPY btv-web/ ./
+COPY vendor/bpmn/ /vendor/bpmn/
+# `prebuild` roda ensure-bpmn (builda o dist ESM da lib bpmn) e então `vite build`.
+RUN pnpm install --frozen-lockfile && pnpm build
 
 # ---------- imagem única (build + runtime do Rust) ----------
 # Deliberadamente UMA imagem só pro Rust, em vez de compilar em `rust:1-bookworm`
@@ -66,9 +83,12 @@ ENV PATH="/root/.local/bin:${PATH}"
 RUN cd /src/python && uv sync
 ENV BTV_PYTHON_DIR=/src/python
 
-# SPA do dashboard, já buildada no estágio web-build.
+# Console de desenvolvedor (web/), servido aninhado em /dev.
 COPY --from=web-build /web/dist /src/web/dist
-ENV BTV_WEB_DIR=/src/web/dist
+ENV BTV_DEV_WEB_DIR=/src/web/dist
+# SPA primária: o produto BuildToValue (btv-web), servido na raiz (/).
+COPY --from=btvweb-build /btv-web/dist /src/btv-web/dist
+ENV BTV_WEB_DIR=/src/btv-web/dist
 
 # Diretório onde o agente atua — monte o SEU projeto aqui (-v "$PWD":/work).
 # `btv verify` roda `cargo test/clippy/fmt` contra O QUE ESTIVER em /work
