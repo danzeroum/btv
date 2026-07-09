@@ -14,7 +14,7 @@
 //!    `serde_json::Value`/tipo de wire; erros são enums de domínio
 //!    (`RepositoryError`/`RunError`), tipos de entrada/saída são deste crate
 //!    (o que ainda é do adapter fica em associated type, decisão visível).
-//! 3. **O agregado é a única porta** — `Run::aprovar_gate` valida a
+//! 3. **O agregado é a única porta** — `Run::approve_gate` valida a
 //!    transição, incrementa o contador e RETORNA o `DomainEvent`; as traits
 //!    NÃO têm `update_status`/`increment_gates` — mutação por fora do
 //!    agregado não existe na API.
@@ -51,7 +51,7 @@ impl RunStatus {
     }
 
     /// Máquina de transições (A3): `Concluida → Ativa` retorna `false` — e
-    /// `Run::transicionar` a transforma em `RunError::InvalidTransition` em
+    /// `Run::transition_to` a transforma em `RunError::InvalidTransition` em
     /// vez de UPDATE silencioso. Transições válidas hoje: `Ativa` → qualquer
     /// terminal; terminal → nada (a reconciliação de zumbis é `Ativa →
     /// Encerrada`, coberta).
@@ -78,12 +78,23 @@ pub struct DomainEvent {
     pub kind: DomainEventKind,
 }
 
-/// Variantes em inglês (ADR 0024, decisão 2) mapeando os nomes do plano A5:
-/// `SquadAtivada`→`SquadActivated`, `GateAprovado`→`GateApproved`,
-/// `AjusteSolicitado`→`AdjustRequested`, `EntregaProduzida`→
-/// `DeliverableProduced`, `PersonaAtualizada`→`PersonaUpdated`,
-/// `TemplatePublicado`→`TemplatePublished`. Os kinds do wire já eram inglês
-/// snake_case — o enum alinha código e wire.
+/// Variantes E CAMPOS em inglês (ADR 0024, decisão 2; confirmado na revisão
+/// do G1) mapeando os nomes do plano A5: `SquadAtivada`→`SquadActivated`,
+/// `GateAprovado`→`GateApproved`, `AjusteSolicitado`→`AdjustRequested`,
+/// `EntregaProduzida`→`DeliverableProduced`, `PersonaAtualizada`→
+/// `PersonaUpdated`, `TemplatePublicado`→`TemplatePublished`.
+///
+/// O rename dos campos é grátis no código: `DomainEvent` NÃO deriva
+/// `Serialize` — as chaves pt do payload atual do ledger (`etapa`,
+/// `instrucao`, `papel`, …) viram responsabilidade EXCLUSIVA do DTO de
+/// serialização do adapter (Trilha B), com os goldens T1 de guarda de que
+/// nada se move no banco. Um lugar só para o mapeamento, em vez de o domínio
+/// carregar nomes de wire para sempre.
+///
+/// Cobertura do vocabulário: `wire_kind()` liga cada variante ao kind
+/// `btv.*` do inventário (`wire-strings.v1.json`) e o teste deste módulo
+/// prova que os DOIS conjuntos são idênticos — variante órfã ou kind sem
+/// variante quebram o build (pedido da revisão do G1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainEventKind {
     /// `btv.squad_activated`
@@ -96,36 +107,70 @@ pub enum DomainEventKind {
     /// é o fato consumado que o ledger registra.
     GateApproved {
         task_id: String,
-        etapa: Option<String>,
-        gates_aprovados: i64,
+        stage: Option<String>,
+        gates_approved: i64,
     },
     /// `btv.adjust_requested`
     AdjustRequested {
         task_id: String,
-        etapa: Option<String>,
-        instrucao: String,
-        gate_liberado: bool,
+        stage: Option<String>,
+        instruction: String,
+        gate_released: bool,
     },
     /// `btv.export_generated`
     DeliverableProduced {
         task_id: String,
         deliverable_id: i64,
-        nome: String,
-        formato: String,
+        name: String,
+        format: String,
     },
     /// `btv.persona_updated` — hash, nunca o prompt em claro (procedência).
     PersonaUpdated {
         template_id: String,
-        papel: String,
+        role: String,
         prompt_sha256: String,
     },
     /// `btv.template_published`
     TemplatePublished {
         template_id: String,
-        publicado: bool,
+        published: bool,
+    },
+    /// `btv.flow_saved` — fluxo do Squad Designer salvo como modelo
+    /// ("salvo e auditado" — a aplicação ao orquestrador real segue sendo
+    /// trabalho futuro, mesma honestidade do handler atual). Estava AUSENTE
+    /// no rascunho do G1 (7 variantes para 8 kinds `btv.*`) — lacuna 2 da
+    /// revisão; o teste de cobertura abaixo impede a reincidência.
+    FlowSaved {
+        name: String,
+        blocks: u64,
+        diagram_sha256: String,
+        semantic_version: Option<String>,
+        snapshot_hash: Option<String>,
+        audit_head: Option<String>,
+        audit_len: Option<u64>,
     },
     /// `btv.user_removed`
     UserRemoved { user_id: i64 },
+}
+
+impl DomainEventKind {
+    /// O kind EXATO do wire para cada variante — mapeamento declarativo
+    /// (dado, não comportamento), a única exceção consciente ao "sem
+    /// implementação" deste arquivo: é o que o teste de cobertura
+    /// variantes↔fixture exige para não ser fake. Apontado para re-auditoria
+    /// do G1.
+    pub fn wire_kind(&self) -> &'static str {
+        match self {
+            Self::SquadActivated { .. } => "btv.squad_activated",
+            Self::GateApproved { .. } => "btv.gate_approved",
+            Self::AdjustRequested { .. } => "btv.adjust_requested",
+            Self::DeliverableProduced { .. } => "btv.export_generated",
+            Self::PersonaUpdated { .. } => "btv.persona_updated",
+            Self::TemplatePublished { .. } => "btv.template_published",
+            Self::FlowSaved { .. } => "btv.flow_saved",
+            Self::UserRemoved { .. } => "btv.user_removed",
+        }
+    }
 }
 
 // ── erros de domínio (critério 2: semânticos, zero infraestrutura) ──────────
@@ -166,7 +211,7 @@ impl Run {
     /// (serviço de aplicação, C3) persiste via `RunRepository::save` e
     /// registra via `LedgerRepository::append`, mas NÃO decide: o contador
     /// deixa de ser um i64 solto mutado por UPDATE.
-    pub fn aprovar_gate(&mut self, ctx: &TenantContext) -> Result<DomainEvent, RunError> {
+    pub fn approve_gate(&mut self, ctx: &TenantContext) -> Result<DomainEvent, RunError> {
         todo!("A4, após aceite do G1")
     }
 
@@ -174,10 +219,10 @@ impl Run {
     /// `set_status(task_id, "qualquer_string")` atual. `Concluida → Ativa`
     /// não compila no chamador tipado e retorna `InvalidTransition` no
     /// caminho dinâmico.
-    pub fn transicionar(
+    pub fn transition_to(
         &mut self,
         ctx: &TenantContext,
-        para: RunStatus,
+        target: RunStatus,
     ) -> Result<DomainEvent, RunError> {
         todo!("A4, após aceite do G1")
     }
@@ -288,12 +333,24 @@ pub trait PersonaRepository {
 /// (não string — A5), a cadeia encadeia dentro do tenant e o export é
 /// verificável isoladamente.
 ///
-/// `type Entry` é decisão EXPOSTA ao G1: o tipo de leitura da trilha hoje é
-/// `btv_schemas::ledger::LedgerEntry`, que este crate não pode importar
-/// (fronteira do lint T4-A não cobre btv-schemas, mas duplicar o tipo aqui
-/// criaria dois donos do mesmo contrato). Associated type deixa o adapter
-/// devolver o tipo canônico existente sem o domínio depender dele — se a
-/// revisão preferir um `AuditEntry` próprio do domínio, é UMA mudança aqui.
+/// **Escopo DECLARADO deste port (lacuna 1 da revisão do G1):** ele registra
+/// FATOS DE DOMÍNIO — os kinds `btv.*` que `DomainEventKind` enumera. As
+/// entradas OPERACIONAIS da mesma cadeia (13 dos 21 kinds do inventário:
+/// `session.*`, `tool.*`, `llm.turn`, `user.turn`, `squad.*`,
+/// `permission_rule.*`, `designer.workflow_saved`, `skill.vetting`) são
+/// instrumentação, não fato de negócio, e continuam entrando pela API
+/// existente (`LedgerStore::append`/`Session::note`) — que a **B3 também
+/// tenantiza**: as DUAS portas alimentam a MESMA cadeia por tenant, com o
+/// mesmo hash-chain. Este port portanto NÃO substitui o `LedgerStore` — ele
+/// é a porta tipada dos fatos de domínio sobre a mesma trilha. Unificar as
+/// duas portas (ou mantê-las como categorias distintas em definitivo) é
+/// decisão diferida, registrada em `pendencias.md` (§ migração DDD, G1).
+///
+/// `type Entry` — decisão exposta, ACEITA na revisão do G1 com gatilho
+/// registrado: no dia em que o domínio precisar INTERPRETAR entradas
+/// (export verificável da Trilha E, billing lendo a trilha), nasce o
+/// `AuditEntry` próprio do domínio e o associated type morre. Até lá, evita
+/// dois donos para o contrato que hoje é de `btv_schemas::ledger::LedgerEntry`.
 pub trait LedgerRepository {
     type Entry;
 
@@ -308,7 +365,7 @@ pub trait LedgerRepository {
         &self,
         ctx: &TenantContext,
         limit: u32,
-        actor: Option<&str>,
+        actor: Option<&ActorId>,
     ) -> Result<Vec<Self::Entry>, RepositoryError>;
 
     /// Verifica UMA cadeia — a do tenant do contexto (ADR 0027 item 3).
@@ -345,4 +402,94 @@ pub trait EventStorePort {
     ) -> Result<Vec<Self::StoredEvent>, RepositoryError>;
 
     fn head_seq(&self, ctx: &TenantContext, aggregate_id: &str) -> Result<i64, RepositoryError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Uma instância de CADA variante (valores dummy — o teste é sobre o
+    /// VOCABULÁRIO, não sobre payload). Variante nova sem entrada aqui não
+    /// compila o `match` de `wire_kind`; kind novo na fixture sem variante
+    /// quebra a igualdade de conjuntos abaixo.
+    fn uma_de_cada_variante() -> Vec<DomainEventKind> {
+        vec![
+            DomainEventKind::SquadActivated {
+                task_id: "sq1".into(),
+                run_id: 1,
+                template_id: "editorial".into(),
+            },
+            DomainEventKind::GateApproved {
+                task_id: "sq1".into(),
+                stage: None,
+                gates_approved: 1,
+            },
+            DomainEventKind::AdjustRequested {
+                task_id: "sq1".into(),
+                stage: None,
+                instruction: "tom formal".into(),
+                gate_released: true,
+            },
+            DomainEventKind::DeliverableProduced {
+                task_id: "sq1".into(),
+                deliverable_id: 1,
+                name: "artigo.md".into(),
+                format: "MD".into(),
+            },
+            DomainEventKind::PersonaUpdated {
+                template_id: "editorial".into(),
+                role: "Redator".into(),
+                prompt_sha256: "abc".into(),
+            },
+            DomainEventKind::TemplatePublished {
+                template_id: "editorial".into(),
+                published: true,
+            },
+            DomainEventKind::FlowSaved {
+                name: "fluxo".into(),
+                blocks: 3,
+                diagram_sha256: "abc".into(),
+                semantic_version: None,
+                snapshot_hash: None,
+                audit_head: None,
+                audit_len: None,
+            },
+            DomainEventKind::UserRemoved { user_id: 1 },
+        ]
+    }
+
+    /// Pedido da revisão do G1 (lacuna 2): o vocabulário `btv.*` da fixture
+    /// canônica (T3) e as variantes de `DomainEventKind` são o MESMO
+    /// conjunto — a ausência de `btv.flow_saved` no rascunho teria quebrado
+    /// aqui. Kind órfão por omissão deixa de ser possível.
+    #[test]
+    fn variantes_cobrem_exatamente_os_kinds_btv_da_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../schemas/fixtures/wire-strings.v1.json"),
+            )
+            .expect("fixture wire-strings.v1"),
+        )
+        .expect("fixture é JSON");
+        let da_fixture: BTreeSet<String> = fixture["ledger_kinds"]
+            .as_array()
+            .expect("lista ledger_kinds")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .filter(|k| k.starts_with("btv."))
+            .map(str::to_string)
+            .collect();
+
+        let das_variantes: BTreeSet<String> = uma_de_cada_variante()
+            .iter()
+            .map(|k| k.wire_kind().to_string())
+            .collect();
+
+        assert_eq!(
+            das_variantes, da_fixture,
+            "vocabulário de DomainEventKind divergiu do inventário btv.* da fixture"
+        );
+    }
 }
