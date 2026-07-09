@@ -59,6 +59,28 @@ def _format_recall(context: dict[str, Any] | None) -> str | None:
         "não se aplicar a ESTA tarefa.\n" + "\n".join(linhas)
     )
 
+
+def _format_roster_domain(roster: list[dict[str, Any]] | None) -> str | None:
+    """Fase 2 (verificação por domínio): quando a tarefa carrega um roster de
+    personas (squad de PRODUTO da galeria — conteúdo/criativo/dados, não
+    software), avisa o planejador para NÃO fabricar passos de `deploy`/
+    infraestrutura. O prompt base é de um "planejador técnico" com uma ação
+    `deploy` — sem esta guarda, um artigo de café ganhava um passo de deploy
+    blue-green fabricado (achado real do teste guiado). `None` para squad de
+    engenharia (roster vazio): comportamento do motor inalterado."""
+    if not roster:
+        return None
+    papeis = ", ".join(str(p.get("papel", "")).strip() for p in roster if p.get("papel"))
+    return (
+        "Esta é uma tarefa de PRODUTO executada por um squad de personas"
+        + (f" ({papeis})" if papeis else "")
+        + ", NÃO um projeto de software. NÃO gere passos de \"deploy\" nem de "
+        "infraestrutura/CI/CD — não há sistema para publicar. Use apenas "
+        "analyze/design/implement/validate no sentido do domínio (planejar/"
+        "produzir/revisar/validar o entregável). Os passos devem refletir o "
+        "trabalho real do domínio, não um pipeline de engenharia."
+    )
+
 _DECOMPOSE_SYSTEM_PROMPT = """Você é um planejador técnico sênior. Dada uma tarefa, decomponha-a em passos executáveis.
 Responda SOMENTE com um objeto JSON (sem markdown):
 {
@@ -105,6 +127,9 @@ class AdaptivePlanner:
         # planejamento — antes era só CONTADA (`context_recall_count`), agora
         # informa a decomposição de verdade.
         messages = [{"role": "system", "content": _DECOMPOSE_SYSTEM_PROMPT}]
+        domain_note = _format_roster_domain(task.get("roster"))
+        if domain_note:
+            messages.append({"role": "system", "content": domain_note})
         context_note = _format_recall(relevant_context)
         if context_note:
             messages.append({"role": "system", "content": context_note})

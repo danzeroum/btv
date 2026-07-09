@@ -179,6 +179,33 @@ def test_verification_evidence_presente_flui_para_validate_results(tmp_path):
     assert "verification_evidence" in auditor_calls[1].messages[1]["content"]
 
 
+def test_squad_de_produto_nao_fail_closa_por_evidencia_ausente(tmp_path):
+    # Fase 2 (verificação por domínio): um squad de PRODUTO (roster de personas)
+    # não tem código para o `cargo test` verificar — o Rust manda evidência
+    # vazia de propósito, marcando `verification_evidence_missing=True`. Ao
+    # contrário do squad de código, aqui NÃO se fail-closa: o roster sinaliza
+    # o domínio não-código, e reprovar por falta de evidência de código seria
+    # FABRICAR uma reprovação. Deve fluir para `validate_results` normalmente.
+    gateway = _gateway(0.9, 0.2, 0.2, approved=True)
+    orch = UnifiedOrchestrator(gateway, memory=AgentMemorySystem(storage_dir=tmp_path))
+
+    result = asyncio.run(
+        orch.execute_complex_task(
+            {
+                "description": "escrever um artigo sobre café",
+                "verification_evidence_missing": True,
+                "roster": [{"papel": "Redator", "prompt": "Você escreve artigos", "funcao": "produce", "ordem": 0, "custom": False}],
+            }
+        )
+    )
+
+    assert result["success"] is True
+    # o auditor foi de fato chamado para validar (não houve short-circuit
+    # fail-closed): proposta + validate_results.
+    auditor_calls = [c for c in gateway.calls if c.requester == "auditor"]
+    assert len(auditor_calls) == 2
+
+
 def test_step_task_de_validate_recebe_resultados_reais_dos_passos_anteriores(tmp_path):
     # Antes desta correção, o step_task de uma ação "validate" só carregava
     # description/action/step do plano — o auditor per-step era cego até ao

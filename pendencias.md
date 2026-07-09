@@ -1699,3 +1699,45 @@ Isto é um gap de produto (e de "Nada Fake" no nível do produto): a galeria
 promete squads por domínio que, por baixo, são sempre o mesmo squad de
 engenharia. Fix de verdade = agentes/verificação configuráveis por domínio
 (roadmap), não patch. Registrado aqui, não escondido.
+
+## Quinta onda — personas operacionais por domínio (o fix do achado estrutural)
+
+A "facha­da" acima está sendo fechada em fases (uma PR por fase). O objetivo:
+as personas criadas/editadas no frontend passam a ser DE FATO os agentes que
+trabalham, com o prompt delas, e o squad de produto se comporta pelo seu
+DOMÍNIO, não como um time de software genérico.
+
+**Fase 1 — personas operacionais (PR #12, merge `8e6bdb4`).** O `SquadTask`
+ganhou `repeated PersonaSpec roster` (proto aditivo): cada persona ativa vira
+`{papel, prompt, funcao, ordem, custom}`. O `btv_agent::ativar_squad_handler`
+monta o roster a partir dos papéis ativos + `prompt_efetivo` (persona U7) e o
+passa por `start_squad_task`. No Python, `_apply_persona_roster` injeta o
+`prompt` de cada persona como `persona_prompt` do agente do motor correspondente
+à `funcao` (plan→architect, produce→developer, review/validate→auditor); o
+`BaseAgent.system_with_persona` PREPENDE a persona ao system prompt operacional
+(voz/objetivo da persona + protocolo JSON/ferramentas do agente), sem quebrar o
+contrato de saída. Editar a persona no frontend passa a mudar de fato como o
+agente trabalha. Roster vazio (CLI `btv squad` / `/api/squad/run`) = elenco fixo
+do motor, retrocompatível.
+
+**Fase 2 — verificação/comportamento por domínio (esta PR).** Fecha as duas
+fabricações que o teste guiado achou num squad de produto (artigo de café):
+1. **`cargo test` no artigo (exit 101 → fail):** a verificação de CÓDIGO
+   (`run_verify_pipeline` = cargo test/clippy/fmt sobre o workspace) só roda
+   para squad de engenharia (roster VAZIO). Squad de produto (roster presente)
+   não tem código para verificar → o Rust pula o cargo e manda evidência vazia,
+   e o Python NÃO fail-closa por evidência ausente quando há roster (`bool(
+   task.get("roster"))`). Fail-closar por falta de evidência de código num
+   artigo seria FABRICAR uma reprovação — o auditor valida pelo conteúdo real.
+2. **Passo de deploy fabricado (o `ops` querendo blue-green):** o planejador
+   (`AdaptivePlanner`, system prompt de "planejador técnico" com ação `deploy`)
+   agora recebe uma nota de domínio quando há roster: "tarefa de PRODUTO, NÃO
+   software; NÃO gere passos de deploy/infra". Sem roster, nada muda (squad de
+   engenharia inalterado). Provado por `test_roster_de_produto_avisa_o_
+   planejador_a_nao_fabricar_deploy` + `test_sem_roster_o_prompt_nao_tem_nota_
+   de_dominio` e `test_squad_de_produto_nao_fail_closa_por_evidencia_ausente`.
+
+**Fase 3 (próxima PR) — personas customizadas de primeira classe.** A tabela
+`custom_personas` (hoje ignorada na ativação) deve virar agentes do roster
+também, para que uma persona criada do zero pelo usuário (não só override de
+papel de template) trabalhe com o prompt dela.

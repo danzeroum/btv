@@ -592,14 +592,26 @@ where
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
-    let root_for_verify = root.clone();
-    let evidence =
-        tokio::task::spawn_blocking(move || crate::run_verify_pipeline(&root_for_verify, None))
-            .await
-            .map_err(|e| format!("task de /verify falhou: {e}"))?
-            .map_err(|e| format!("falha ao rodar /verify antes do squad: {e}"))?;
-    let verification_evidence_json = serde_json::to_string(&evidence)
-        .map_err(|e| format!("falha ao serializar evidência: {e}"))?;
+    // Verificação de CÓDIGO (cargo test/clippy/fmt sobre o workspace) só faz
+    // sentido para squads de engenharia (CLI `btv squad` / `/api/squad/run`,
+    // que têm roster VAZIO). Um squad de PRODUTO (galeria: roster de personas,
+    // domínios de conteúdo/criativo/dados) NÃO tem código para verificar —
+    // rodar `cargo test` num artigo dá `fail` (exit 101) e o auditor fail-closa
+    // por engano. Fase 2 (verificação por domínio): produto pula o cargo e
+    // envia evidência vazia; o Python não fail-closa por falta dela (o roster
+    // sinaliza o domínio não-código).
+    let verification_evidence_json = if roster.is_empty() {
+        let root_for_verify = root.clone();
+        let evidence =
+            tokio::task::spawn_blocking(move || crate::run_verify_pipeline(&root_for_verify, None))
+                .await
+                .map_err(|e| format!("task de /verify falhou: {e}"))?
+                .map_err(|e| format!("falha ao rodar /verify antes do squad: {e}"))?;
+        serde_json::to_string(&evidence)
+            .map_err(|e| format!("falha ao serializar evidência: {e}"))?
+    } else {
+        String::new()
+    };
 
     // Abre a sessão de ledger ANTES de mover `description` para o
     // `SquadTask` abaixo — mesma sessão/ledger que o resto da plataforma usa
