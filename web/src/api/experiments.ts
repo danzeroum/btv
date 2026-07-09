@@ -28,6 +28,8 @@ export interface ExperimentReport {
   verdict: ExperimentVerdict
   winner?: string
   p_value: number
+  /** Comparações par-a-par (m*(m-1)/2) na correção de Bonferroni; 1 para A/B. */
+  comparisons: number
   produced_at: string
 }
 

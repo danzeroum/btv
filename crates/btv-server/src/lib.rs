@@ -334,12 +334,11 @@ async fn model_usage(State(state): State<AppState>) -> impl IntoResponse {
 
 /// `GET /api/experiment/:nome` (Fase 7 Onda 9, A2) — relatório de A/B sobre a
 /// telemetria real. Mesma validação que `run_experiment` já aplica na CLI
-/// (`main.rs`): exige exatamente 2 variantes. `404` quando o experimento não
+/// (`main.rs`): aceita 2+ variantes (multivariante, Bonferroni). `404` quando o experimento não
 /// tem nenhum evento (`props.experiment` nunca bateu); `422` quando tem
-/// eventos mas não exatamente 2 variantes distintas (não dá pra fazer um A/B
-/// com 1 ou com 3+ lados) — a requisição em si é válida, é o experimento que
-/// não está no formato certo. Nenhum DTO novo: `ExperimentReport` já deriva
-/// `Serialize`+`JsonSchema` (`experiment.v1`).
+/// eventos mas só 1 variante distinta (não dá pra comparar) — a requisição em
+/// si é válida, é o experimento que não está no formato certo. Nenhum DTO
+/// novo: `ExperimentReport` já deriva `Serialize`+`JsonSchema` (`experiment.v1`).
 async fn get_experiment(
     State(state): State<AppState>,
     AxumPath(nome): AxumPath<String>,
@@ -355,22 +354,26 @@ async fn get_experiment(
         )
             .into_response();
     }
-    if variants.len() != 2 {
+    // Multivariante: 2+ variantes são aceitas (correção de Bonferroni). Só
+    // uma variante (`len() == 1`) não é um experimento comparável → 422.
+    if variants.len() < 2 {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ErrorBody::new(
-                "experiment_needs_two_variants",
+                "experiment_needs_variants",
                 format!(
-                    "A/B exige exatamente 2 variantes; '{nome}' tem {}",
+                    "um experimento comparável exige >=2 variantes; '{nome}' tem {}",
                     variants.len()
                 ),
             )),
         )
             .into_response();
     }
-    let a = VariantStats::new(variants[0].0.clone(), variants[0].1, variants[0].2);
-    let b = VariantStats::new(variants[1].0.clone(), variants[1].1, variants[1].2);
-    let report = ExperimentReport::from_two_variants(nome, "success_rate", a, b, now_rfc3339());
+    let stats: Vec<VariantStats> = variants
+        .into_iter()
+        .map(|(v, n, s)| VariantStats::new(v, n, s))
+        .collect();
+    let report = ExperimentReport::from_variants(nome, "success_rate", stats, now_rfc3339());
     Json(report).into_response()
 }
 
@@ -1861,7 +1864,57 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["code"], "experiment_needs_two_variants");
+        assert_eq!(json["code"], "experiment_needs_variants");
+    }
+
+    /// Multivariante: 3 variantes com amostra suficiente produzem um relatório
+    /// (não mais um 422). A domina B e C → vencedor com Bonferroni; a resposta
+    /// carrega `comparisons: 3`.
+    #[tokio::test]
+    async fn experiment_com_tres_variantes_produz_relatorio_multivariante() {
+        let telemetry = Telemetry::open_in_memory().unwrap();
+        let semear = |variant: &str, sucessos: usize, total: usize| {
+            for i in 0..total {
+                telemetry.record(
+                    "llm.call",
+                    "s",
+                    serde_json::json!({
+                        "experiment": "tri", "variant": variant, "success": i < sucessos
+                    }),
+                    "t",
+                );
+            }
+        };
+        semear("A", 95, 100);
+        semear("B", 45, 100);
+        semear("C", 40, 100);
+        let web_dir = fixture_web_dir();
+        let app = router(
+            telemetry,
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/experiment/tri")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["variants"].as_array().unwrap().len(), 3);
+        assert_eq!(json["comparisons"], 3);
+        assert_eq!(json["verdict"], "significant");
+        assert_eq!(json["winner"], "A");
     }
 
     /// Nome sem nenhum evento correspondente é `404` — distinto do `422` de

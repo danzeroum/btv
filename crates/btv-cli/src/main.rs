@@ -209,17 +209,18 @@ fn run_experiment(experiment: String, db: Option<PathBuf>, format: VerifyFormat)
     let telemetry = Telemetry::open(db_path.to_str().unwrap_or(".btv/telemetry.db"))?;
 
     let variants = telemetry.experiment_variants(&experiment);
-    if variants.len() != 2 {
+    if variants.len() < 2 {
         bail!(
-            "A/B exige exatamente 2 variantes; o experimento '{experiment}' tem {} \
+            "um experimento comparável exige >=2 variantes; '{experiment}' tem {} \
              (procuro eventos com props.experiment='{experiment}' e props.variant na telemetria)",
             variants.len()
         );
     }
-    let a = VariantStats::new(variants[0].0.clone(), variants[0].1, variants[0].2);
-    let b = VariantStats::new(variants[1].0.clone(), variants[1].1, variants[1].2);
-    let report =
-        ExperimentReport::from_two_variants(experiment, "success_rate", a, b, now_rfc3339());
+    let stats: Vec<VariantStats> = variants
+        .into_iter()
+        .map(|(v, n, s)| VariantStats::new(v, n, s))
+        .collect();
+    let report = ExperimentReport::from_variants(experiment, "success_rate", stats, now_rfc3339());
 
     match format {
         VerifyFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),

@@ -69,8 +69,11 @@ export function Experimentos() {
           <div className="stack">
             <div className="row">
               <StatTile value={report.experiment} label="experimento" />
-              <StatTile value={report.metric} label="métrica" />
-              <StatTile value={report.p_value.toFixed(4)} label="p-valor" />
+              <StatTile value={`${report.variants.length}`} label="variantes" />
+              <StatTile value={report.p_value.toFixed(4)} label="p-valor decisivo" />
+              {report.comparisons > 1 && (
+                <StatTile value={`${report.comparisons}`} label="comparações (Bonferroni)" />
+              )}
             </div>
 
             <div className="row" style={{ alignItems: 'center' }}>
@@ -92,8 +95,9 @@ export function Experimentos() {
       </AsyncStatus>
 
       <div style={{ fontSize: 11, color: 'var(--faint)' }}>
-        veredito derivado por teste z de duas proporções (<span className="mono">experiment.v1</span>, ADR 0014) —
-        nunca inventa vencedor sem significância. Atribuição por telemetria ainda em instrumentação: nenhum código de
+        veredito derivado por testes z de duas proporções par-a-par com correção de Bonferroni para 3+ variantes
+        (<span className="mono">experiment.v1</span>, ADR 0014) — nunca inventa vencedor sem significância.
+        Atribuição por telemetria ainda em instrumentação: nenhum código de
         produção grava <span className="mono">props.experiment</span>/<span className="mono">variant</span>/
         <span className="mono">success</span> hoje — os relatórios acima refletem dados semeados para prova do
         caminho, não tráfego real ainda.

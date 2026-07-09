@@ -10,6 +10,7 @@
     "verdict": "significant",
     "winner": "A",
     "p_value": 0.0000001,
+    "comparisons": 1,
     "produced_at": "2026-07-06T00:00:00Z"
   },
   "invalid_missing_verdict": {
