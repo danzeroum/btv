@@ -312,11 +312,18 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
         // `sq{n}` já persistido para a primeira ativação após um redeploy não
         // colidir (`UNIQUE constraint failed: runs.task_id`).
         {
-            let maior = btv_store
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .max_run_task_seq();
-            squad_hub.seed_task_seq(maior);
+            let store = btv_store.lock().unwrap_or_else(|e| e.into_inner());
+            squad_hub.seed_task_seq(store.max_run_task_seq());
+            // Runs que ficaram `ativa` no volume são zumbis (o processo que as
+            // rodava morreu — o estado vivo da squad é só em memória). No
+            // arranque, reconcilia para `encerrada` — senão ficam "ativa" para
+            // sempre na tela, sem nunca concluir.
+            match store.reconcile_stale_runs(&now_rfc3339()) {
+                Ok(n) if n > 0 => {
+                    eprintln!("btv: {n} run(s) 'ativa' órfã(s) → 'encerrada' no arranque")
+                }
+                _ => {}
+            }
         }
         let btv_router = btv_agent::router(
             squad_hub.clone(),
