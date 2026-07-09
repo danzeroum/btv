@@ -172,7 +172,7 @@ export function Personas() {
                       }}
                       style={{ border: 'none', borderBottom: '1px dashed var(--line2)', background: 'none', fontSize: 14, fontWeight: 600, fontFamily: 'var(--sans)', color: 'var(--ink)', padding: '2px 0', width: '100%' }}
                     />
-                    <span style={{ fontSize: 11, color: 'var(--faint)' }}>persona criada por você</span>
+                    <span style={{ fontSize: 11, color: 'var(--faint)' }}>criada por você · trabalha na produção da squad</span>
                   </span>
                   <span style={{ ...badgeBase, background: '#e7efe9', color: '#2d6a50' }}>própria</span>
                 </div>

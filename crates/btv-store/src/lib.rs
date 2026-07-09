@@ -12,7 +12,7 @@ pub mod prompt_library;
 pub mod rule_store;
 pub mod telemetry;
 
-pub use btv::{BtvRun, BtvStore, BtvStoreError, BtvUser, PinCheck};
+pub use btv::{BtvRun, BtvStore, BtvStoreError, BtvUser, CustomPersona, PinCheck};
 pub use events::{EventError, EventInput, EventStore, StoredEvent};
 pub use ledger::LedgerStore;
 pub use prompt_cache::PromptCache;
