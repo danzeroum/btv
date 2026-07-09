@@ -598,6 +598,9 @@ async fn get_verify_status(
                 "status": "done",
                 "run_id": job.run_id,
                 "evidence": evidence,
+                // Review por valor DERIVADO da evidência real (technical/
+                // security + gates duros) — substitui o mock do frontend.
+                "review": btv_schemas::review::ValueReview::from_evidence(evidence),
             }))
             .into_response(),
             VerifyJobStatus::Failed { message } => Json(serde_json::json!({

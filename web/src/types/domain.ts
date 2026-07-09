@@ -63,12 +63,6 @@ export interface LedgerEntry {
   ts: string
 }
 
-export interface ReviewerScore {
-  name: string
-  score: number
-  detail: string
-}
-
 /** Espelha a resposta de `GET /api/providers` (Fase 7 Onda 12, piso) —
  * `configured` é real (lido do mesmo env var que `Gateway::from_env` lê),
  * não um status fabricado como "ativo"/"standby". */

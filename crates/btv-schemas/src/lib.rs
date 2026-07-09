@@ -10,6 +10,7 @@ pub mod handoff;
 pub mod ledger;
 pub mod persona;
 pub mod plan;
+pub mod review;
 pub mod squad_template;
 pub mod telemetry;
 pub mod verification;
