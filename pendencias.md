@@ -1625,6 +1625,20 @@ duas decisões silenciosas, ambas fechadas com teste:
    no volume atual permanecem (append-only não reescreve história) — um ledger
    limpo exige arquivar/zerar o volume, decisão de ops.**
 
+5. **Gate do "Squad ao vivo" lançava erro não-tratado quando a sessão já
+   acabara** — "Aprovar e continuar" dava `ApiError: nenhum gate pendente` e
+   "Pedir ajuste" dava `tarefa inexistente ou já encerrada`. Causa: o gate HITL
+   vive só na memória do backend (`SquadHub`) e é efêmero — expira em ~5 min
+   (fail-closed, ADR 0017) e some se o container reinicia (ex.: redeploy). O
+   frontend seguia mostrando o gate obsoleto e o `void aprovar()` virava
+   "Uncaught (in promise)". Fechado no `SquadRunContext`: `aprovar`/`ajustar`
+   capturam a falha, limpam a squad ao vivo obsoleta e avisam o usuário
+   ("sessão já encerrada — inicie uma nova"). `tsc`/vitest verdes.
+
 Observações não-bug registradas pelas sondas (por design, não código): custo
 `$0` até tráfego novo com tokens; rodapé "Marina L." é placeholder (não há
-sessão/login real).
+sessão/login real). **Entregas vazias numa run "concluída"** também é honestidade
+(não bug): a Biblioteca só mostra arquivos REALMENTE gravados por ferramenta
+(`edit` exit 0); quando o modelo apenas ESCREVE em prosa que "gravou o arquivo"
+(ex.: deepseek dizendo exportar MusicXML/MIDI/PDF sem tool de renderização
+real), nada é capturado — o "Nada Fake" pega a entrega alucinada.
