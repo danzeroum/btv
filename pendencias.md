@@ -1610,8 +1610,21 @@ duas decisões silenciosas, ambas fechadas com teste:
    auditoria passaram a **remover** o perfil de teste ao fim (fallback gracioso a
    "suspender" em backend sem a rota) — não geram mais resíduo.
 
-Observações não-bug registradas pelas sondas (por design/dado herdado, não
-código): o ledger de produção acusa `ok=false` (quebra de hash-chain no volume
-antigo — o caminho de escrita produz cadeia válida, provado por uma instância
-limpa com `ok=true`); custo `$0` até tráfego novo com tokens; rodapé "Marina L."
-é placeholder (não há sessão/login real).
+4. **Ledger "CADEIA VIOLADA" era corrida real de concorrência (não dado
+   herdado)** — cada `Session` do squad abre uma CONEXÃO própria a `.btv/btv.db`
+   (`session.rs`), separada da conexão do dashboard (`main.rs`). O `append` fazia
+   `SELECT último hash → calcula → INSERT` numa transação `DEFERRED`; sob WAL,
+   duas conexões concorrentes (o ledger mostrava DUAS sessões `sa…` iniciando no
+   mesmo minuto) liam o mesmo `prev_hash` e a segunda encadeava no hash errado →
+   `verify_chain` acusava violação. Fechado com `BEGIN IMMEDIATE` (o lock de
+   escrita é pego ANTES do SELECT → read-modify-write atômico entre conexões) +
+   `busy_timeout` (a 2ª espera em vez de estourar "database is locked"). Provado
+   por `appends_concorrentes_de_conexoes_separadas_mantem_a_cadeia` (6 threads ×
+   20 entradas, conexões separadas): passa com o conserto; sem ele, dá panic em
+   todas as rodadas. **O conserto impede novas quebras; as entradas já violadas
+   no volume atual permanecem (append-only não reescreve história) — um ledger
+   limpo exige arquivar/zerar o volume, decisão de ops.**
+
+Observações não-bug registradas pelas sondas (por design, não código): custo
+`$0` até tráfego novo com tokens; rodapé "Marina L." é placeholder (não há
+sessão/login real).
