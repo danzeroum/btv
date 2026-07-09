@@ -162,10 +162,13 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
         permission = GrpcPermissionClient(channel)
         tool_client = GrpcToolClient(channel)
         memory = AgentMemorySystem(storage_dir=self.memory_dir) if self.memory_dir else AgentMemorySystem()
+        # Modelo POR TAREFA: o `request.model` (tela Modelo / `--model`)
+        # sobrepõe o default do pool/sidecar; vazio = herda `self.model`.
+        task_model = request.model or self.model
         orchestrator = UnifiedOrchestrator(
             gateway,
             permission_client=permission,
-            model=self.model,
+            model=task_model,
             memory=memory,
             tool_client=tool_client,
         )

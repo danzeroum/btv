@@ -21,7 +21,8 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 /// Quanto esperar o server indexar antes de desistir de uma consulta (o
@@ -30,6 +31,10 @@ const READY_TIMEOUT: Duration = Duration::from_secs(60);
 /// Orçamento para os diagnósticos assentarem (são empurrados de forma assíncrona
 /// pelo server após o `didOpen`; não há sinal claro de "acabou").
 const DIAG_BUDGET: Duration = Duration::from_secs(12);
+/// Prazo de UM round-trip request/response. Com o reader de fundo drenando o
+/// stdout continuamente, uma resposta que nunca chega vira erro em vez de
+/// pendurar a thread da consulta para sempre.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Um language server declarado pelo usuário: o comando que o sobe via stdio, e
 /// a raiz do workspace que ele deve analisar.
@@ -48,6 +53,11 @@ pub enum LspQuery {
     Definition,
     References,
     Diagnostics,
+    /// Busca por NOME de símbolo (`workspace/symbol`): o server acha as
+    /// ocorrências e resolve a posição — o agente não precisa saber
+    /// linha/coluna de antemão (fecha a fricção do dogfooding da Onda 5, em
+    /// que a tool de posição não compunha com as tools de conteúdo).
+    Symbol,
 }
 
 impl LspQuery {
@@ -56,21 +66,45 @@ impl LspQuery {
             LspQuery::Definition => "definition",
             LspQuery::References => "references",
             LspQuery::Diagnostics => "diagnostics",
+            LspQuery::Symbol => "symbol",
         }
     }
+}
+
+/// Estado compartilhado entre a thread de fundo (que lê o stdout do server) e a
+/// thread da consulta (que escreve requests e espera respostas). O reader drena
+/// o stdout **continuamente** — assim `$/progress`/`publishDiagnostics` e demais
+/// notificações nunca se acumulam no buffer do pipe do SO entre consultas
+/// (endurecimento registrado na pendência da Onda 5).
+#[derive(Default)]
+struct Shared {
+    inner: Mutex<SharedInner>,
+    /// Sinalizado quando chega uma resposta nova ou o server morre.
+    cv: Condvar,
+    /// Últimos diagnósticos empurrados por URI (`publishDiagnostics`).
+    diagnostics: Mutex<HashMap<String, Value>>,
+}
+
+#[derive(Default)]
+struct SharedInner {
+    /// Respostas recebidas mas ainda não consumidas, por `id` do request.
+    responses: HashMap<i64, Result<Value, String>>,
+    /// `Some(motivo)` quando o reader viu EOF/erro — desperta consultas presas.
+    dead: Option<String>,
 }
 
 /// Um processo de language server vivo, com os canais e o estado de sessão.
 struct LspProc {
     child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    /// `stdin` é compartilhado com a thread reader (que precisa responder
+    /// requests do servidor no meio de um handshake) via `Mutex`.
+    stdin: Arc<Mutex<ChildStdin>>,
     next_id: i64,
     /// URIs já abertas (`didOpen` só uma vez por documento — reabrir viola o
     /// protocolo).
     opened: HashSet<String>,
-    /// Últimos diagnósticos empurrados por URI (`textDocument/publishDiagnostics`).
-    diagnostics: HashMap<String, Value>,
+    shared: Arc<Shared>,
+    reader: Option<JoinHandle<()>>,
 }
 
 impl Drop for LspProc {
@@ -79,6 +113,69 @@ impl Drop for LspProc {
         // o robusto. Nada de rust-analyzer órfão comendo CPU.
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // O kill fecha o stdout → o reader vê EOF e termina; junta pra não
+        // deixar thread pendurada (a lição do process-group da Fase 4).
+        if let Some(handle) = self.reader.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+/// Loop da thread de fundo: lê cada mensagem do server e a roteia —
+/// resposta → `responses` (desperta a consulta), request do servidor →
+/// responde na hora (senão o handshake trava), notificação → guarda
+/// diagnósticos e **descarta** o resto (drenagem contínua). EOF/erro marca a
+/// sessão como morta.
+fn reader_loop(
+    mut stdout: BufReader<ChildStdout>,
+    stdin: Arc<Mutex<ChildStdin>>,
+    shared: Arc<Shared>,
+) {
+    loop {
+        let m = match read_msg(&mut stdout) {
+            Ok(m) => m,
+            Err(e) => {
+                let mut inner = shared.inner.lock().unwrap_or_else(|p| p.into_inner());
+                inner.dead = Some(e);
+                shared.cv.notify_all();
+                return;
+            }
+        };
+        let has_method = m.get("method").is_some();
+        if !has_method {
+            if let Some(id) = m.get("id").and_then(Value::as_i64) {
+                let res = match m.get("error") {
+                    Some(err) => Err(format!("{err}")),
+                    None => Ok(m.get("result").cloned().unwrap_or(Value::Null)),
+                };
+                let mut inner = shared.inner.lock().unwrap_or_else(|p| p.into_inner());
+                inner.responses.insert(id, res);
+                shared.cv.notify_all();
+            }
+            continue;
+        }
+        if m.get("id").is_some() {
+            // request do servidor → responde para não travar o handshake.
+            if let Ok(mut w) = stdin.lock() {
+                let _ = respond_server_request(&mut *w, &m);
+            }
+            continue;
+        }
+        // notificação — guarda diagnósticos, descarta o resto (nada entope).
+        if m.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics") {
+            if let Some(params) = m.get("params") {
+                if let Some(uri) = params.get("uri").and_then(Value::as_str) {
+                    shared
+                        .diagnostics
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .insert(
+                            uri.to_string(),
+                            params.get("diagnostics").cloned().unwrap_or(json!([])),
+                        );
+                }
+            }
+        }
     }
 }
 
@@ -136,41 +233,47 @@ impl LspSession {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| format!("subir LSP '{}': {e}", config.command))?;
-        let mut stdin = child.stdin.take().ok_or("LSP sem stdin")?;
-        let mut stdout = BufReader::new(child.stdout.take().ok_or("LSP sem stdout")?);
+        let stdin = Arc::new(Mutex::new(child.stdin.take().ok_or("LSP sem stdin")?));
+        let stdout = BufReader::new(child.stdout.take().ok_or("LSP sem stdout")?);
 
-        write_msg(
-            &mut stdin,
-            &json!({
-                "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-                    "processId": null,
-                    "rootUri": root_uri,
-                    "capabilities": {},
-                    "workspaceFolders": [{ "uri": root_uri, "name": "btv" }]
-                }
-            }),
-        )?;
-        // Aguarda a resposta do initialize, respondendo requests do servidor.
-        loop {
-            let m = read_msg(&mut stdout)?;
-            if m.get("method").is_none() && m.get("id").and_then(Value::as_i64) == Some(1) {
-                break;
-            }
-            respond_server_request(&mut stdin, &m)?;
-        }
-        write_msg(
-            &mut stdin,
-            &json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }),
-        )?;
+        // Reader de fundo já de pé ANTES do handshake: assim o próprio
+        // `initialize` (e os requests que o server manda no meio dele) passam
+        // pelo mesmo canal, e nada fica bloqueando o pipe.
+        let shared = Arc::new(Shared::default());
+        let reader = {
+            let stdin = Arc::clone(&stdin);
+            let shared = Arc::clone(&shared);
+            std::thread::spawn(move || reader_loop(stdout, stdin, shared))
+        };
 
-        *slot = Some(LspProc {
+        let mut proc = LspProc {
             child,
             stdin,
-            stdout,
-            next_id: 1,
+            next_id: 0,
             opened: HashSet::new(),
-            diagnostics: HashMap::new(),
-        });
+            shared,
+            reader: Some(reader),
+        };
+
+        proc.request(
+            "initialize",
+            json!({
+                "processId": null,
+                "rootUri": root_uri,
+                "capabilities": {},
+                "workspaceFolders": [{ "uri": root_uri, "name": "btv" }]
+            }),
+            REQUEST_TIMEOUT,
+        )?;
+        {
+            let mut w = proc.stdin.lock().map_err(|_| "lock stdin LSP envenenado")?;
+            write_msg(
+                &mut *w,
+                &json!({ "jsonrpc": "2.0", "method": "initialized", "params": {} }),
+            )?;
+        }
+
+        *slot = Some(proc);
         Ok(())
     }
 
@@ -179,58 +282,19 @@ impl LspSession {
             return Ok(());
         }
         let lang = language_id(uri);
-        write_msg(
-            &mut proc.stdin,
-            &json!({
-                "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
-                    "textDocument": { "uri": uri, "languageId": lang, "version": 1, "text": text }
-                }
-            }),
-        )?;
+        {
+            let mut w = proc.stdin.lock().map_err(|_| "lock stdin LSP envenenado")?;
+            write_msg(
+                &mut *w,
+                &json!({
+                    "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
+                        "textDocument": { "uri": uri, "languageId": lang, "version": 1, "text": text }
+                    }
+                }),
+            )?;
+        }
         proc.opened.insert(uri.to_string());
         Ok(())
-    }
-
-    /// Envia um request e lê até a resposta com o `id`, drenando notificações
-    /// (guardando `publishDiagnostics`) e respondendo requests do servidor no
-    /// caminho — assim o pipe não entope entre consultas.
-    fn request(proc: &mut LspProc, method: &str, params: Value) -> Result<Value, String> {
-        proc.next_id += 1;
-        let id = proc.next_id;
-        write_msg(
-            &mut proc.stdin,
-            &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
-        )?;
-        loop {
-            let m = read_msg(&mut proc.stdout)?;
-            let has_method = m.get("method").is_some();
-            if !has_method {
-                // resposta a algum request nosso
-                if m.get("id").and_then(Value::as_i64) == Some(id) {
-                    if let Some(err) = m.get("error") {
-                        return Err(format!("LSP {method}: {err}"));
-                    }
-                    return Ok(m.get("result").cloned().unwrap_or(Value::Null));
-                }
-                continue; // resposta velha, ignora
-            }
-            if m.get("id").is_some() {
-                // request do servidor → responde para não travar
-                respond_server_request(&mut proc.stdin, &m)?;
-                continue;
-            }
-            // notificação — guarda diagnósticos, ignora o resto
-            if m.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics") {
-                if let Some(params) = m.get("params") {
-                    if let Some(uri) = params.get("uri").and_then(Value::as_str) {
-                        proc.diagnostics.insert(
-                            uri.to_string(),
-                            params.get("diagnostics").cloned().unwrap_or(json!([])),
-                        );
-                    }
-                }
-            }
-        }
     }
 
     /// `textDocument/definition` na posição (0-indexed, convenção LSP), com
@@ -272,7 +336,33 @@ impl LspSession {
         // request no meio da indexação e a spec LSP manda o cliente re-tentar.
         let start = Instant::now();
         loop {
-            match Self::request(proc, method, params.clone()) {
+            match proc.request(method, params.clone(), REQUEST_TIMEOUT) {
+                Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
+                Err(e) => return Err(e),
+                Ok(res) => {
+                    if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
+                        return Ok(res);
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        }
+    }
+
+    /// Busca símbolos por NOME (`workspace/symbol`): o server acha as
+    /// ocorrências e resolve a posição de cada uma. Retry enquanto indexa
+    /// (resultado vazio), como as consultas de posição.
+    pub fn symbol(&self, name: &str) -> Result<Value, String> {
+        let mut guard = self.proc.lock().map_err(|_| "lock LSP envenenado")?;
+        Self::ensure_started(&mut guard, &self.config)?;
+        let proc = guard.as_mut().expect("proc iniciado");
+        let start = Instant::now();
+        loop {
+            match proc.request(
+                "workspace/symbol",
+                json!({ "query": name }),
+                REQUEST_TIMEOUT,
+            ) {
                 Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
                 Err(e) => return Err(e),
                 Ok(res) => {
@@ -286,8 +376,9 @@ impl LspSession {
     }
 
     /// Diagnósticos do arquivo. São empurrados de forma assíncrona pelo server
-    /// após o `didOpen`; a gente bombeia round-trips baratos (`documentSymbol`)
-    /// para drenar as notificações até assentarem ou estourar o orçamento.
+    /// após o `didOpen`; o reader de fundo os captura continuamente, então aqui
+    /// só fazemos polling do stash compartilhado até assentar ou estourar o
+    /// orçamento (não precisa mais bombear round-trips para drenar o pipe).
     pub fn diagnostics(&self, file: &str) -> Result<Value, String> {
         let uri = self.uri_for(file);
         let text = self.read_file(file)?;
@@ -299,13 +390,23 @@ impl LspSession {
         let start = Instant::now();
         let mut first_seen: Option<Instant> = None;
         loop {
-            // Bombeia um round-trip: drena publishDiagnostics para o stash.
-            let _ = Self::request(
-                proc,
-                "textDocument/documentSymbol",
-                json!({ "textDocument": { "uri": uri } }),
-            );
-            let stashed = proc.diagnostics.get(&uri).cloned();
+            if let Some(dead) = proc
+                .shared
+                .inner
+                .lock()
+                .map_err(|_| "lock LSP envenenado")?
+                .dead
+                .clone()
+            {
+                return Err(format!("servidor LSP encerrou: {dead}"));
+            }
+            let stashed = proc
+                .shared
+                .diagnostics
+                .lock()
+                .map_err(|_| "lock LSP envenenado")?
+                .get(&uri)
+                .cloned();
             match &stashed {
                 Some(v) if !is_empty(v) => return Ok(stashed.unwrap()),
                 Some(_) => {
@@ -321,7 +422,48 @@ impl LspSession {
             if start.elapsed() > DIAG_BUDGET {
                 return Ok(stashed.unwrap_or_else(|| json!([])));
             }
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    }
+}
+
+impl LspProc {
+    /// Envia um request e dorme no condvar até o reader de fundo entregar a
+    /// resposta com o `id` (ou o server morrer / estourar o timeout). O reader
+    /// é quem lê o stdout — aqui só escrevemos e esperamos.
+    fn request(&mut self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        self.next_id += 1;
+        let id = self.next_id;
+        {
+            let mut w = self.stdin.lock().map_err(|_| "lock stdin LSP envenenado")?;
+            write_msg(
+                &mut *w,
+                &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
+            )?;
+        }
+        let deadline = Instant::now() + timeout;
+        let mut inner = self
+            .shared
+            .inner
+            .lock()
+            .map_err(|_| "lock LSP envenenado")?;
+        loop {
+            if let Some(res) = inner.responses.remove(&id) {
+                return res.map_err(|e| format!("LSP {method}: {e}"));
+            }
+            if let Some(dead) = &inner.dead {
+                return Err(format!("servidor LSP encerrou durante '{method}': {dead}"));
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(format!("timeout LSP em '{method}'"));
+            }
+            let (guard, _timeout) = self
+                .shared
+                .cv
+                .wait_timeout(inner, deadline - now)
+                .map_err(|_| "lock LSP envenenado")?;
+            inner = guard;
         }
     }
 }
@@ -348,6 +490,9 @@ impl Tool for LspTool {
                 "LSP: referências do símbolo na posição (file, line, character — 0-indexed)"
             }
             LspQuery::Diagnostics => "LSP: diagnósticos (erros/avisos) do arquivo",
+            LspQuery::Symbol => {
+                "LSP: acha símbolos por NOME no workspace (workspace/symbol) — devolve nome:caminho:linha:coluna (0-indexed), sem precisar saber a posição de antemão"
+            }
         }
     }
     fn input_schema(&self) -> Value {
@@ -356,6 +501,11 @@ impl Tool for LspTool {
                 "type": "object",
                 "properties": { "file": { "type": "string" } },
                 "required": ["file"]
+            }),
+            LspQuery::Symbol => json!({
+                "type": "object",
+                "properties": { "name": { "type": "string", "description": "nome (ou prefixo) do símbolo" } },
+                "required": ["name"]
             }),
             _ => json!({
                 "type": "object",
@@ -373,6 +523,16 @@ impl Tool for LspTool {
         format!("lsp:{}/{} {}", self.server_id, self.kind.as_str(), file)
     }
     fn run(&self, args: &Value) -> Result<ToolOutput, ToolError> {
+        // `symbol` é por NOME, não por arquivo — tratado antes de exigir `file`.
+        if self.kind == LspQuery::Symbol {
+            let name = args
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ToolError::InvalidArgs("campo 'name' obrigatório".into()))?;
+            let res = self.session.symbol(name).map_err(ToolError::Execution)?;
+            return Ok(bound_output(render_symbols(&res), DEFAULT_OUTPUT_LIMIT));
+        }
+
         let file = args
             .get("file")
             .and_then(Value::as_str)
@@ -386,6 +546,7 @@ impl Tool for LspTool {
                     .map_err(ToolError::Execution)?;
                 render_diagnostics(file, &res)
             }
+            LspQuery::Symbol => unreachable!("symbol tratado acima"),
             _ => {
                 let line = args.get("line").and_then(Value::as_u64).ok_or_else(|| {
                     ToolError::InvalidArgs("campo 'line' obrigatório (0-indexed)".into())
@@ -409,10 +570,11 @@ impl Tool for LspTool {
     }
 }
 
-/// Registra as três tools (`lsp__<id>__{definition,references,diagnostics}`) de
-/// um server no registry, compartilhando uma sessão preguiçosa. **Não sobe** o
-/// server — isso é feito no primeiro uso (o server é caro). Guarda de colisão
-/// como os loaders de skill/MCP. Devolve quantas foram registradas.
+/// Registra as quatro tools
+/// (`lsp__<id>__{definition,references,diagnostics,symbol}`) de um server no
+/// registry, compartilhando uma sessão preguiçosa. **Não sobe** o server — isso
+/// é feito no primeiro uso (o server é caro). Guarda de colisão como os loaders
+/// de skill/MCP. Devolve quantas foram registradas.
 pub fn register_lsp_server(registry: &mut ToolRegistry, config: &LspServerConfig) -> usize {
     let session = Arc::new(LspSession::new(config.clone()));
     let mut n = 0;
@@ -420,6 +582,7 @@ pub fn register_lsp_server(registry: &mut ToolRegistry, config: &LspServerConfig
         LspQuery::Definition,
         LspQuery::References,
         LspQuery::Diagnostics,
+        LspQuery::Symbol,
     ] {
         let full_name = format!("lsp__{}__{}", config.id, kind.as_str());
         if registry.get(&full_name).is_some() {
@@ -549,6 +712,41 @@ fn render_locations(v: &Value) -> String {
     }
     if lines.is_empty() {
         "(nenhum resultado)".to_string()
+    } else {
+        lines.join("\n")
+    }
+}
+
+/// Renderiza o resultado de `workspace/symbol` (`SymbolInformation[]` ou
+/// `WorkspaceSymbol[]`) como linhas `nome:caminho:linha:coluna` (0-indexed).
+fn render_symbols(v: &Value) -> String {
+    let items: Vec<Value> = match v {
+        Value::Array(a) => a.clone(),
+        Value::Null => vec![],
+        other => vec![other.clone()],
+    };
+    let mut lines = Vec::new();
+    for it in items {
+        let name = it.get("name").and_then(Value::as_str).unwrap_or("?");
+        let loc = it.get("location");
+        let uri = loc
+            .and_then(|l| l.get("uri"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let (line, ch) = loc
+            .and_then(|l| l.get("range"))
+            .and_then(|r| r.get("start"))
+            .map(|s| {
+                (
+                    s.get("line").and_then(Value::as_u64).unwrap_or(0),
+                    s.get("character").and_then(Value::as_u64).unwrap_or(0),
+                )
+            })
+            .unwrap_or((0, 0));
+        lines.push(format!("{}:{}:{}:{}", name, uri_to_path(uri), line, ch));
+    }
+    if lines.is_empty() {
+        "(nenhum símbolo)".to_string()
     } else {
         lines.join("\n")
     }

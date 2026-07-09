@@ -1537,10 +1537,49 @@ corrigidas:**
   esqueleto honesto com `loadgen` real; 3 fixes de marca aplicados e lint de
   marca passando.
 
-**Segue aberto por decisão (não é esquecimento):** sessão MCP persistente;
-thread leak do probe MCP (rmcp não-cancelável); reader de fundo do LSP; LSP
-por nome de símbolo; recall alimentando o planejamento do squad; embeddings
-neurais no RAG; `model` por tarefa no proto `SquadTask` (tela Modelo →
-squad); A/B multivariante; Playwright do 409 concorrente; custo monetário;
-conversores binários; auth do A6; "Review por valor" mock (não-escopo da
-F7 Onda 11).
+## Segunda onda da validação (2026-07-09) — os 13 itens abertos, resolvidos
+
+A lista que antes ficava "aberta por decisão" foi toda executada. Cada item
+com teste (unidade + integração/Playwright real onde aplicável):
+
+1. **Sessão MCP persistente** — `McpSession` (thread dedicada, conecta uma vez
+   e reusa; `Arc` compartilhada pelas tools do servidor). `btv-tools/src/mcp.rs`.
+2. **Thread leak do probe MCP** — operações bounded por `tokio::time::timeout`;
+   a thread da sessão sempre termina, mesmo contra servidor travado.
+3. **Reader de fundo do LSP** — `reader_loop` drena o stdout continuamente
+   (respostas por Condvar, notificações guardadas); nada entope entre consultas.
+   `btv-tools/src/lsp.rs`.
+4. **LSP por nome de símbolo** — tool `lsp__<id>__symbol` (`workspace/symbol`),
+   provada contra o rust-analyzer REAL.
+5. **Recall no planejamento** — o contexto recuperado alimenta
+   `create_adaptive_plan` (antes só contado). Provado por
+   `test_recall_alimenta_o_prompt_do_planejador`.
+6. **Embeddings no RAG** — retriever plugável (`Embedder`/`semantic_rank`):
+   default segue TF-IDF léxico (offline), neural é opt-in de deploy; provado que
+   o caminho semântico casa sinônimo onde o léxico não casa (ADR 0013 atualizado).
+7. **`model` por tarefa no `SquadTask`** — campo novo no proto, plumado até cada
+   agente Python; a tela Modelo controla o squad por tarefa. Provado por
+   `test_model_por_tarefa_sobrepoe_o_default_do_pool`.
+8. **A/B multivariante** — `ExperimentReport::from_variants` (N≥2 com correção
+   de Bonferroni); rota e CLI aceitam 3+ variantes.
+9. **Playwright do 409 concorrente** — `verify-concurrency-real-backend.spec.ts`
+   (dois POST da mesma origem → 202 + 409 com o mesmo run_id).
+10. **Custo monetário** — tokens reais gravados no `llm.call` + tabela de preços
+    (`btv-llm::pricing`); `/api/models/usage` devolve custo estimado por modelo
+    e total, com data de referência; console e produto mostram com nota honesta.
+11. **Conversores binários** — `btv-cli::convert` gera DOCX/XLSX/PDF reais por
+    serialização determinística (ZIP OOXML à mão + CRC32), sem sandbox; PNG/MIDI
+    seguem 422 honesto. DOCX validado no `zipfile` do Python e em Playwright.
+12. **Auth do A6** — PIN opcional por perfil, verificado no backend (hash
+    sha256, nunca exposto); rotas `/pin` e `/verify-pin`; UI de "entrar" com PIN.
+13. **Review por valor** — `btv_schemas::review::ValueReview::from_evidence`
+    (porte fiel das dimensões determinísticas + gates duros do `btv_review`); a
+    tela deixa de fabricar `VALUE_SCORE`/`REVIEWERS` e mostra technical/security
+    reais + gates, com `performance`/`value` (de agente) honestamente não-wiradas.
+
+**Ainda aberto por design honesto** (não é esquecimento): embeddings neurais em
+PRODUÇÃO (o retriever é plugável, mas o embedder default segue léxico —
+offline-first; um backend neural exige API de embeddings/modelo, opt-in de
+deploy); `PNG`/`MIDI` (exigem renderização/mídia real); a certificação plena de
+"Review por valor" (média ponderada das 4 dimensões) depende das duas dimensões
+de agente. Todos documentados no código, não escondidos.

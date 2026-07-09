@@ -308,38 +308,71 @@ struct ModelUsageEntry {
     calls: u64,
     cache_hits: u64,
     cache_misses: u64,
+    input_tokens: u64,
+    output_tokens: u64,
+    /// Provider dono do preço tabelado (rótulo), `None` se sem preço.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<&'static str>,
+    /// Custo estimado em USD (tokens reais × preço tabelado). `None` quando o
+    /// modelo não tem preço na tabela — nunca fabricado.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    estimated_cost_usd: Option<f64>,
 }
 
-/// `GET /api/models/usage` (Fase 7 Onda 7, A5) — agrega os eventos reais
-/// (`llm.call`/`cache.hit`/`cache.miss`, todos já gravados com `props.model`
-/// por `RateLimitedGenerator`/`CachedGenerator`) por modelo; `tier` é
-/// derivado aqui (não em `btv-store`, que não depende de `btv-llm`) via
-/// `model_tier::tier_from_id`, a mesma classificação real usada para
-/// compaction antecipada.
+#[derive(Serialize)]
+struct ModelUsageResponse {
+    entries: Vec<ModelUsageEntry>,
+    /// Soma dos custos estimados dos modelos COM preço tabelado (USD).
+    total_estimated_cost_usd: f64,
+    /// Data de referência da tabela de preços (a estimativa envelhece).
+    pricing_as_of: &'static str,
+}
+
+/// `GET /api/models/usage` (Fase 7 Onda 7, A5; custo na validação de
+/// pendencias.md) — agrega os eventos reais (`llm.call`/`cache.hit`/
+/// `cache.miss`, gravados com `props.model` e, no `llm.call`, os tokens reais
+/// da resposta) por modelo. `tier` é derivado aqui via `tier_from_id`; o custo
+/// estimado vem de `pricing::estimate_cost_usd` (tokens reais × preço tabelado
+/// estático — uma ESTIMATIVA, com `pricing_as_of`, nunca um custo ao vivo).
 async fn model_usage(State(state): State<AppState>) -> impl IntoResponse {
+    let mut total = 0.0;
     let entries: Vec<ModelUsageEntry> = state
         .telemetry
         .model_usage()
         .into_iter()
-        .map(|u| ModelUsageEntry {
-            tier: tier_from_id(&u.model),
-            model: u.model,
-            calls: u.calls,
-            cache_hits: u.cache_hits,
-            cache_misses: u.cache_misses,
+        .map(|u| {
+            let cost =
+                btv_llm::pricing::estimate_cost_usd(&u.model, u.input_tokens, u.output_tokens);
+            if let Some(c) = cost {
+                total += c;
+            }
+            ModelUsageEntry {
+                tier: tier_from_id(&u.model),
+                provider: btv_llm::pricing::price_for(&u.model).map(|p| p.provider),
+                estimated_cost_usd: cost,
+                model: u.model,
+                calls: u.calls,
+                cache_hits: u.cache_hits,
+                cache_misses: u.cache_misses,
+                input_tokens: u.input_tokens,
+                output_tokens: u.output_tokens,
+            }
         })
         .collect();
-    Json(entries)
+    Json(ModelUsageResponse {
+        entries,
+        total_estimated_cost_usd: total,
+        pricing_as_of: btv_llm::pricing::AS_OF,
+    })
 }
 
 /// `GET /api/experiment/:nome` (Fase 7 Onda 9, A2) — relatório de A/B sobre a
 /// telemetria real. Mesma validação que `run_experiment` já aplica na CLI
-/// (`main.rs`): exige exatamente 2 variantes. `404` quando o experimento não
+/// (`main.rs`): aceita 2+ variantes (multivariante, Bonferroni). `404` quando o experimento não
 /// tem nenhum evento (`props.experiment` nunca bateu); `422` quando tem
-/// eventos mas não exatamente 2 variantes distintas (não dá pra fazer um A/B
-/// com 1 ou com 3+ lados) — a requisição em si é válida, é o experimento que
-/// não está no formato certo. Nenhum DTO novo: `ExperimentReport` já deriva
-/// `Serialize`+`JsonSchema` (`experiment.v1`).
+/// eventos mas só 1 variante distinta (não dá pra comparar) — a requisição em
+/// si é válida, é o experimento que não está no formato certo. Nenhum DTO
+/// novo: `ExperimentReport` já deriva `Serialize`+`JsonSchema` (`experiment.v1`).
 async fn get_experiment(
     State(state): State<AppState>,
     AxumPath(nome): AxumPath<String>,
@@ -355,22 +388,26 @@ async fn get_experiment(
         )
             .into_response();
     }
-    if variants.len() != 2 {
+    // Multivariante: 2+ variantes são aceitas (correção de Bonferroni). Só
+    // uma variante (`len() == 1`) não é um experimento comparável → 422.
+    if variants.len() < 2 {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ErrorBody::new(
-                "experiment_needs_two_variants",
+                "experiment_needs_variants",
                 format!(
-                    "A/B exige exatamente 2 variantes; '{nome}' tem {}",
+                    "um experimento comparável exige >=2 variantes; '{nome}' tem {}",
                     variants.len()
                 ),
             )),
         )
             .into_response();
     }
-    let a = VariantStats::new(variants[0].0.clone(), variants[0].1, variants[0].2);
-    let b = VariantStats::new(variants[1].0.clone(), variants[1].1, variants[1].2);
-    let report = ExperimentReport::from_two_variants(nome, "success_rate", a, b, now_rfc3339());
+    let stats: Vec<VariantStats> = variants
+        .into_iter()
+        .map(|(v, n, s)| VariantStats::new(v, n, s))
+        .collect();
+    let report = ExperimentReport::from_variants(nome, "success_rate", stats, now_rfc3339());
     Json(report).into_response()
 }
 
@@ -561,6 +598,9 @@ async fn get_verify_status(
                 "status": "done",
                 "run_id": job.run_id,
                 "evidence": evidence,
+                // Review por valor DERIVADO da evidência real (technical/
+                // security + gates duros) — substitui o mock do frontend.
+                "review": btv_schemas::review::ValueReview::from_evidence(evidence),
             }))
             .into_response(),
             VerifyJobStatus::Failed { message } => Json(serde_json::json!({
@@ -1685,7 +1725,7 @@ mod tests {
             telemetry.record(
                 "llm.call",
                 "s1",
-                serde_json::json!({"model": "claude-sonnet-5"}),
+                serde_json::json!({"model": "claude-sonnet-5", "input_tokens": 1_000_000, "output_tokens": 0}),
                 "t",
             );
         }
@@ -1698,7 +1738,7 @@ mod tests {
         telemetry.record(
             "llm.call",
             "s1",
-            serde_json::json!({"model": "claude-haiku-4-5"}),
+            serde_json::json!({"model": "claude-haiku-4-5", "input_tokens": 500_000, "output_tokens": 0}),
             "t",
         );
         telemetry.record("cache.hit", "s1", serde_json::json!({}), "t");
@@ -1726,7 +1766,7 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        let arr = json.as_array().unwrap();
+        let arr = json["entries"].as_array().unwrap();
         assert_eq!(
             arr.len(),
             2,
@@ -1740,6 +1780,9 @@ mod tests {
         assert_eq!(haiku["tier"], "small");
         assert_eq!(haiku["calls"], 1);
         assert_eq!(haiku["cache_hits"], 0);
+        // 0.5M in × $0.80/Mtok (haiku) = $0.40, estimativa a partir de tokens reais.
+        assert!((haiku["estimated_cost_usd"].as_f64().unwrap() - 0.40).abs() < 1e-9);
+        assert_eq!(haiku["provider"], "anthropic");
 
         let sonnet = arr
             .iter()
@@ -1749,6 +1792,13 @@ mod tests {
         assert_eq!(sonnet["calls"], 2);
         assert_eq!(sonnet["cache_hits"], 1);
         assert_eq!(sonnet["cache_misses"], 0);
+        assert_eq!(sonnet["input_tokens"], 2_000_000);
+        // 2M in × $3/Mtok (sonnet) = $6.00.
+        assert!((sonnet["estimated_cost_usd"].as_f64().unwrap() - 6.00).abs() < 1e-9);
+
+        // Total = $6.00 (sonnet) + $0.40 (haiku) = $6.40; data de referência presente.
+        assert!((json["total_estimated_cost_usd"].as_f64().unwrap() - 6.40).abs() < 1e-9);
+        assert!(json["pricing_as_of"].as_str().unwrap().len() >= 4);
     }
 
     /// Fronteira da Onda 9 (A2): 2 variantes com >= `MIN_SAMPLES` cada batem
@@ -1861,7 +1911,57 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["code"], "experiment_needs_two_variants");
+        assert_eq!(json["code"], "experiment_needs_variants");
+    }
+
+    /// Multivariante: 3 variantes com amostra suficiente produzem um relatório
+    /// (não mais um 422). A domina B e C → vencedor com Bonferroni; a resposta
+    /// carrega `comparisons: 3`.
+    #[tokio::test]
+    async fn experiment_com_tres_variantes_produz_relatorio_multivariante() {
+        let telemetry = Telemetry::open_in_memory().unwrap();
+        let semear = |variant: &str, sucessos: usize, total: usize| {
+            for i in 0..total {
+                telemetry.record(
+                    "llm.call",
+                    "s",
+                    serde_json::json!({
+                        "experiment": "tri", "variant": variant, "success": i < sucessos
+                    }),
+                    "t",
+                );
+            }
+        };
+        semear("A", 95, 100);
+        semear("B", 45, 100);
+        semear("C", 40, 100);
+        let web_dir = fixture_web_dir();
+        let app = router(
+            telemetry,
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/experiment/tri")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["variants"].as_array().unwrap().len(), 3);
+        assert_eq!(json["comparisons"], 3);
+        assert_eq!(json["verdict"], "significant");
+        assert_eq!(json["winner"], "A");
     }
 
     /// Nome sem nenhum evento correspondente é `404` — distinto do `422` de

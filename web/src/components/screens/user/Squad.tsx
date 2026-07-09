@@ -3,6 +3,8 @@ import { Card } from '../../primitives/Card'
 import { Button } from '../../primitives/Button'
 import { ProgressBar } from '../../primitives/ProgressBar'
 import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { useAppState } from '../../../state/AppContext'
+import { primaryModelName } from '../../../api/models'
 import { useToast } from '../../primitives/Toast'
 import {
   connectSquadEvents,
@@ -27,6 +29,7 @@ function formatJsonPreview(raw: string): string {
 
 export function Squad() {
   const toast = useToast()
+  const { modelTier } = useAppState()
   const [task, setTask] = useState('migre o módulo de pagamentos para o novo gateway')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [events, setEvents] = useState<SquadEventEnvelope[]>([])
@@ -116,7 +119,7 @@ export function Squad() {
     setResolvedHitlCount(0)
     setStreamEnded(false)
     try {
-      const { task_id } = await run.run(task)
+      const { task_id } = await run.run(task, primaryModelName(modelTier))
       setTaskId(task_id)
       disconnectRef.current = connectSquadEvents(task_id, {
         onEvent: (event) => setEvents((prev) => [...prev, event]),

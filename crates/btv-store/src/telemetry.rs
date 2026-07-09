@@ -35,6 +35,11 @@ pub struct ModelUsage {
     pub calls: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
+    /// Tokens reais somados de `props.input_tokens`/`output_tokens` dos
+    /// `llm.call` (gravados pelo `RateLimitedGenerator` com o `Usage` da
+    /// resposta) — a base honesta para estimar custo (tokens × preço).
+    pub input_tokens: u64,
+    pub output_tokens: u64,
 }
 
 pub struct TelemetryStore {
@@ -159,7 +164,9 @@ impl TelemetryStore {
             "SELECT json_extract(props, '$.model') AS model,
                     SUM(CASE WHEN name = 'llm.call' THEN 1 ELSE 0 END) AS calls,
                     SUM(CASE WHEN name = 'cache.hit' THEN 1 ELSE 0 END) AS cache_hits,
-                    SUM(CASE WHEN name = 'cache.miss' THEN 1 ELSE 0 END) AS cache_misses
+                    SUM(CASE WHEN name = 'cache.miss' THEN 1 ELSE 0 END) AS cache_misses,
+                    COALESCE(SUM(json_extract(props, '$.input_tokens')), 0) AS input_tokens,
+                    COALESCE(SUM(json_extract(props, '$.output_tokens')), 0) AS output_tokens
              FROM telemetry_event
              WHERE json_extract(props, '$.model') IS NOT NULL
              GROUP BY model
@@ -171,6 +178,8 @@ impl TelemetryStore {
                 calls: row.get(1)?,
                 cache_hits: row.get(2)?,
                 cache_misses: row.get(3)?,
+                input_tokens: row.get::<_, i64>(4)?.max(0) as u64,
+                output_tokens: row.get::<_, i64>(5)?.max(0) as u64,
             })
         })?;
         rows.collect()
@@ -347,7 +356,12 @@ mod tests {
         let store = TelemetryStore::open_in_memory().unwrap();
         for _ in 0..3 {
             store
-                .record("llm.call", "s", &json!({"model": "claude-sonnet-5"}), "t")
+                .record(
+                    "llm.call",
+                    "s",
+                    &json!({"model": "claude-sonnet-5", "input_tokens": 100, "output_tokens": 20}),
+                    "t",
+                )
                 .unwrap();
         }
         store
@@ -357,7 +371,12 @@ mod tests {
             .record("cache.miss", "s", &json!({"model": "claude-sonnet-5"}), "t")
             .unwrap();
         store
-            .record("llm.call", "s", &json!({"model": "claude-haiku-4-5"}), "t")
+            .record(
+                "llm.call",
+                "s",
+                &json!({"model": "claude-haiku-4-5", "input_tokens": 50, "output_tokens": 10}),
+                "t",
+            )
             .unwrap();
         // Ruído: sem `model` e um nome de evento não contado — não devem aparecer.
         store.record("cache.hit", "s", &json!({}), "t").unwrap();
@@ -379,12 +398,16 @@ mod tests {
                     calls: 1,
                     cache_hits: 0,
                     cache_misses: 0,
+                    input_tokens: 50,
+                    output_tokens: 10,
                 },
                 ModelUsage {
                     model: "claude-sonnet-5".into(),
                     calls: 3,
                     cache_hits: 1,
                     cache_misses: 1,
+                    input_tokens: 300,
+                    output_tokens: 60,
                 },
             ]
         );

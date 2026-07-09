@@ -7,14 +7,18 @@ import { ProgressBar } from '../../primitives/ProgressBar'
 import { usePolling } from '../../../hooks/usePolling'
 import { useToast } from '../../primitives/Toast'
 import {
-  REVIEWERS,
-  VALUE_GATE,
-  VALUE_SCORE,
   fetchVerifyStatus,
   startVerifyRun,
+  type ValueReview,
   type VerificationEvidence,
   type VerifyStatus,
 } from '../../../api/verify'
+
+const GATE_LABEL: Record<string, string> = {
+  critical_finding: 'finding crítico na evidência',
+  verify_fail: 'veredito fail do /verify',
+  security_floor: 'segurança abaixo do piso',
+}
 
 function VerifyPoller({ runId, onUpdate }: { runId: string; onUpdate: (status: VerifyStatus) => void }) {
   const state = usePolling(() => fetchVerifyStatus(runId), 500)
@@ -29,9 +33,9 @@ export function Verify() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ step: number; total: number } | null>(null)
   const [evidence, setEvidence] = useState<VerificationEvidence | null>(null)
+  const [review, setReview] = useState<ValueReview | null>(null)
   const [starting, setStarting] = useState(false)
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
-  const [expandedReviewer, setExpandedReviewer] = useState<string | null>(null)
 
   const handleStatusUpdate = useCallback(
     (status: VerifyStatus) => {
@@ -46,6 +50,7 @@ export function Verify() {
         return
       }
       setEvidence(status.evidence)
+      setReview(status.review)
       setProgress(null)
       setActiveRunId(null)
       toast.push(status.evidence.verdict === 'pass' ? 'success' : 'error', `pipeline /verify: ${status.evidence.verdict}`)
@@ -147,38 +152,54 @@ export function Verify() {
 
       <Card>
         <strong>Review por valor</strong>
-        <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-          <Gauge value={VALUE_SCORE} gate={VALUE_GATE} label={`gate > ${VALUE_GATE.toFixed(2)}`} />
-        </div>
-        <div className="row" style={{ justifyContent: 'center', marginBottom: 10 }}>
-          <Badge color="var(--ok)">CERTIFICADO</Badge>
-        </div>
-        <div className="stack">
-          {REVIEWERS.map((r) => (
-            <div key={r.name}>
-              <button
-                onClick={() => setExpandedReviewer(expandedReviewer === r.name ? null : r.name)}
-                className="row"
-                style={{
-                  width: '100%',
-                  justifyContent: 'space-between',
-                  fontSize: 12,
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--ink)',
-                  padding: 0,
-                }}
-              >
-                <span>{r.name}</span>
-                <span className="mono">{r.score.toFixed(2)}</span>
-              </button>
-              <ProgressBar value={r.score} />
-              {expandedReviewer === r.name && (
-                <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{r.detail}</p>
-              )}
+        {!review ? (
+          <p style={{ fontSize: 12, color: 'var(--faint)', marginTop: 10 }}>
+            rode o <span className="mono">/verify</span> — o review por valor é derivado da evidência real
+            (não há mais números fixos aqui).
+          </p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+              <Gauge
+                value={review.security}
+                gate={0.5}
+                label={`segurança · piso 0.50`}
+              />
             </div>
-          ))}
-        </div>
+            <div className="row" style={{ justifyContent: 'center', marginBottom: 10 }}>
+              <Badge color={review.gates_passed ? 'var(--ok)' : 'var(--red)'}>
+                {review.gates_passed ? 'GATES OK' : 'REPROVADO'}
+              </Badge>
+            </div>
+            <div className="stack">
+              <div>
+                <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
+                  <span>technical (passos verdes)</span>
+                  <span className="mono">{review.technical.toFixed(2)}</span>
+                </div>
+                <ProgressBar value={review.technical} />
+              </div>
+              <div>
+                <div className="row" style={{ justifyContent: 'space-between', fontSize: 12 }}>
+                  <span>security (1 − penalidade por finding)</span>
+                  <span className="mono">{review.security.toFixed(2)}</span>
+                </div>
+                <ProgressBar value={review.security} />
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: review.gates_passed ? 'var(--muted)' : 'var(--red)', marginTop: 8 }}>
+              {review.reason}
+              {review.gate_triggered && ` · gate: ${GATE_LABEL[review.gate_triggered] ?? review.gate_triggered}`}
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8 }}>
+              derivado de <span className="mono">btv_schemas::review::ValueReview</span> sobre a evidência real:
+              só as dimensões determinísticas (technical/security) + os gates duros. As dimensões{' '}
+              <em>performance</em> e <em>value</em> do review completo dependem de avaliação de agente e{' '}
+              <strong>não</strong> são fabricadas aqui — a certificação plena (média ponderada das 4) exige esse
+              passo, ainda não wireado.
+            </p>
+          </>
+        )}
       </Card>
     </div>
   )

@@ -416,6 +416,9 @@ async fn try_squad(
             decision_type: "architecture".into(),
             max_autonomy_level: 3,
             verification_evidence_json,
+            // `--model` da CLI também vale por-tarefa (além de ir no `--model`
+            // do sidecar): o Python o sobrepõe ao default do orquestrador.
+            model: opts.model.clone(),
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -692,6 +695,7 @@ mod tests {
                 decision_type: "architecture".into(),
                 max_autonomy_level: 3,
                 verification_evidence_json: String::new(),
+                model: String::new(),
             })
             .await
             .expect("stream aberto");

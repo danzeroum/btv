@@ -72,14 +72,23 @@ class AgentMemorySystem:
             corpus = [rec for rec in corpus if rec.get("agent") == agent]
         return list(reversed(corpus))[:limit]
 
-    def recall_similar(self, query: str, k: int = 5) -> dict[str, Any]:
-        """Recupera as `k` memórias mais similares à `query` por TF-IDF-cosseno
-        sobre o corpus episódico (Fase 6 Onda 6 — recuperação real, substitui o
-        no-op). Devolve listas paralelas (`ids`/`documents`/`metadatas`/`scores`)
-        das relevantes, em ordem decrescente de relevância; vazio se nada casa."""
+    def recall_similar(
+        self, query: str, k: int = 5, embedder: "recall.Embedder | None" = None
+    ) -> dict[str, Any]:
+        """Recupera as `k` memórias mais similares à `query` sobre o corpus
+        episódico (Fase 6 Onda 6 — recuperação real). Sem `embedder`, usa o
+        índice LÉXICO TF-IDF-cosseno (default offline, zero-dep). Com um
+        `embedder` neural injetado, usa recuperação SEMÂNTICA (cosseno de
+        embeddings — casa sinônimo/paráfrase). Devolve listas paralelas
+        (`ids`/`documents`/`metadatas`/`scores`) das relevantes, em ordem
+        decrescente; vazio se nada casa."""
         corpus = self._load_corpus()
         docs = [json.dumps(rec.get("decision", {}), ensure_ascii=False) for rec in corpus]
-        ranked = recall.rank(query, docs, k)
+        ranked = (
+            recall.semantic_rank(query, docs, embedder, k)
+            if embedder is not None
+            else recall.rank(query, docs, k)
+        )
         return {
             "ids": [
                 f"{corpus[i].get('agent', '?')}_{corpus[i].get('timestamp', i)}"

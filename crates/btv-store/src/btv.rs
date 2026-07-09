@@ -9,12 +9,14 @@
 //! o `LedgerStore` — este store guarda estado consultável, não trilha
 //! imutável.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BtvStoreError {
     #[error("erro de storage: {0}")]
     Storage(#[from] rusqlite::Error),
+    #[error("registro não encontrado")]
+    NotFound,
 }
 
 /// Uma squad ativada (execução) — linha de "Minhas squads" (U6) e âncora da
@@ -100,7 +102,8 @@ impl BtvStore {
                 email TEXT NOT NULL,
                 papel TEXT NOT NULL,
                 ativo INTEGER NOT NULL DEFAULT 1,
-                created_ts TEXT NOT NULL
+                created_ts TEXT NOT NULL,
+                pin_hash TEXT
             );
             CREATE TABLE IF NOT EXISTS custom_personas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,6 +113,10 @@ impl BtvStore {
                 updated_ts TEXT NOT NULL
             );",
         )?;
+        // Migração defensiva para bancos criados antes do PIN do A6: adiciona a
+        // coluna se ausente (SQLite não tem "ADD COLUMN IF NOT EXISTS"; um erro
+        // de coluna duplicada em banco já migrado é ignorado).
+        let _ = conn.execute("ALTER TABLE users ADD COLUMN pin_hash TEXT", []);
         Ok(Self { conn })
     }
 
@@ -370,18 +377,25 @@ impl BtvStore {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    // ── A6: perfis locais (sem senha/auth — atribuição de ator, local-first) ──
+    // ── A6: perfis locais com PIN opcional (verificado pelo backend) ──
 
+    /// Cria um perfil, com PIN OPCIONAL. Um `pin` presente é guardado como
+    /// hash (nunca em claro); ausente = perfil aberto (comportamento anterior).
     pub fn insert_user(
         &self,
         nome: &str,
         email: &str,
         papel: &str,
+        pin: Option<&str>,
         now: &str,
     ) -> Result<i64, BtvStoreError> {
+        let pin_hash = pin
+            .filter(|p| !p.is_empty())
+            .map(|p| pin_hash(now, email, nome, p));
         self.conn.execute(
-            "INSERT INTO users (nome, email, papel, ativo, created_ts) VALUES (?1, ?2, ?3, 1, ?4)",
-            params![nome, email, papel, now],
+            "INSERT INTO users (nome, email, papel, ativo, created_ts, pin_hash)
+             VALUES (?1, ?2, ?3, 1, ?4, ?5)",
+            params![nome, email, papel, now, pin_hash],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -394,10 +408,63 @@ impl BtvStore {
         Ok(())
     }
 
+    /// Define (ou limpa, com `None`/vazio) o PIN de um perfil. O salt é
+    /// recomputado dos campos já persistidos (`created_ts|email|nome`).
+    pub fn set_user_pin(&self, id: i64, pin: Option<&str>) -> Result<(), BtvStoreError> {
+        let row: Option<(String, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT created_ts, email, nome FROM users WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        let Some((created_ts, email, nome)) = row else {
+            return Err(BtvStoreError::NotFound);
+        };
+        let hash = pin
+            .filter(|p| !p.is_empty())
+            .map(|p| pin_hash(&created_ts, &email, &nome, p));
+        self.conn.execute(
+            "UPDATE users SET pin_hash = ?2 WHERE id = ?1",
+            params![id, hash],
+        )?;
+        Ok(())
+    }
+
+    /// Verifica o PIN de um perfil contra o hash guardado. Perfil aberto (sem
+    /// PIN) → [`PinCheck::NoPin`] (nada a verificar); id inexistente → `NotFound`.
+    pub fn verify_user_pin(&self, id: i64, pin: &str) -> Result<PinCheck, BtvStoreError> {
+        let row: Option<(String, String, String, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT created_ts, email, nome, pin_hash FROM users WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()?;
+        let Some((created_ts, email, nome, stored)) = row else {
+            return Err(BtvStoreError::NotFound);
+        };
+        match stored {
+            None => Ok(PinCheck::NoPin),
+            Some(stored) => {
+                let candidate = pin_hash(&created_ts, &email, &nome, pin);
+                // Comparação de tamanho fixo (hex de sha256) — diferença de
+                // tempo desprezível para um dashboard local.
+                if candidate == stored {
+                    Ok(PinCheck::Ok)
+                } else {
+                    Ok(PinCheck::Wrong)
+                }
+            }
+        }
+    }
+
     pub fn list_users(&self) -> Result<Vec<BtvUser>, BtvStoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, nome, email, papel, ativo FROM users ORDER BY id")?;
+            .prepare("SELECT id, nome, email, papel, ativo, pin_hash FROM users ORDER BY id")?;
         let rows = stmt.query_map([], |row| {
             Ok(BtvUser {
                 id: row.get(0)?,
@@ -405,14 +472,35 @@ impl BtvStore {
                 email: row.get(2)?,
                 papel: row.get(3)?,
                 ativo: row.get::<_, i64>(4)? != 0,
+                // Nunca vaza o hash — só se HÁ um PIN.
+                has_pin: row.get::<_, Option<String>>(5)?.is_some(),
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 }
 
-/// Perfil local (A6): identidade nomeada para atribuição — SEM autenticação
-/// (local-first, 127.0.0.1). Auth real é trabalho futuro explícito.
+/// Resultado de `verify_user_pin` — perfil aberto, PIN correto ou incorreto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinCheck {
+    NoPin,
+    Ok,
+    Wrong,
+}
+
+/// Hash do PIN: `sha256(created_ts|email|nome|pin)`. O salt (created_ts+
+/// email+nome) é único por perfil e recomputável dos campos persistidos, então
+/// não precisa de coluna própria. **Honesto:** é sha256 simples, não um KDF
+/// pesado — adequado para um PIN de perfil local num dashboard 127.0.0.1, não
+/// para um cofre de senhas exposto à rede.
+fn pin_hash(created_ts: &str, email: &str, nome: &str, pin: &str) -> String {
+    btv_schemas::sha256_hex(&format!("{created_ts}|{email}|{nome}|{pin}"))
+}
+
+/// Perfil local (A6): identidade nomeada para atribuição, com PIN OPCIONAL
+/// verificado pelo backend (hash sha256, nunca em claro). O PIN gate o "assumir
+/// perfil" na UI; não é uma barreira de rede (o dashboard é 127.0.0.1 e
+/// guardado por `Origin`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct BtvUser {
     pub id: i64,
@@ -420,6 +508,8 @@ pub struct BtvUser {
     pub email: String,
     pub papel: String,
     pub ativo: bool,
+    /// Se o perfil exige PIN para ser assumido (o hash em si nunca é exposto).
+    pub has_pin: bool,
 }
 
 /// Artefato exportado — linha da Biblioteca de entregas (U4), com trilha de
@@ -572,5 +662,57 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |r| r.get(0))
             .unwrap();
         assert_eq!(mode, "wal");
+    }
+
+    #[test]
+    fn perfil_sem_pin_e_aberto_com_pin_verifica_backend() {
+        let store = BtvStore::open_in_memory().unwrap();
+        // Perfil aberto (sem PIN): has_pin=false; verify devolve NoPin.
+        let aberto = store
+            .insert_user("Ana", "ana@x", "usuario", None, "t1")
+            .unwrap();
+        // Perfil com PIN: has_pin=true, hash guardado (nunca exposto).
+        let travado = store
+            .insert_user("Bia", "bia@x", "admin", Some("1234"), "t2")
+            .unwrap();
+
+        let users = store.list_users().unwrap();
+        assert!(!users.iter().find(|u| u.id == aberto).unwrap().has_pin);
+        assert!(users.iter().find(|u| u.id == travado).unwrap().has_pin);
+
+        assert_eq!(
+            store.verify_user_pin(aberto, "qualquer").unwrap(),
+            PinCheck::NoPin
+        );
+        assert_eq!(
+            store.verify_user_pin(travado, "1234").unwrap(),
+            PinCheck::Ok
+        );
+        assert_eq!(
+            store.verify_user_pin(travado, "0000").unwrap(),
+            PinCheck::Wrong
+        );
+        assert!(matches!(
+            store.verify_user_pin(999, "x"),
+            Err(BtvStoreError::NotFound)
+        ));
+    }
+
+    #[test]
+    fn set_pin_define_e_limpa() {
+        let store = BtvStore::open_in_memory().unwrap();
+        let id = store
+            .insert_user("Ana", "ana@x", "usuario", None, "t1")
+            .unwrap();
+        assert_eq!(store.verify_user_pin(id, "x").unwrap(), PinCheck::NoPin);
+        // Define um PIN → passa a exigir.
+        store.set_user_pin(id, Some("42")).unwrap();
+        assert!(store.list_users().unwrap()[0].has_pin);
+        assert_eq!(store.verify_user_pin(id, "42").unwrap(), PinCheck::Ok);
+        assert_eq!(store.verify_user_pin(id, "99").unwrap(), PinCheck::Wrong);
+        // Limpa (None) → volta a aberto.
+        store.set_user_pin(id, None).unwrap();
+        assert!(!store.list_users().unwrap()[0].has_pin);
+        assert_eq!(store.verify_user_pin(id, "42").unwrap(), PinCheck::NoPin);
     }
 }

@@ -217,7 +217,9 @@ async fn ativar_squad_handler(
         })
         .collect();
 
-    let task_id = match start_squad_task(&state.squad, descricao) {
+    // A galeria BuildToValue não tem seletor de modelo por ativação (o produto
+    // usa o default do deploy, `BTV_SQUAD_MODEL`); `None` = herda esse default.
+    let task_id = match start_squad_task(&state.squad, descricao, None) {
         Ok(id) => id,
         Err(resp) => return *resp,
     };
@@ -528,10 +530,12 @@ async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Respon
     }
 }
 
-/// `GET /api/btv/deliverables/{id}/download` — baixa o arquivo REAL da
-/// entrega. Formato binário responde 422 explícito ("em breve", aprovação
-/// obs. 3 — sem conversor real, sem fingir); arquivo sumido do disco
-/// responde 404 honesto.
+/// `GET /api/btv/deliverables/{id}/download` — baixa a entrega. Formato de
+/// texto: serve o conteúdo como está. Formato binário: converte o texto por
+/// serialização determinística (DOCX/XLSX/PDF via `crate::convert`, sem
+/// sandbox) ou serve markup como texto (SVG/MusicXML); formatos que exigem
+/// renderização/mídia real (PNG, MIDI) respondem 422 honesto. Arquivo sumido
+/// do disco responde 404.
 async fn download_deliverable_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
@@ -564,41 +568,67 @@ async fn download_deliverable_handler(
         // Formato fora do catálogo do template (extensão de arquivo livre):
         // texto por padrão — o conteúdo é o que a ferramenta gravou.
         .unwrap_or(false);
+    // Lê o conteúdo (texto) gravado pela ferramenta do squad.
+    let content = match std::fs::read(&deliverable.path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody::new(
+                    "file_missing",
+                    format!("arquivo da entrega não encontrado: {e}"),
+                )),
+            )
+                .into_response()
+        }
+    };
     if binario {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorBody::new(
-                "format_not_exportable",
-                format!(
-                    "exportação de {} exige conversor na sandbox — em breve",
-                    deliverable.formato
-                ),
-            )),
-        )
-            .into_response();
+        // Converte o texto para o formato binário por serialização determinística
+        // (DOCX/XLSX/PDF) ou serve markup como texto (SVG/MusicXML). Formatos que
+        // exigem renderização/mídia real (PNG, MIDI) seguem sem conversor → 422.
+        let text = String::from_utf8_lossy(&content);
+        return match crate::convert::convert(&deliverable.formato, &text) {
+            Some(conv) => (
+                StatusCode::OK,
+                [
+                    ("content-type", conv.content_type.to_string()),
+                    (
+                        "content-disposition",
+                        format!(
+                            "attachment; filename=\"{}.{}\"",
+                            deliverable.nome, conv.extension
+                        ),
+                    ),
+                ],
+                conv.bytes,
+            )
+                .into_response(),
+            None => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorBody::new(
+                    "format_not_exportable",
+                    format!(
+                        "exportação de {} exige renderização/conversão de mídia — sem conversor honesto disponível",
+                        deliverable.formato
+                    ),
+                )),
+            )
+                .into_response(),
+        };
     }
-    match std::fs::read(&deliverable.path) {
-        Ok(bytes) => (
-            StatusCode::OK,
-            [
-                ("content-type", "text/plain; charset=utf-8".to_string()),
-                (
-                    "content-disposition",
-                    format!("attachment; filename=\"{}\"", deliverable.nome),
-                ),
-            ],
-            bytes,
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody::new(
-                "file_missing",
-                format!("arquivo da entrega não encontrado: {e}"),
-            )),
-        )
-            .into_response(),
-    }
+    // Formato de texto: serve o conteúdo como está.
+    (
+        StatusCode::OK,
+        [
+            ("content-type", "text/plain; charset=utf-8".to_string()),
+            (
+                "content-disposition",
+                format!("attachment; filename=\"{}\"", deliverable.nome),
+            ),
+        ],
+        content,
+    )
+        .into_response()
 }
 
 // ── personas (U7) ──
@@ -955,6 +985,9 @@ struct NovoUsuarioBody {
     email: String,
     #[serde(default)]
     papel: Option<String>,
+    /// PIN opcional para proteger o perfil (verificado pelo backend).
+    #[serde(default)]
+    pin: Option<String>,
 }
 
 async fn list_users_handler(State(state): State<BtvAgentState>) -> Response {
@@ -986,6 +1019,7 @@ async fn create_user_handler(
         body.nome.trim(),
         body.email.trim(),
         &papel,
+        body.pin.as_deref(),
         &crate::session::now_rfc3339(),
     ) {
         Ok(id) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
@@ -1010,6 +1044,72 @@ async fn set_user_ativo_handler(
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
     match store.set_user_ativo(id, body.ativo) {
         Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct SetPinBody {
+    /// PIN novo; vazio/ausente limpa o PIN (perfil volta a aberto).
+    #[serde(default)]
+    pin: Option<String>,
+}
+
+/// `POST /api/btv/users/:id/pin` — define ou limpa o PIN de um perfil.
+async fn set_user_pin_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+    Json(body): Json<SetPinBody>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.set_user_pin(id, body.pin.as_deref()) {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(btv_store::BtvStoreError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody::new("store_error", e.to_string())),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct VerifyPinBody {
+    pin: String,
+}
+
+/// `POST /api/btv/users/:id/verify-pin` — verifica o PIN de um perfil no
+/// backend (o hash nunca sai). `{ok, reason}`: `no_pin` (perfil aberto),
+/// `ok` (correto) ou `wrong` (incorreto). Sempre HTTP 200 salvo perfil
+/// inexistente (404) — a distinção "aberto/certo/errado" é do corpo.
+async fn verify_user_pin_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+    Json(body): Json<VerifyPinBody>,
+) -> Response {
+    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.verify_user_pin(id, &body.pin) {
+        Ok(check) => {
+            let (ok, reason) = match check {
+                btv_store::PinCheck::NoPin => (true, "no_pin"),
+                btv_store::PinCheck::Ok => (true, "ok"),
+                btv_store::PinCheck::Wrong => (false, "wrong"),
+            };
+            Json(serde_json::json!({ "ok": ok, "reason": reason })).into_response()
+        }
+        Err(btv_store::BtvStoreError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody::new("store_error", e.to_string())),
@@ -1051,6 +1151,11 @@ pub fn router(
             get(list_users_handler).post(create_user_handler),
         )
         .route("/api/btv/users/{id}/ativo", post(set_user_ativo_handler))
+        .route("/api/btv/users/{id}/pin", post(set_user_pin_handler))
+        .route(
+            "/api/btv/users/{id}/verify-pin",
+            post(verify_user_pin_handler),
+        )
         .route("/api/btv/deliverables", get(list_deliverables_handler))
         .route(
             "/api/btv/deliverables/{id}/download",

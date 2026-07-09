@@ -50,10 +50,12 @@ class FakeCoreServicer(core_pb2_grpc.CoreServiceServicer):
         self.by_requester = by_requester
         self.permission_allow = permission_allow
         self.generate_calls: list[str] = []
+        self.generate_models: list[str] = []
         self.permission_calls: list[str] = []
 
     async def Generate(self, request, context):  # noqa: N802
         self.generate_calls.append(request.requester)
+        self.generate_models.append(request.model)
         text = self.by_requester.get(request.requester, "{}")
         yield llm_pb2.LlmChunk(text_delta=text)
         yield llm_pb2.LlmChunk(usage=llm_pb2.Usage(input_tokens=1, output_tokens=2, cache_hit=False, provider="fake"))
@@ -65,7 +67,15 @@ class FakeCoreServicer(core_pb2_grpc.CoreServiceServicer):
 
 
 async def _run_scenario(
-    tmp_path, arch_conf, dev_conf, aud_conf, approved, permission_allow, verification_evidence_json=""
+    tmp_path,
+    arch_conf,
+    dev_conf,
+    aud_conf,
+    approved,
+    permission_allow,
+    verification_evidence_json="",
+    model="",
+    pool_model="claude-sonnet-5",
 ):
     core_sock = str(tmp_path / "core.sock")
     squad_sock = str(tmp_path / "squad.sock")
@@ -78,7 +88,7 @@ async def _run_scenario(
 
     squad_server = grpc.aio.server()
     squad_pb2_grpc.add_SquadServiceServicer_to_server(
-        SquadServicer(core_socket=core_sock, memory_dir=tmp_path), squad_server
+        SquadServicer(core_socket=core_sock, model=pool_model, memory_dir=tmp_path), squad_server
     )
     squad_server.add_insecure_port(f"unix://{squad_sock}")
     await squad_server.start()
@@ -92,6 +102,7 @@ async def _run_scenario(
                 description="publicar serviço",
                 decision_type="architecture",
                 verification_evidence_json=verification_evidence_json,
+                model=model,
             )
         ):
             events.append(ev)
@@ -103,6 +114,34 @@ async def _run_scenario(
 
 def _kinds(events):
     return [ev.WhichOneof("payload") for ev in events]
+
+
+def test_model_por_tarefa_sobrepoe_o_default_do_pool(tmp_path):
+    """O `model` da SquadTask (tela Modelo / --model) chega a CADA agente:
+    todas as chamadas Generate ao CoreService usam o modelo da tarefa, não o
+    default do pool."""
+    _events, core = asyncio.run(
+        _run_scenario(
+            tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True,
+            model="deepseek-chat", pool_model="claude-sonnet-5",
+        )
+    )
+    assert core.generate_models, "esperava chamadas Generate"
+    assert all(m == "deepseek-chat" for m in core.generate_models), (
+        f"todo Generate deveria usar o modelo da tarefa; veio: {set(core.generate_models)}"
+    )
+
+
+def test_model_vazio_na_tarefa_herda_o_default_do_pool(tmp_path):
+    _events, core = asyncio.run(
+        _run_scenario(
+            tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True,
+            model="", pool_model="claude-sonnet-5",
+        )
+    )
+    assert all(m == "claude-sonnet-5" for m in core.generate_models), (
+        f"model vazio deveria herdar o default do pool; veio: {set(core.generate_models)}"
+    )
 
 
 def test_stream_de_eventos_com_consenso_forte(tmp_path):

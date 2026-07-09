@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 // U4 (Biblioteca), U6 (Minhas squads) e U7 (Personas) contra o backend real.
 // O harness semeia via os MESMOS caminhos de produção (seed_btv →
 // BtvStore::insert_run/insert_deliverable): um MD exportável com arquivo
-// real no disco e um DOCX binário (export honesto: "em breve").
+// real no disco e um DOCX (o texto é convertido para um DOCX real no export).
 
 test('biblioteca agrupa entregas reais com trilha e export honesto', async ({ page }) => {
   await page.goto('/')
@@ -20,11 +20,16 @@ test('biblioteca agrupa entregas reais com trilha e export honesto', async ({ pa
   expect(download.ok()).toBeTruthy()
   expect(await download.text()).toContain('conteúdo real do artefato')
 
-  // DOCX binário: sem botão de export — "em breve" (sem conversor real).
+  // DOCX: o texto é convertido para um DOCX REAL na exportação (não mais "em
+  // breve"). O download vem com o content-type de DOCX e a assinatura de ZIP.
   await expect(page.getByText('minuta-seed.docx')).toBeVisible()
-  await expect(page.getByText('em breve')).toBeVisible()
-  const negado = await page.request.get('/api/btv/deliverables/2/download')
-  expect(negado.status()).toBe(422)
+  const docx = await page.request.get('/api/btv/deliverables/2/download')
+  expect(docx.ok()).toBeTruthy()
+  expect(docx.headers()['content-type']).toContain('wordprocessingml.document')
+  const bytes = await docx.body()
+  // Assinatura ZIP (PK\x03\x04) — é um pacote OOXML de verdade.
+  expect(bytes[0]).toBe(0x50)
+  expect(bytes[1]).toBe(0x4b)
 })
 
 test('minhas squads lista runs persistidos com status e ação contextual', async ({ page }) => {

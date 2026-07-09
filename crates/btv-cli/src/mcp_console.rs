@@ -1,6 +1,8 @@
 //! Fase 7 Onda 7 (A1): console MCP — enumera `.btv/mcp.toml`, sonda cada
-//! servidor (`btv_tools::mcp::list_tools_blocking`, com timeout curto) e
-//! calcula o preview de política real via `PermissionEngine::evaluate`
+//! servidor (`btv_tools::mcp::list_tools_blocking`, que agora é bounded por
+//! dentro — a thread da sessão SEMPRE termina, então não há mais o "thread
+//! leak" do probe contra um servidor travado) e calcula o preview de política
+//! real via `PermissionEngine::evaluate`
 //! combinado com o MESMO store de `Rule` persistida da Onda 2
 //! (`web_agent::load_rule_overrides`) — os perfis const (`BUILD`/`PLAN`) não
 //! têm regra nenhuma para `mcp__*`, então sem consultar o override o preview

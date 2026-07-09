@@ -9,20 +9,20 @@
  * (os dois dão um `run_id` para acompanhar via polling).
  */
 import { ApiError, fetchJson } from './client'
-import type { ReviewerScore } from '../types/domain'
 
-/** "Review por valor" (`btv_review`'s gates/certification) ainda não
- * ligado nesta onda — escopo desta fase é só o job de `/verify` em
- * background (ver `docs/PLANO-FASE-7-frontend-primario.md`, Onda 11). */
-export const VALUE_SCORE = 0.86
-export const VALUE_GATE = 0.7
+/** Review por valor DERIVADO da evidência real do `/verify` — espelha
+ * `btv_schemas::review::ValueReview`. Só as dimensões determinísticas
+ * (technical/security) + os gates duros; performance/value dependem de
+ * agente e NÃO são fabricadas aqui. */
+export type GateTriggered = 'critical_finding' | 'verify_fail' | 'security_floor'
 
-export const REVIEWERS: ReviewerScore[] = [
-  { name: 'qualidade', score: 0.9, detail: 'cobertura de testes e clareza do diff acima do gate.' },
-  { name: 'segurança', score: 0.84, detail: 'sem segredos expostos; permissões respeitam a matriz build/plan.' },
-  { name: 'valor', score: 0.88, detail: 'entrega o pedido do usuário sem escopo extra.' },
-  { name: 'manutenção', score: 0.82, detail: 'poucas abstrações novas; segue os padrões existentes do crate.' },
-]
+export interface ValueReview {
+  technical: number
+  security: number
+  gates_passed: boolean
+  gate_triggered?: GateTriggered
+  reason: string
+}
 
 export interface Finding {
   tool: string
@@ -57,7 +57,7 @@ export interface VerifyRunStarted {
 
 export type VerifyStatus =
   | { status: 'running'; run_id: string; step: number; total: number }
-  | { status: 'done'; run_id: string; evidence: VerificationEvidence }
+  | { status: 'done'; run_id: string; evidence: VerificationEvidence; review: ValueReview }
   // Panic interno no pipeline (capturado no servidor via catch_unwind) —
   // terminal como 'done', mas sem evidência para mostrar.
   | { status: 'failed'; run_id: string; message: string }

@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://btv.buildtovalue.dev/schemas/experiment.v1.schema.json",
   "title": "experiment.v1",
-  "description": "Relatório de A/B testing sobre a telemetria (Fase 6 Onda 7). Compara a taxa de sucesso de duas variantes com um teste z de duas proporções; o veredito é derivado dos dados (significant/inconclusive/insufficient_data) e o vencedor só existe quando há significância — nunca fabricado.",
+  "description": "Relatório de A/B testing sobre a telemetria (Fase 6 Onda 7; multivariante desde a validação de pendencias.md). Compara a taxa de sucesso de N>=2 variantes com testes z de duas proporções par-a-par; o veredito é derivado dos dados (significant/inconclusive/insufficient_data) com correção de Bonferroni (α / comparisons) e o vencedor só existe quando bate todas as demais com significância — nunca fabricado.",
   "type": "object",
-  "required": ["experiment", "metric", "variants", "verdict", "p_value", "produced_at"],
+  "required": ["experiment", "metric", "variants", "verdict", "p_value", "comparisons", "produced_at"],
   "properties": {
     "experiment": { "type": "string" },
     "metric": { "type": "string", "examples": ["success_rate"] },
@@ -24,6 +24,7 @@
     "verdict": { "type": "string", "enum": ["significant", "inconclusive", "insufficient_data"] },
     "winner": { "type": "string" },
     "p_value": { "type": "number", "minimum": 0, "maximum": 1 },
+    "comparisons": { "type": "integer", "minimum": 0, "description": "nº de comparações par-a-par (m*(m-1)/2) usadas na correção de Bonferroni; 1 para duas variantes" },
     "produced_at": { "type": "string", "format": "date-time" }
   }
 }

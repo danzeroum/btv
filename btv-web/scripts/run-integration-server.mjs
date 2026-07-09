@@ -46,8 +46,8 @@ writeFileSync(
 
 // 2b. semeia um run concluído + entregas REAIS (mesmo BtvStore de
 // produção): um artefato MD exportável (arquivo de verdade no disco, o
-// download serve o conteúdo real) e um DOCX binário (a UI mostra "em
-// breve" — sem conversor, sem fingir).
+// download serve o conteúdo real) e um DOCX (o texto é convertido para um
+// DOCX real na exportação — serialização determinística, sem sandbox).
 const artigoPath = join(workDir, 'artigo-seed.md')
 writeFileSync(artigoPath, '# Artigo semeado\n\nconteúdo real do artefato para o download.\n')
 const btvDb = join(workDir, '.btv', 'btv.db')
@@ -56,7 +56,7 @@ run('cargo', [
   btvDb, 'editorial', 'Newsletter seed', artigoPath, 'MD',
 ])
 const docxPath = join(workDir, 'minuta-seed.docx')
-writeFileSync(docxPath, 'placeholder binário')
+writeFileSync(docxPath, 'Minuta juridica seed\nclausula primeira\nclausula segunda')
 run('cargo', [
   'run', '-q', '-p', 'btv-store', '--example', 'seed_btv', '--',
   btvDb, 'juridico', 'Minuta seed', docxPath, 'DOCX',

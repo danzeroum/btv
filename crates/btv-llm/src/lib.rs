@@ -10,6 +10,7 @@ pub mod chat;
 pub mod gateway;
 pub mod model_tier;
 pub mod openai;
+pub mod pricing;
 pub mod provider;
 pub mod rate_limit;
 pub mod scripted;

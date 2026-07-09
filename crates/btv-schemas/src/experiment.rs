@@ -2,13 +2,21 @@
 //!
 //! Um experimento atribui eventos de telemetria a variantes (pelas chaves
 //! `props.experiment`, `props.variant` e `props.success`); este módulo compara a
-//! **taxa de sucesso** de duas variantes com um **teste z de duas proporções** e
+//! **taxa de sucesso** das variantes com um **teste z de duas proporções** e
 //! deriva o veredito
 //! **dos dados**: `Significant` (com vencedor) só quando p < α; senão
 //! `Inconclusive` ("sem significância" — nunca inventa vencedor); e
 //! `InsufficientData` quando a amostra é pequena demais para o teste ser
 //! confiável. Mesma postura do `verification::derive_verdict` (veredito honesto
 //! derivado, não fabricado) e da régua "Nada Fake" aplicada a estatística.
+//!
+//! **Multivariante (>2 variantes):** o vencedor é a variante de maior taxa que
+//! bate TODAS as outras ao nível α **corrigido por Bonferroni** (α / número de
+//! comparações par-a-par) — a correção evita declarar um vencedor por acaso só
+//! porque há muitas variantes competindo. O `p_value` reportado é o da
+//! comparação decisiva (o maior p entre o vencedor e as demais: a barra mais
+//! alta que ele teve de passar). Duas variantes é o caso particular com 1
+//! comparação (Bonferroni não altera α).
 //!
 //! Sem crate de estatística no workspace — o teste é hand-rolled em Rust puro
 //! (CDF normal via aproximação de `erf` de Abramowitz-Stegun 7.1.26, |erro| ≤
@@ -70,16 +78,18 @@ pub struct ExperimentReport {
     /// A variante vencedora — `Some` **apenas** quando `verdict == Significant`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub winner: Option<String>,
-    /// p-valor bicaudal do teste z de duas proporções.
+    /// p-valor bicaudal decisivo. Para 2 variantes é o teste z direto; para N,
+    /// é o MAIOR p entre o vencedor e as demais (a comparação mais apertada).
     pub p_value: f64,
+    /// Número de comparações par-a-par usadas na correção de Bonferroni
+    /// (`m*(m-1)/2`). `1` para o caso de duas variantes.
+    pub comparisons: u64,
     pub produced_at: String,
 }
 
 impl ExperimentReport {
-    /// Constrói o relatório a partir de exatamente duas variantes. Veredito
-    /// derivado dos dados: `InsufficientData` se alguma variante tem menos que
-    /// [`MIN_SAMPLES`]; senão o teste z decide `Significant` (vencedor = maior
-    /// taxa) ou `Inconclusive`. **Nunca** devolve vencedor sem significância.
+    /// Constrói o relatório a partir de exatamente duas variantes (açúcar sobre
+    /// [`from_variants`]).
     pub fn from_two_variants(
         experiment: impl Into<String>,
         metric: impl Into<String>,
@@ -87,28 +97,64 @@ impl ExperimentReport {
         b: VariantStats,
         produced_at: impl Into<String>,
     ) -> Self {
-        let (verdict, winner, p_value) = if a.n < MIN_SAMPLES || b.n < MIN_SAMPLES {
+        Self::from_variants(experiment, metric, vec![a, b], produced_at)
+    }
+
+    /// Constrói o relatório a partir de N ≥ 2 variantes. Veredito derivado dos
+    /// dados: `InsufficientData` se alguma variante tem menos que [`MIN_SAMPLES`]
+    /// (ou se há menos de 2 variantes); senão a variante de maior taxa é o
+    /// vencedor **apenas** se bater TODAS as demais ao α corrigido por Bonferroni
+    /// — do contrário `Inconclusive`. **Nunca** devolve vencedor sem
+    /// significância.
+    pub fn from_variants(
+        experiment: impl Into<String>,
+        metric: impl Into<String>,
+        mut variants: Vec<VariantStats>,
+        produced_at: impl Into<String>,
+    ) -> Self {
+        // Ordem determinística: maior taxa primeiro; empate desempata por nome.
+        variants.sort_by(|a, b| {
+            b.rate
+                .partial_cmp(&a.rate)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.variant.cmp(&b.variant))
+        });
+
+        let m = variants.len();
+        let comparisons = (m * m.saturating_sub(1) / 2) as u64;
+        let insufficient = m < 2 || variants.iter().any(|v| v.n < MIN_SAMPLES);
+
+        let (verdict, winner, p_value) = if insufficient {
             (ExperimentVerdict::InsufficientData, None, 1.0)
         } else {
-            let p = two_proportion_p_value(a.successes, a.n, b.successes, b.n);
-            if p < ALPHA {
-                let winner = if a.rate >= b.rate {
-                    a.variant.clone()
-                } else {
-                    b.variant.clone()
-                };
-                (ExperimentVerdict::Significant, Some(winner), p)
+            let best = &variants[0];
+            let others = &variants[1..];
+            // Comparação decisiva = a mais apertada (maior p) do vencedor vs as demais.
+            let worst_p = others
+                .iter()
+                .map(|o| two_proportion_p_value(best.successes, best.n, o.successes, o.n))
+                .fold(0.0_f64, f64::max);
+            // Bonferroni: exige significância no α dividido pelo nº de comparações.
+            let corrected_alpha = ALPHA / comparisons.max(1) as f64;
+            let strictly_best = others.iter().all(|o| best.rate > o.rate);
+            if strictly_best && worst_p < corrected_alpha {
+                (
+                    ExperimentVerdict::Significant,
+                    Some(best.variant.clone()),
+                    worst_p,
+                )
             } else {
-                (ExperimentVerdict::Inconclusive, None, p)
+                (ExperimentVerdict::Inconclusive, None, worst_p)
             }
         };
         Self {
             experiment: experiment.into(),
             metric: metric.into(),
-            variants: vec![a, b],
+            variants,
             verdict,
             winner,
             p_value,
+            comparisons,
             produced_at: produced_at.into(),
         }
     }
@@ -222,5 +268,62 @@ mod tests {
     fn variant_stats_calcula_taxa() {
         assert_eq!(VariantStats::new("A", 4, 1).rate, 0.25);
         assert_eq!(VariantStats::new("A", 0, 0).rate, 0.0);
+    }
+
+    #[test]
+    fn duas_variantes_comparisons_e_um() {
+        let a = VariantStats::new("A", 100, 90);
+        let b = VariantStats::new("B", 100, 50);
+        let r = ExperimentReport::from_two_variants("exp", "success_rate", a, b, "t");
+        assert_eq!(
+            r.comparisons, 1,
+            "2 variantes = 1 comparação (Bonferroni no-op)"
+        );
+        assert_eq!(r.verdict, ExperimentVerdict::Significant);
+    }
+
+    #[test]
+    fn multivariante_vencedor_bate_todos_com_bonferroni() {
+        // A domina B e C com folga enorme → vencedor mesmo com α corrigido (÷3).
+        let variants = vec![
+            VariantStats::new("A", 200, 190),
+            VariantStats::new("B", 200, 90),
+            VariantStats::new("C", 200, 80),
+        ];
+        let r = ExperimentReport::from_variants("exp", "success_rate", variants, "t");
+        assert_eq!(r.comparisons, 3, "3 variantes = 3 comparações par-a-par");
+        assert_eq!(r.verdict, ExperimentVerdict::Significant);
+        assert_eq!(r.winner.as_deref(), Some("A"));
+        // p_value reportado é o da comparação decisiva (a mais apertada).
+        assert!(r.p_value < ALPHA / 3.0);
+    }
+
+    #[test]
+    fn multivariante_lider_apertado_sobre_o_segundo_e_inconclusive() {
+        // A é o maior, mas mal separado de B (o segundo) → não passa Bonferroni,
+        // mesmo dominando C. Nada Fake: sem vencedor.
+        let variants = vec![
+            VariantStats::new("A", 100, 62),
+            VariantStats::new("B", 100, 55),
+            VariantStats::new("C", 100, 20),
+        ];
+        let r = ExperimentReport::from_variants("exp", "success_rate", variants, "t");
+        assert_eq!(r.verdict, ExperimentVerdict::Inconclusive);
+        assert!(
+            r.winner.is_none(),
+            "líder sem separação clara não é vencedor"
+        );
+    }
+
+    #[test]
+    fn multivariante_amostra_pequena_em_uma_variante_e_insuficiente() {
+        let variants = vec![
+            VariantStats::new("A", 100, 90),
+            VariantStats::new("B", 100, 50),
+            VariantStats::new("C", 5, 1), // abaixo de MIN_SAMPLES
+        ];
+        let r = ExperimentReport::from_variants("exp", "success_rate", variants, "t");
+        assert_eq!(r.verdict, ExperimentVerdict::InsufficientData);
+        assert!(r.winner.is_none());
     }
 }

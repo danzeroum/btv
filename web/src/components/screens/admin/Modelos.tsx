@@ -21,16 +21,18 @@ export function Modelos() {
 
   return (
     <AsyncStatus state={state.state} onRetry={() => void state.run()}>
-      {(usage) => {
+      {(data) => {
+        const usage = data.entries
         const totalCalls = usage.reduce((acc, u) => acc + u.calls, 0)
         const top = usage.slice().sort((a, b) => b.calls - a.calls)[0]
+        const fmtUsd = (v: number) => `$${v.toFixed(v < 1 ? 4 : 2)}`
 
         return (
           <div className="stack">
             <div className="row">
               <StatTile value={String(totalCalls)} label="chamadas llm (todos os modelos)" />
               <StatTile value={top ? top.model : '—'} label="modelo mais usado" />
-              <StatTile value={String(usage.length)} label="modelos distintos vistos" />
+              <StatTile value={fmtUsd(data.total_estimated_cost_usd)} label="custo estimado (USD)" />
             </div>
 
             {usage.length === 0 ? (
@@ -46,8 +48,23 @@ export function Modelos() {
                   { key: 'model', header: 'modelo', render: (u) => <span className="mono">{u.model}</span> },
                   { key: 'tier', header: 'tier', render: (u) => <Badge>{u.tier}</Badge> },
                   { key: 'calls', header: 'chamadas', render: (u) => u.calls },
-                  { key: 'cache_hits', header: 'cache hit', render: (u) => u.cache_hits },
-                  { key: 'cache_misses', header: 'cache miss', render: (u) => u.cache_misses },
+                  {
+                    key: 'tokens',
+                    header: 'tokens (in/out)',
+                    render: (u) => `${u.input_tokens.toLocaleString()} / ${u.output_tokens.toLocaleString()}`,
+                  },
+                  {
+                    key: 'cost',
+                    header: 'custo est. (USD)',
+                    render: (u) =>
+                      u.estimated_cost_usd === undefined ? (
+                        <span style={{ color: 'var(--faint)' }} title="sem preço tabelado para este modelo">
+                          sem preço
+                        </span>
+                      ) : (
+                        fmtUsd(u.estimated_cost_usd)
+                      ),
+                  },
                   {
                     key: 'hit_rate',
                     header: 'hit rate',
@@ -58,9 +75,10 @@ export function Modelos() {
             )}
 
             <div style={{ fontSize: 11, color: 'var(--faint)' }}>
-              tier derivado de <span className="mono">model_tier::tier_from_id</span> · agrega{' '}
-              <span className="mono">llm.call</span>/<span className="mono">cache.hit</span>/
-              <span className="mono">cache.miss</span> da telemetria real
+              tier derivado de <span className="mono">model_tier::tier_from_id</span> · custo ={' '}
+              <strong>estimativa</strong> a partir de tokens reais × tabela de preços estática (referência{' '}
+              <span className="mono">{data.pricing_as_of}</span>, envelhece — não é custo cobrado). Modelo sem
+              preço tabelado aparece como "sem preço", nunca com custo fabricado.
             </div>
           </div>
         )

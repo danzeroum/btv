@@ -23,6 +23,10 @@ message SquadTask {
   // Ausente/inválida (string vazia ou JSON malformado) é tratado como
   // fail-closed pelo lado Python (server.py), nunca como "sem evidência = ok".
   string verification_evidence_json = 5;
+  // Modelo LLM a usar NESTA tarefa (ex.: "deepseek-chat"). Vazio = herda o
+  // default do pool/sidecar (`--model`). Permite a tela Modelo/o `--model`
+  // controlarem o squad por tarefa, em vez de um modelo fixo por processo.
+  string model = 6;
 }
 
 message SquadEvent {

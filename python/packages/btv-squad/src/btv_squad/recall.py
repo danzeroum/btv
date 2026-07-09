@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Iterable
+from typing import Iterable, Protocol, Sequence
 
 # Stopwords PT+EN comuns: removidas para o TF-IDF discriminar por conteúdo, não
 # por conectivos ubíquos. Lista modesta e transparente (não é um recurso oculto).
@@ -107,5 +107,55 @@ def rank(query: str, docs: list[str], k: int = 5) -> list[tuple[int, float]]:
         s = _cosine(qvec, _vector(toks, idf))
         if s > 1e-9:
             scored.append((i, s))
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    return scored[:k]
+
+
+# ── Recuperação semântica plugável (embeddings) ────────────────────────────
+#
+# `rank` acima é LÉXICO (TF-IDF): casa por termos distintivos em comum, não faz
+# ponte de sinônimo/paráfrase. Para recuperação SEMÂNTICA de verdade (sinônimo,
+# "sandbox" ↔ "contêiner/docker"), o retriever passa a aceitar um `Embedder`:
+# qualquer coisa que transforme texto em um vetor denso. O ranqueamento então é
+# cosseno sobre esses vetores — `semantic_rank`.
+#
+# **Honestidade (ADR 0013):** o embedder PADRÃO da plataforma segue sendo o
+# léxico (offline, zero-dep). Um embedder NEURAL (transformer via API de
+# embeddings, ou um modelo local) é injetável por quem quiser semântica de
+# sinônimo, ao custo de rede/peso — não é o default por causa do princípio
+# offline-first. Esta camada torna o retriever agnóstico ao embedder (antes era
+# TF-IDF hardwired); qual embedder usar é uma escolha de deploy.
+
+
+class Embedder(Protocol):
+    """Transforma textos em vetores densos. Um embedder neural (API/modelo) e um
+    embedder de teste (`ScriptedEmbedder`) satisfazem o mesmo contrato."""
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+
+def _dense_cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def semantic_rank(
+    query: str, docs: list[str], embedder: Embedder, k: int = 5
+) -> list[tuple[int, float]]:
+    """Ranqueia `docs` por similaridade de EMBEDDING (cosseno sobre vetores
+    densos) com `query`. Mesmo contrato de saída de `rank` (`[(índice, score)]`
+    dos top-`k` com score positivo, decrescente), mas o casamento é semântico —
+    dois textos sinônimos com vetores próximos casam mesmo sem termo em comum.
+    """
+    if not docs or k <= 0:
+        return []
+    vectors = embedder.embed([query, *docs])
+    qvec, dvecs = vectors[0], vectors[1:]
+    scored = [(i, _dense_cosine(qvec, dv)) for i, dv in enumerate(dvecs)]
+    scored = [(i, s) for i, s in scored if s > 1e-9]
     scored.sort(key=lambda pair: pair[1], reverse=True)
     return scored[:k]

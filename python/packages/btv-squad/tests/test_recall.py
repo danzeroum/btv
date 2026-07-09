@@ -4,7 +4,7 @@ Provam recuperação REAL por relevância — não vacuidade: ground truth com
 conjuntos disjuntos, discriminação por termo distintivo (IDF), e os cantos
 honestos (corpus vazio, consulta sem casamento, limite k)."""
 
-from btv_squad.recall import rank
+from btv_squad.recall import rank, semantic_rank
 
 
 # Ground truth: dois tópicos com um termo distintivo COMPARTILHADO por todos os
@@ -80,3 +80,68 @@ def test_termo_ubiquo_nao_domina_a_relevancia():
     ]
     ranked = rank("senha do usuário", docs, k=1)
     assert ranked[0][0] == 0, f"o doc com 'senha' deveria vencer; veio {ranked}"
+
+
+# ── Recuperação SEMÂNTICA plugável (embeddings) ────────────────────────────
+
+
+class _ScriptedEmbedder:
+    """Embedder de teste: mapeia textos a vetores por CONCEITO (não por termo),
+    modelando o que um embedder neural faria — sinônimos caem perto no espaço.
+    Prova que o retriever semântico casa por significado, não por token."""
+
+    # Eixos conceituais: [contenção/isolamento, autenticação].
+    _CONCEITO = {
+        "sandbox": [1.0, 0.0],
+        "contêiner": [1.0, 0.0],
+        "container": [1.0, 0.0],
+        "docker": [0.9, 0.0],
+        "isolar": [0.8, 0.0],
+        "confinar": [0.8, 0.0],
+        "login": [0.0, 1.0],
+        "senha": [0.0, 1.0],
+        "autenticação": [0.0, 1.0],
+        "credencial": [0.0, 0.9],
+    }
+
+    def embed(self, texts):
+        out = []
+        for t in texts:
+            low = t.casefold()
+            vec = [0.0, 0.0]
+            for termo, v in self._CONCEITO.items():
+                if termo in low:
+                    vec[0] += v[0]
+                    vec[1] += v[1]
+            # Sem conceito reconhecido → vetor neutro pequeno (não casa forte).
+            out.append(vec if vec != [0.0, 0.0] else [0.01, 0.01])
+        return out
+
+
+def test_semantic_rank_faz_ponte_de_sinonimo_que_o_tfidf_nao_faz():
+    """A consulta usa "contêiner/docker"; o doc relevante fala "sandbox" — SEM
+    termo em comum. TF-IDF não casa (score 0); o retriever semântico casa pelo
+    conceito de contenção. É a diferença léxico × semântico."""
+    docs = [
+        "isolar o sandbox como somente-leitura",  # 0 — conceito: contenção
+        "corrigir o fluxo de login e senha",      # 1 — conceito: autenticação
+    ]
+    consulta = "confinar o contêiner docker"
+
+    # Léxico: sem termo compartilhado com o doc 0 → não o recupera.
+    lex = {i for i, _ in rank(consulta, docs, k=2)}
+    assert 0 not in lex, "TF-IDF não deveria casar sinônimo sem termo em comum"
+
+    # Semântico: casa o doc de contenção (0), não o de autenticação (1).
+    sem = semantic_rank(consulta, docs, _ScriptedEmbedder(), k=2)
+    assert sem, "o retriever semântico deveria recuperar algo"
+    assert sem[0][0] == 0, f"esperava o doc de contenção (0) no topo; veio {sem}"
+
+
+def test_semantic_rank_respeita_contrato_de_saida():
+    docs = ["sandbox docker isolado", "login e senha do usuário"]
+    ranked = semantic_rank("autenticação com credencial", docs, _ScriptedEmbedder(), k=2)
+    # Ordem decrescente, score positivo, top = o doc de autenticação (1).
+    assert [s for _, s in ranked] == sorted((s for _, s in ranked), reverse=True)
+    assert ranked[0][0] == 1
+    assert semantic_rank("x", [], _ScriptedEmbedder(), k=5) == []
