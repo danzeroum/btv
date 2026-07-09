@@ -55,3 +55,20 @@ consulta (corpus pequeno); funciona entre sessões e dentro da sessão.
   raciocínio do squad, fora da fronteira desta onda (correção da recuperação).
 - O scaffolding `chromadb` (inativo) permanece como sink alternativo para um futuro
   vector DB real; o recall não depende mais dele.
+
+## Atualização (validação de pendencias.md, 2026-07)
+
+- **Retriever plugável (embeddings).** `recall.py` deixou de ser TF-IDF
+  hardwired: um `Embedder` (protocolo `embed(texts) -> vetores densos`) pode ser
+  injetado e o ranqueamento passa a ser cosseno sobre embeddings
+  (`semantic_rank`), casando **sinônimo/paráfrase** — exatamente o limite
+  "contêiner ↔ sandbox" exposto pelo teste. O embedder **PADRÃO segue léxico**
+  (TF-IDF, offline, zero-dep — o princípio deste ADR permanece); um embedder
+  neural (API de embeddings ou modelo local) é **opt-in de deploy**, ao custo de
+  rede/peso. Provado por um `_ScriptedEmbedder` nos testes: a consulta semântica
+  recupera o doc de conceito correto **sem termo em comum**, onde o TF-IDF não
+  casa. `AgentMemorySystem.recall_similar(query, k, embedder=None)` reflete isso.
+- **Recall no planejamento (era follow-up).** O contexto recuperado agora
+  alimenta `create_adaptive_plan` (bloco de contexto do prompt do planejador),
+  não é mais só contado.
+- **Scaffolding chromadb removido** (não só inativo) — o recall lê só o JSONL.
