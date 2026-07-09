@@ -7,6 +7,7 @@
 
 mod btv_agent;
 mod cache;
+mod convert;
 mod doctor_console;
 mod lsp_console;
 mod mcp_console;

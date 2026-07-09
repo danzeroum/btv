@@ -530,10 +530,12 @@ async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Respon
     }
 }
 
-/// `GET /api/btv/deliverables/{id}/download` — baixa o arquivo REAL da
-/// entrega. Formato binário responde 422 explícito ("em breve", aprovação
-/// obs. 3 — sem conversor real, sem fingir); arquivo sumido do disco
-/// responde 404 honesto.
+/// `GET /api/btv/deliverables/{id}/download` — baixa a entrega. Formato de
+/// texto: serve o conteúdo como está. Formato binário: converte o texto por
+/// serialização determinística (DOCX/XLSX/PDF via `crate::convert`, sem
+/// sandbox) ou serve markup como texto (SVG/MusicXML); formatos que exigem
+/// renderização/mídia real (PNG, MIDI) respondem 422 honesto. Arquivo sumido
+/// do disco responde 404.
 async fn download_deliverable_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
@@ -566,41 +568,67 @@ async fn download_deliverable_handler(
         // Formato fora do catálogo do template (extensão de arquivo livre):
         // texto por padrão — o conteúdo é o que a ferramenta gravou.
         .unwrap_or(false);
+    // Lê o conteúdo (texto) gravado pela ferramenta do squad.
+    let content = match std::fs::read(&deliverable.path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody::new(
+                    "file_missing",
+                    format!("arquivo da entrega não encontrado: {e}"),
+                )),
+            )
+                .into_response()
+        }
+    };
     if binario {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorBody::new(
-                "format_not_exportable",
-                format!(
-                    "exportação de {} exige conversor na sandbox — em breve",
-                    deliverable.formato
-                ),
-            )),
-        )
-            .into_response();
+        // Converte o texto para o formato binário por serialização determinística
+        // (DOCX/XLSX/PDF) ou serve markup como texto (SVG/MusicXML). Formatos que
+        // exigem renderização/mídia real (PNG, MIDI) seguem sem conversor → 422.
+        let text = String::from_utf8_lossy(&content);
+        return match crate::convert::convert(&deliverable.formato, &text) {
+            Some(conv) => (
+                StatusCode::OK,
+                [
+                    ("content-type", conv.content_type.to_string()),
+                    (
+                        "content-disposition",
+                        format!(
+                            "attachment; filename=\"{}.{}\"",
+                            deliverable.nome, conv.extension
+                        ),
+                    ),
+                ],
+                conv.bytes,
+            )
+                .into_response(),
+            None => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorBody::new(
+                    "format_not_exportable",
+                    format!(
+                        "exportação de {} exige renderização/conversão de mídia — sem conversor honesto disponível",
+                        deliverable.formato
+                    ),
+                )),
+            )
+                .into_response(),
+        };
     }
-    match std::fs::read(&deliverable.path) {
-        Ok(bytes) => (
-            StatusCode::OK,
-            [
-                ("content-type", "text/plain; charset=utf-8".to_string()),
-                (
-                    "content-disposition",
-                    format!("attachment; filename=\"{}\"", deliverable.nome),
-                ),
-            ],
-            bytes,
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody::new(
-                "file_missing",
-                format!("arquivo da entrega não encontrado: {e}"),
-            )),
-        )
-            .into_response(),
-    }
+    // Formato de texto: serve o conteúdo como está.
+    (
+        StatusCode::OK,
+        [
+            ("content-type", "text/plain; charset=utf-8".to_string()),
+            (
+                "content-disposition",
+                format!("attachment; filename=\"{}\"", deliverable.nome),
+            ),
+        ],
+        content,
+    )
+        .into_response()
 }
 
 // ── personas (U7) ──

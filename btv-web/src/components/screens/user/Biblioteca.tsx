@@ -51,6 +51,10 @@ export function Biblioteca() {
         const cor = template?.cor ?? 'var(--brand)'
         const binarioDe = (formato: string) =>
           template?.formatos.find((f) => f.nome === formato)?.binario ?? false
+        // Formatos que exigem renderização/mídia real e ainda não têm conversor
+        // honesto — o resto (DOCX/XLSX/PDF/SVG/MusicXML) é convertido no backend.
+        const semConversor = (formato: string) =>
+          ['png', 'midi'].includes(formato.toLowerCase())
         return (
           <div key={templateId} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
@@ -63,7 +67,7 @@ export function Biblioteca() {
               </span>
             </div>
             {artefatos.map((a) => {
-              const binario = binarioDe(a.formato)
+              const emBreve = binarioDe(a.formato) && semConversor(a.formato)
               return (
                 <div
                   key={a.id}
@@ -82,10 +86,10 @@ export function Biblioteca() {
                     </span>
                   </div>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.55 }}>{a.trilha}</span>
-                  {binario ? (
+                  {emBreve ? (
                     <span
                       className="mono"
-                      title="exportação exige conversor na sandbox — em breve"
+                      title="exige renderização/conversão de mídia real — sem conversor honesto ainda"
                       style={{ fontSize: 10.5, color: 'var(--faint)', border: '1px dashed var(--line2)', borderRadius: 8, padding: '7px 14px' }}
                     >
                       em breve
