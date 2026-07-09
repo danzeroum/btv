@@ -175,14 +175,40 @@ function hhmm(ts: string): string {
   return m ? `${m[1]}:${m[2]}` : ts.slice(0, 5)
 }
 
+/** O orquestrador roda um elenco FIXO de agentes (architect → developer →
+ *  reviewer → auditor), na mesma ordem que os papéis do template ocupam a
+ *  esteira (`papeis[0..3]`). O feed/chat mostravam o nome cru do MOTOR
+ *  ("architect"/"Arquiteto"), divergindo da esteira, que usa o papel do
+ *  template ("Pauteiro"). Este mapa alinha os dois — cobrindo as formas em
+ *  inglês (feed) e em português (chat). */
+const AGENTE_INDICE: Record<string, number> = {
+  architect: 0,
+  arquiteto: 0,
+  developer: 1,
+  desenvolvedor: 1,
+  reviewer: 2,
+  revisor: 2,
+  auditor: 3,
+}
+
+/** Traduz o identificador de um agente do orquestrador para o papel do
+ *  template (Pauteiro/Redator/…). Passa direto qualquer nome que não seja um
+ *  agente conhecido (ex.: "Você", "Squad") — sem inventar rótulo. */
+export function papelDoAgente(agente: string, papeis: string[]): string {
+  const idx = AGENTE_INDICE[agente.trim().toLowerCase()]
+  return idx !== undefined && papeis[idx] ? papeis[idx] : agente
+}
+
 export interface FeedItem {
   ts: string
   txt: string
 }
 
 /** Deriva o feed de atividade (coluna direita de U3) dos eventos reais —
- *  mais recente primeiro. */
-export function feedFromEvents(events: SquadEventEnvelope[]): FeedItem[] {
+ *  mais recente primeiro. `papeis` (papéis ativos do template) traduz os nomes
+ *  dos agentes do motor para os papéis mostrados na esteira. */
+export function feedFromEvents(events: SquadEventEnvelope[], papeis: string[] = []): FeedItem[] {
+  const papel = (agente: string) => papelDoAgente(agente, papeis)
   const out: FeedItem[] = []
   for (const ev of events) {
     const ts = hhmm(ev.ts)
@@ -191,17 +217,17 @@ export function feedFromEvents(events: SquadEventEnvelope[]): FeedItem[] {
     if ('Proposal' in p) {
       out.push({
         ts,
-        txt: `${p.Proposal.agent} propôs (confiança ${Math.round(p.Proposal.confidence * 100)}%)`,
+        txt: `${papel(p.Proposal.agent)} propôs (confiança ${Math.round(p.Proposal.confidence * 100)}%)`,
       })
     } else if ('Consensus' in p) {
       out.push({
         ts,
-        txt: `consenso de ${p.Consensus.decision_maker || 'squad'} (força ${Math.round(p.Consensus.strength * 100)}%)${p.Consensus.requires_human ? ' — aguarda humano' : ''}`,
+        txt: `consenso de ${p.Consensus.decision_maker ? papel(p.Consensus.decision_maker) : 'squad'} (força ${Math.round(p.Consensus.strength * 100)}%)${p.Consensus.requires_human ? ' — aguarda humano' : ''}`,
       })
     } else if ('Handoff' in p) {
       out.push({
         ts,
-        txt: `${p.Handoff.from_agent} ${HANDOFF_LABEL[p.Handoff.phase] ?? 'handoff'} ${p.Handoff.to_agent}`,
+        txt: `${papel(p.Handoff.from_agent)} ${HANDOFF_LABEL[p.Handoff.phase] ?? 'handoff'} ${papel(p.Handoff.to_agent)}`,
       })
     } else if ('Hitl' in p) {
       out.push({ ts, txt: `✋ gate aberto — aguarda sua decisão (${p.Hitl.reason})` })

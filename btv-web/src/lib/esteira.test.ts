@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { esteiraFromEvents, feedFromEvents, makeEtapas, type Etapa } from './esteira'
+import { esteiraFromEvents, feedFromEvents, makeEtapas, papelDoAgente, type Etapa } from './esteira'
 import type { SquadEventEnvelope, SquadEventPayload } from '../api/squad'
 import type { SquadTemplate } from '../api/templates'
 
@@ -140,5 +140,33 @@ describe('feedFromEvents', () => {
     expect(feed[2].txt).toContain('architect propôs')
     expect(feed[1].txt).toContain('✋ gate aberto')
     expect(feed[0].ts).toBe('10:15')
+  })
+
+  it('com papeis, traduz o agente do motor para o papel do template', () => {
+    const papeis = ['Pauteiro', 'Redator', 'Revisor de estilo', 'Fact-checker']
+    const feed = feedFromEvents(
+      [ev({ Proposal: { agent: 'architect', confidence: 0.85, content_json: '{}' } })],
+      papeis,
+    )
+    // "architect" → papeis[0] = "Pauteiro" (alinha com a esteira).
+    expect(feed[0].txt).toContain('Pauteiro propôs')
+    expect(feed[0].txt).not.toContain('architect')
+  })
+})
+
+describe('papelDoAgente', () => {
+  const papeis = ['Pauteiro', 'Redator', 'Revisor de estilo', 'Fact-checker']
+  it('mapeia agentes do motor (inglês e português) para o papel do template', () => {
+    expect(papelDoAgente('architect', papeis)).toBe('Pauteiro')
+    expect(papelDoAgente('Desenvolvedor', papeis)).toBe('Redator')
+    expect(papelDoAgente('reviewer', papeis)).toBe('Revisor de estilo')
+    expect(papelDoAgente('Auditor', papeis)).toBe('Fact-checker')
+  })
+  it('passa direto nomes que não são agentes (sem inventar rótulo)', () => {
+    expect(papelDoAgente('Você', papeis)).toBe('Você')
+    expect(papelDoAgente('Squad', papeis)).toBe('Squad')
+  })
+  it('sem papeis, devolve o nome original', () => {
+    expect(papelDoAgente('architect', [])).toBe('architect')
   })
 })

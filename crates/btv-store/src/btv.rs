@@ -169,6 +169,21 @@ impl BtvStore {
             .unwrap_or(0)
     }
 
+    /// Reconcilia runs ZUMBIS no arranque: uma run `ativa` no volume cujo
+    /// processo já morreu (crash, restart, container recriado) não tem como
+    /// estar realmente rodando — o estado vivo da squad mora só na MEMÓRIA do
+    /// processo, que se foi. Marca todas as `ativa` como `encerrada` para não
+    /// ficarem "ativa" para sempre na tela. Deve rodar SÓ no arranque do
+    /// dashboard (quando nada ainda está rodando neste processo). Devolve
+    /// quantas reconciliou.
+    pub fn reconcile_stale_runs(&self, now: &str) -> Result<usize, BtvStoreError> {
+        let n = self.conn.execute(
+            "UPDATE runs SET status = 'encerrada', updated_ts = ?1 WHERE status = 'ativa'",
+            params![now],
+        )?;
+        Ok(n)
+    }
+
     /// Transição de status ao fim da execução (`concluida`/`erro`) ou no
     /// kill-switch (`encerrada`). Silencioso para task_id desconhecido — o
     /// watcher pode sobreviver a um run apagado.
@@ -751,6 +766,25 @@ mod tests {
         store.set_user_pin(id, None).unwrap();
         assert!(!store.list_users().unwrap()[0].has_pin);
         assert_eq!(store.verify_user_pin(id, "42").unwrap(), PinCheck::NoPin);
+    }
+
+    #[test]
+    fn reconcile_stale_runs_encerra_ativas_orfas() {
+        let store = BtvStore::open_in_memory().unwrap();
+        store
+            .insert_run("sq1", "editorial", "v1", "R1", "[]", "[]", "t1")
+            .unwrap(); // fica 'ativa'
+        store
+            .insert_run("sq2", "editorial", "v1", "R2", "[]", "[]", "t2")
+            .unwrap();
+        store.set_status("sq2", "concluida", "t2").unwrap(); // concluída NÃO deve mudar
+        let n = store.reconcile_stale_runs("t3").unwrap();
+        assert_eq!(n, 1, "só a 'ativa' órfã é reconciliada");
+        let runs = store.list_runs().unwrap();
+        let sq1 = runs.iter().find(|r| r.task_id == "sq1").unwrap();
+        let sq2 = runs.iter().find(|r| r.task_id == "sq2").unwrap();
+        assert_eq!(sq1.status, "encerrada");
+        assert_eq!(sq2.status, "concluida", "concluída fica intacta");
     }
 
     #[test]

@@ -40,6 +40,35 @@ pub struct Gateway {
     providers: Vec<ProviderConfig>,
 }
 
+/// Cliente HTTP dos providers COM timeouts. Sem eles (`reqwest::Client::new()`),
+/// uma chamada a um provider que trava (rede caída, rate-limit sem resposta,
+/// servidor pendurado) fica ESPERANDO PARA SEMPRE e congela o agente/squad
+/// inteiro — visto em produção: uma squad ao vivo parou na Revisão e a run
+/// ficou `ativa` zumbi sem nunca concluir nem errar.
+///
+/// `read_timeout` é de OCIOSIDADE (dispara se NENHUM byte chega na janela),
+/// então não corta um stream longo porém ativo — só o que emperrou de vez;
+/// `connect_timeout` cobre o aperto de mão. Ambos configuráveis por env.
+fn build_http_client() -> reqwest::Client {
+    let secs = |var: &str, default: u64| -> u64 {
+        std::env::var(var)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
+    };
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(secs(
+            "BTV_LLM_CONNECT_TIMEOUT_SECS",
+            30,
+        )))
+        .read_timeout(std::time::Duration::from_secs(secs(
+            "BTV_LLM_READ_TIMEOUT_SECS",
+            120,
+        )))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 impl Gateway {
     /// Detecta providers pelas variáveis de ambiente, na ordem da cadeia de
     /// fallback padrão: Anthropic → DeepSeek → OpenAI.
@@ -75,7 +104,7 @@ impl Gateway {
             })
             .collect();
         Self {
-            client: reqwest::Client::new(),
+            client: build_http_client(),
             providers,
         }
     }
