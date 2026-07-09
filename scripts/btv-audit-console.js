@@ -60,7 +60,7 @@ window.btvAudit = async function btvAudit(opts = {}) {
     // Fronteira de método: rotas POST-only não podem responder a GET
     await (async()=>{ const r = await req('GET','/api/ledger/verify'); r.status===405 ? P(V,'GET em rota POST-only (ledger/verify)','405 correto') : r.status===200 ? F(V,'GET em rota POST-only (ledger/verify)','200! método não checado') : W(V,'GET em rota POST-only (ledger/verify)',`veio ${r.status}`) })()
     await (async()=>{ const r = await req('GET','/api/verify/run'); r.status===405 ? P(V,'GET em rota POST-only (verify/run)','405 correto') : r.status===200 ? F(V,'GET em rota POST-only (verify/run)','200! disparou verify por GET') : W(V,'GET em rota POST-only (verify/run)',`veio ${r.status}`) })()
-    await (async()=>{ const r = await req('GET','/api/rota-que-nao-existe-'+Math.floor(performance.now())); r.status===404 ? P(V,'rota inexistente','404 correto') : W(V,'rota inexistente',`veio ${r.status}`) })()
+    await (async()=>{ const r = await req('GET','/api/rota-que-nao-existe-'+Math.floor(performance.now())); r.status===404 ? P(V,'rota inexistente','404 correto') : W(V,'rota inexistente',`veio ${r.status} — /api desconhecida cai no fallback SPA (index.html), não 404 JSON (por design)`) })()
   }
 
   // ===================== 2) HONESTIDADE / DADOS FABRICADOS =====================

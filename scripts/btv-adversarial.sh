@@ -67,7 +67,7 @@ if   [ "$c" = 405 ]; then P METODO "GET em POST-only (verify/run)" "405"
 elif [ "$c" = 200 ]; then Fl METODO "GET em POST-only (verify/run)" "200 — disparou verify por GET"
 else W METODO "GET em POST-only (verify/run)" "veio $c"; fi
 c=$(code GET "/api/rota-inexistente-$RANDOM")
-[ "$c" = 404 ] && P METODO "rota inexistente" "404" || W METODO "rota inexistente" "veio $c"
+[ "$c" = 404 ] && P METODO "rota inexistente" "404" || W METODO "rota inexistente" "veio $c — /api desconhecida cai no fallback SPA (index.html), não 404 JSON (por design)"
 
 # ---------------------------------------------------------------------------
 echo "--- 3) Input hostil (4xx, nunca 500) ---"
@@ -103,15 +103,18 @@ if [ "$have_jq" = 1 ]; then
   tot=$(body GET '/api/ledger?limit=1000' | jq 'length' 2>/dev/null)
   if [ "$ok" = true ]; then P HONESTO "ledger hash-chain íntegro" "ok=true verified=$ver de $tot"
   else W HONESTO "ledger hash-chain NÃO íntegro" "ok=$ok verified=$ver de $tot — investigar .btv/btv.db (volume?)"; fi
-  # 5b. custo fabricado (custo>0 com tokens 0)
+  # 5b. shape de models/usage — array puro denuncia backend PRÉ-MERGE
   usg=$(body GET /api/models/usage)
-  fab=$(printf '%s' "$usg" | jq '[.entries[] | select(.estimated_cost_usd>0 and .input_tokens==0 and .output_tokens==0)] | length' 2>/dev/null)
-  as_of=$(printf '%s' "$usg" | jq -r '.pricing_as_of')
+  shape=$(printf '%s' "$usg" | jq -r 'if (type=="object" and has("entries")) then "novo" elif type=="array" then "antigo" else "?" end' 2>/dev/null)
+  [ "$shape" = "antigo" ] && W HONESTO "models/usage é ARRAY puro" "backend PRÉ-MERGE (sem entries/pricing_as_of) — provável instância ANTIGA neste \$BASE"
+  ent='(.entries // .)'   # tolera as duas formas
+  fab=$(printf '%s' "$usg" | jq "[ ${ent}[] | select(.estimated_cost_usd>0 and .input_tokens==0 and .output_tokens==0)] | length" 2>/dev/null)
+  as_of=$(printf '%s' "$usg" | jq -r '.pricing_as_of // "n/d"' 2>/dev/null)
   if [ "${fab:-0}" -gt 0 ]; then Fl HONESTO "custo fabricado" "$fab modelo(s) com custo>0 e 0 tokens"
   else P HONESTO "custo honesto" "sem custo fabricado (tab $as_of)"; fi
   # 5c. provider usado ⊆ configurados
   conf=$(body GET /api/providers | jq -r '[.[]|select(.configured)|(.name//.id//.provider)]|@csv' 2>/dev/null)
-  used=$(printf '%s' "$usg" | jq -r '[.entries[].provider]|unique|@csv' 2>/dev/null)
+  used=$(printf '%s' "$usg" | jq -r "[ ${ent}[].provider ]|unique|@csv" 2>/dev/null)
   Inf HONESTO "providers configurados × usados" "conf=[$conf] usados=[$used]"
   # 5d. templates com dados completos
   bad=$(body GET /api/btv/templates | jq '[.[] | select((.papeis|length)==0 or (.formatos|length)==0 or (.id|not) or (.nome|not))] | length' 2>/dev/null)
