@@ -142,6 +142,27 @@ impl SquadHub {
         task_id
     }
 
+    /// Semeia o contador de `task_id` para o PRÓXIMO id ficar acima do maior já
+    /// persistido (`maior_seq_existente`). O contador é por-processo e reinicia
+    /// a cada restart; sem isto, após um redeploy a primeira ativação geraria
+    /// `sq1` de novo e colidiria com a run persistida no volume
+    /// (`UNIQUE constraint failed: runs.task_id`). Idempotente: nunca reduz.
+    pub fn seed_task_seq(&self, maior_seq_existente: u64) {
+        let alvo = maior_seq_existente.saturating_add(1);
+        let mut cur = self.next_task_seq.load(Ordering::Relaxed);
+        while cur < alvo {
+            match self.next_task_seq.compare_exchange_weak(
+                cur,
+                alvo,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(observado) => cur = observado,
+            }
+        }
+    }
+
     pub fn publish(&self, task_id: &str, event: SquadEvent) {
         let mut tasks = self.tasks.lock().expect("squad hub mutex poisoned");
         if let Some(state) = tasks.get_mut(task_id) {
@@ -987,6 +1008,21 @@ mod tests {
         assert_eq!(squad_model(), "deepseek-chat");
 
         std::env::remove_var("BTV_SQUAD_MODEL");
+    }
+
+    #[test]
+    fn seed_task_seq_continua_acima_do_persistido_e_nao_reduz() {
+        let hub = SquadHub::new(Duration::from_millis(50));
+        // Simula runs já persistidas cujo maior id é `sq3`.
+        hub.seed_task_seq(3);
+        assert_eq!(
+            hub.new_task(),
+            "sq4",
+            "próximo id continua acima do persistido"
+        );
+        // Idempotente: semear com valor menor NÃO reduz o contador.
+        hub.seed_task_seq(1);
+        assert_eq!(hub.new_task(), "sq5");
     }
 
     #[test]
