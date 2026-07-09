@@ -591,4 +591,143 @@ mod tests {
         assert_eq!(messages[1].role, Role::Assistant);
         assert_eq!(messages[2].role, Role::User);
     }
+
+    // ── consenso→ledger (pendência de exercício da Fase 4, re-declarada na
+    // Fase 6 Onda 9 e fechada na validação de pendencias.md) ─────────────────
+
+    use btv_proto::squad::squad_service_server::{
+        SquadService as SquadServiceTrait, SquadServiceServer,
+    };
+    use btv_proto::squad::{
+        Consensus, HealthRequest, HealthResponse, Proposal, SquadEvent, StepResult,
+    };
+    use tokio_stream::wrappers::UnixListenerStream;
+    use tonic::{Response, Status};
+
+    /// SquadService roteirizado (Rust, sem key, sem Python): emite o roteiro
+    /// mínimo de uma tarefa real — proposta → CONSENSO → passo — e encerra o
+    /// stream. Mesmo idioma do mock de `client_over_uds.rs` do btv-sidecar.
+    struct ScriptedSquadService;
+
+    #[tonic::async_trait]
+    impl SquadServiceTrait for ScriptedSquadService {
+        type ExecuteTaskStream = tokio_stream::wrappers::ReceiverStream<Result<SquadEvent, Status>>;
+
+        // `tonic::Status` é grande por natureza — mock de teste, sem valor em
+        // boxear aqui.
+        #[allow(clippy::result_large_err)]
+        async fn execute_task(
+            &self,
+            req: tonic::Request<SquadTask>,
+        ) -> Result<Response<Self::ExecuteTaskStream>, Status> {
+            let task_id = req.into_inner().task_id;
+            let (tx, rx) = tokio::sync::mpsc::channel(8);
+            let ev = |payload| {
+                Ok(SquadEvent {
+                    task_id: task_id.clone(),
+                    ts: "2026-01-01T00:00:00Z".into(),
+                    payload: Some(payload),
+                })
+            };
+            tx.try_send(ev(squad_event::Payload::Proposal(Proposal {
+                agent: "architect".into(),
+                confidence: 0.9,
+                content_json: "{}".into(),
+            })))
+            .unwrap();
+            tx.try_send(ev(squad_event::Payload::Consensus(Consensus {
+                decision_maker: "architect".into(),
+                strength: 0.87,
+                decision_json: "{}".into(),
+                requires_human: false,
+            })))
+            .unwrap();
+            tx.try_send(ev(squad_event::Payload::Step(StepResult {
+                step_id: "s1".into(),
+                success: true,
+                summary: "ok".into(),
+            })))
+            .unwrap();
+            Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                rx,
+            )))
+        }
+
+        async fn health(
+            &self,
+            _req: tonic::Request<HealthRequest>,
+        ) -> Result<Response<HealthResponse>, Status> {
+            Ok(Response::new(HealthResponse {
+                ready: true,
+                version: "scripted-0".into(),
+            }))
+        }
+    }
+
+    /// Dirige o MESMO laço de produção do `btv squad` (`render_and_record`,
+    /// quem grava `squad.consensus` via `Session::note`) com um stream gRPC
+    /// REAL sobre UDS — roteirizado, sem key e sem Python — até o evento
+    /// `Consensus`, e assere a entrada `squad.consensus` no ledger com a
+    /// cadeia íntegra. É o teste de regressão permanente que a pendência nº 1
+    /// da Fase 6 Onda 9 pedia; o gêmeo cross-process (Python real emitindo
+    /// `Consensus` no stream) já vive em `btv-sidecar/tests/squad_e2e.rs`.
+    #[tokio::test]
+    async fn consenso_do_stream_e_registrado_no_ledger_com_cadeia_integra() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("scripted-squad.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let server = tokio::spawn(
+            tonic::transport::Server::builder()
+                .add_service(SquadServiceServer::new(ScriptedSquadService))
+                .serve_with_incoming(UnixListenerStream::new(listener)),
+        );
+
+        let mut client = btv_sidecar::SquadClient::connect(socket.clone())
+            .await
+            .expect("conecta no scripted squad");
+        let stream = client
+            .execute_task(SquadTask {
+                task_id: "t-consenso".into(),
+                description: "tarefa roteirizada".into(),
+                decision_type: "architecture".into(),
+                max_autonomy_level: 3,
+                verification_evidence_json: String::new(),
+            })
+            .await
+            .expect("stream aberto");
+
+        let mut session =
+            Session::open(dir.path(), "tarefa roteirizada", "scripted").expect("sessão");
+        let outcome = render_and_record(stream, &mut session).await;
+        let events = match outcome {
+            SquadRun::Completed(events) => events,
+            SquadRun::Failed { reason, .. } => panic!("stream deveria completar: {reason}"),
+        };
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e.payload, Some(squad_event::Payload::Consensus(_)))),
+            "o roteiro emite um Consensus"
+        );
+        session.finish(true, 1).expect("finish");
+        server.abort();
+
+        // Fronteira: a entrada `squad.consensus` existe no ledger REAL
+        // (`.btv/btv.db`), com os campos do evento e a cadeia íntegra.
+        let store =
+            btv_store::LedgerStore::open(dir.path().join(".btv").join("btv.db").to_str().unwrap())
+                .expect("abre o ledger");
+        let total = store.verify_chain().expect("cadeia íntegra");
+        // session.start + skill... (nenhuma) + consensus + session.end = 3.
+        assert_eq!(total, 3, "start + consensus + end");
+        let consensus: Vec<_> = store
+            .recent(10, None)
+            .expect("recent")
+            .into_iter()
+            .filter(|e| e.kind == "squad.consensus")
+            .collect();
+        assert_eq!(consensus.len(), 1, "exatamente um squad.consensus");
+        assert_eq!(consensus[0].payload["decision_maker"], "architect");
+        assert_eq!(consensus[0].payload["requires_human"], false);
+    }
 }
