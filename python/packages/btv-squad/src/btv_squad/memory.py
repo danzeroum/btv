@@ -1,13 +1,14 @@
 """Memória persistente de agentes (migrado de BuildToValue
 `src/memory/agent_memory.py`). Curto/longo prazo + episódica em disco.
 
-`chromadb` é opcional — sem ele, o **corpus episódico em disco** (o JSONL) é a
-fonte da verdade. A recuperação (`recall_similar`) é feita por um índice TF-IDF
-local (`recall.py`, Fase 6 Onda 6), **não mais** pelo `_FallbackCollection` — que
-era um no-op (devolvia listas vazias sempre). O ramo chromadb permanece como
-sink alternativo (inativo enquanto a dep não for declarada), mas o recall não
-depende mais dele. Diretório de armazenamento segue a convenção `.btv/` do
-resto da plataforma (era `.buildtoflip/ledger` na origem).
+O **corpus episódico em disco** (o JSONL) é a fonte da verdade. A recuperação
+(`recall_similar`) é feita por um índice TF-IDF local (`recall.py`, Fase 6
+Onda 6). O scaffolding chromadb (`_FallbackCollection` no-op + `collection.add`
+em `remember_decision`) foi removido na validação de pendencias.md: era um sink
+inativo que nunca foi consultado — um vector DB real, se vier, é uma onda/ADR
+nova (ADR 0013 registra o limite léxico do retriever atual). Diretório de
+armazenamento segue a convenção `.btv/` do resto da plataforma (era
+`.buildtoflip/ledger` na origem).
 """
 
 from __future__ import annotations
@@ -19,25 +20,6 @@ from typing import Any, Optional
 
 from . import recall
 
-try:
-    import chromadb
-    from chromadb.config import Settings
-except Exception:  # pragma: no cover - dependência opcional
-    chromadb = None
-    Settings = None
-
-
-class _FallbackCollection:
-    def __init__(self) -> None:
-        self._items: list[dict[str, Any]] = []
-
-    def add(self, *, documents: list[str], metadatas: list[dict[str, Any]], ids: list[str]) -> None:
-        for doc, meta, id_ in zip(documents, metadatas, ids):
-            self._items.append({"id": id_, "document": doc, "metadata": meta})
-
-    def query(self, query_texts: list[str], n_results: int = 5) -> dict[str, Any]:
-        return {"ids": [], "metadatas": [], "documents": [], "query": query_texts, "n_results": n_results}
-
 
 class AgentMemorySystem:
     """Gerencia memórias de curto, longo prazo e episódicas dos agentes."""
@@ -48,29 +30,8 @@ class AgentMemorySystem:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.episodic_path = self.storage_dir / "agent_memories.jsonl"
 
-        self.collection = self._initialise_vector_store()
-
-    def _initialise_vector_store(self):
-        if chromadb is None or Settings is None:
-            return _FallbackCollection()
-
-        try:
-            client = chromadb.Client(
-                Settings(
-                    chroma_server_host="localhost",
-                    chroma_server_http_port=8000,
-                    chroma_client_auth_provider="no_auth",
-                )
-            )
-            try:
-                return client.create_collection("agent_memories")
-            except Exception:
-                return client.get_collection("agent_memories")
-        except Exception:
-            return _FallbackCollection()
-
     def remember_decision(self, agent: str, decision: dict[str, Any]) -> None:
-        """Grava uma decisão importante em disco e no armazenamento vetorial."""
+        """Grava uma decisão importante no corpus episódico em disco."""
 
         memory = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -80,12 +41,6 @@ class AgentMemorySystem:
         }
         with self.episodic_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(memory, ensure_ascii=False) + "\n")
-
-        self.collection.add(
-            documents=[json.dumps(decision, ensure_ascii=False)],
-            metadatas=[{"agent": agent, "timestamp": memory["timestamp"]}],
-            ids=[f"{agent}_{memory['timestamp']}"],
-        )
 
     def _load_corpus(self) -> list[dict[str, Any]]:
         """Lê o corpus episódico do disco (JSONL). É a fonte da verdade do

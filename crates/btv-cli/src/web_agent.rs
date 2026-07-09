@@ -1005,12 +1005,11 @@ pub async fn require_local_origin(req: Request, next: Next) -> Response {
     if req.method() != Method::GET {
         if let Some(origin) = req.headers().get(header::ORIGIN) {
             let origin_str = origin.to_str().unwrap_or("");
-            // Loopback (rápido) OU hosts liberados por `BTV_TRUSTED_ORIGINS` —
-            // MESMA regra da guarda do btv-server, para hospedagem atrás de
-            // ingress com auth (opt-in; vazio = só localhost). Ver ADR 0015.
-            if !is_local_origin(origin_str)
-                && !btv_server::origin_allowed(origin_str, &btv_server::trusted_origin_hosts())
-            {
+            // Loopback OU hosts liberados por `BTV_TRUSTED_ORIGINS` — a MESMA
+            // função da guarda do btv-server (`origin_allowed` já cobre o
+            // loopback internamente), para hospedagem atrás de ingress com
+            // auth (opt-in; vazio = só localhost). Ver ADR 0015.
+            if !btv_server::origin_allowed(origin_str, &btv_server::trusted_origin_hosts()) {
                 return (
                     StatusCode::FORBIDDEN,
                     Json(ErrorBody::new("forbidden_origin", "origin não permitida")),
@@ -1020,21 +1019,6 @@ pub async fn require_local_origin(req: Request, next: Next) -> Response {
         }
     }
     next.run(req).await
-}
-
-fn is_local_origin(origin: &str) -> bool {
-    let rest = origin
-        .strip_prefix("http://")
-        .or_else(|| origin.strip_prefix("https://"));
-    let Some(rest) = rest else {
-        return false;
-    };
-    let host_port = rest.split('/').next().unwrap_or("");
-    let host = host_port
-        .rsplit_once(':')
-        .map(|(h, _)| h)
-        .unwrap_or(host_port);
-    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
 }
 
 #[cfg(test)]
@@ -1049,21 +1033,30 @@ mod tests {
     /// isso o lock é compartilhado via `crate::test_support`, não local.
     use crate::test_support::lock_cwd;
 
+    // A guarda deste router delega a `btv_server::origin_allowed` — estes
+    // testes garantem que a delegação preserva o comportamento original
+    // (loopback aceito, resto rejeitado com lista de confiança vazia).
     #[test]
     fn origin_localhost_variantes_sao_aceitas() {
-        assert!(is_local_origin("http://127.0.0.1:7878"));
-        assert!(is_local_origin("http://localhost:5173"));
-        assert!(is_local_origin("https://127.0.0.1"));
-        assert!(is_local_origin("http://[::1]:7878"));
+        assert!(btv_server::origin_allowed("http://127.0.0.1:7878", &[]));
+        assert!(btv_server::origin_allowed("http://localhost:5173", &[]));
+        assert!(btv_server::origin_allowed("https://127.0.0.1", &[]));
+        assert!(btv_server::origin_allowed("http://[::1]:7878", &[]));
     }
 
     #[test]
     fn origin_externa_e_rejeitada() {
-        assert!(!is_local_origin("https://evil.example"));
+        assert!(!btv_server::origin_allowed("https://evil.example", &[]));
         // Ataque de sufixo: não pode bastar "127.0.0.1" aparecer na string.
-        assert!(!is_local_origin("http://127.0.0.1.evil.example"));
-        assert!(!is_local_origin("http://evil.example/?u=127.0.0.1"));
-        assert!(!is_local_origin(""));
+        assert!(!btv_server::origin_allowed(
+            "http://127.0.0.1.evil.example",
+            &[]
+        ));
+        assert!(!btv_server::origin_allowed(
+            "http://evil.example/?u=127.0.0.1",
+            &[]
+        ));
+        assert!(!btv_server::origin_allowed("", &[]));
     }
 
     #[test]

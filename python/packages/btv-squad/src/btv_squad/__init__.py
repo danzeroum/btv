@@ -18,7 +18,6 @@ from btv_squad.agents import (
 from btv_squad.chains import ChainStep, ResilientPromptChain
 from btv_squad.consensus import ConsensusResult, WeightedConsensusEngine
 from btv_squad.evaluation import ContinuousEvaluator
-from btv_squad.forgetting import IntelligentForgetting, MemoryStore
 from btv_squad.gateway import GatewayClient, LlmRequest, LlmResponse, ScriptedGatewayClient
 from btv_squad.hitl import ProgressiveAutonomyManager
 from btv_squad.memory import AgentMemorySystem
@@ -48,11 +47,9 @@ __all__ = [
     "DeveloperAgent",
     "DockerSandbox",
     "GatewayClient",
-    "IntelligentForgetting",
     "LearningRouter",
     "LlmRequest",
     "LlmResponse",
-    "MemoryStore",
     "OpsAgent",
     "ParallelResourceManager",
     "PermissionClient",
