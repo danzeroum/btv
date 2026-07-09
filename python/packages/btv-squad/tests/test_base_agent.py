@@ -53,3 +53,15 @@ def test_log_decision_nao_quebra_sem_memoria_anexada():
     entry = agent.log_decision({"confidence": 0.5})
     assert entry["agent"] == "echo"
     assert entry["decision"] == {"confidence": 0.5}
+
+
+def test_system_with_persona_prepende_a_persona_ao_base():
+    agent = _EchoAgent("echo")
+    base = "PROTOCOLO: responda em JSON."
+    # Sem persona: devolve o base intacto.
+    assert agent.system_with_persona(base) == base
+    # Com persona: a voz/objetivo vem ANTES do protocolo (que fica preservado).
+    agent.persona_prompt = "Você é o Redator. Escreva SEMPRE em voz ativa."
+    combinado = agent.system_with_persona(base)
+    assert combinado.startswith("Você é o Redator")
+    assert base in combinado

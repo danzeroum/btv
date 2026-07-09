@@ -165,7 +165,7 @@ class DeveloperAgent(BaseAgent):
         request = LlmRequest(
             model=self.model,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_with_persona(_SYSTEM_PROMPT)},
                 {"role": "user", "content": task.strip() or "Tarefa não especificada"},
             ],
             requester=self.agent_type,
@@ -184,7 +184,7 @@ class DeveloperAgent(BaseAgent):
 
         async def _run_loop() -> dict[str, Any]:
             messages: list[dict[str, str]] = [
-                {"role": "system", "content": _REACT_SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_with_persona(_REACT_SYSTEM_PROMPT)},
                 {"role": "user", "content": task.strip() or "Tarefa não especificada"},
             ]
             tool_calls: list[dict[str, Any]] = []

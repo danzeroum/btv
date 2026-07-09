@@ -124,6 +124,7 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
             // afetar as asserções deste teste (proposals/consensus/steps).
             verification_evidence_json: String::new(),
             model: String::new(),
+            roster: Vec::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -274,6 +275,7 @@ async fn kill_do_sidecar_dispara_fallback() {
             // afetar as asserções deste teste (proposals/consensus/steps).
             verification_evidence_json: String::new(),
             model: String::new(),
+            roster: Vec::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -565,6 +567,7 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
             // definição de pronto exige observar).
             verification_evidence_json: evidence_json,
             model: String::new(),
+            roster: Vec::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");

@@ -419,6 +419,8 @@ async fn try_squad(
             // `--model` da CLI também vale por-tarefa (além de ir no `--model`
             // do sidecar): o Python o sobrepõe ao default do orquestrador.
             model: opts.model.clone(),
+            // A CLI `btv squad` não tem personas de template — elenco fixo.
+            roster: Vec::new(),
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -696,6 +698,7 @@ mod tests {
                 max_autonomy_level: 3,
                 verification_evidence_json: String::new(),
                 model: String::new(),
+                roster: Vec::new(),
             })
             .await
             .expect("stream aberto");
