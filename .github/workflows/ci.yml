@@ -23,6 +23,19 @@ jobs:
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo fmt --all --check
 
+  # Lint arquitetural (Trilha T4 do plano DDD multitenant): o futuro
+  # btv-domain não pode depender de rusqlite/axum/tonic/reqwest (nem
+  # transitivamente) e arquivo de handler HTTP não pode conter SQL cru. A
+  # checagem de dependência arma sozinha quando o crate btv-domain nascer —
+  # até lá o script avisa e pula só essa metade. cargo-deny não serve aqui:
+  # `[bans]` é global do grafo, não por-crate.
+  arch-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/arch-lint.sh
+
   # Gate de supply-chain (advisories/licenças) — porte da rust-migration.
   deny:
     runs-on: ubuntu-latest

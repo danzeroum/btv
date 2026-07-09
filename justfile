@@ -15,6 +15,11 @@ lint:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all --check
 
+# Lint arquitetural da migração DDD (Trilha T4): fronteiras de camada
+# verificadas por máquina — ver scripts/arch-lint.sh.
+arch-lint:
+    ./scripts/arch-lint.sh
+
 # Pipeline de verificação determinística (evidência JSON — Fase 5 completa o /verify).
 verify: test lint
 
