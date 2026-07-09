@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/btv-cli",
     "crates/btv-core",
+    "crates/btv-golden",
     "crates/btv-llm",
     "crates/btv-proto",
     "crates/btv-schemas",
@@ -64,3 +65,4 @@ btv-tui = { path = "crates/btv-tui" }
 btv-proto = { path = "crates/btv-proto" }
 btv-sidecar = { path = "crates/btv-sidecar" }
 btv-server = { path = "crates/btv-server" }
+btv-golden = { path = "crates/btv-golden" }

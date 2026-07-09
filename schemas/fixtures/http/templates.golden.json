@@ -1,0 +1,594 @@
+{
+  "flow": "templates",
+  "steps": [
+    {
+      "name": "lista os 12 modelos embutidos",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/templates"
+      },
+      "response": {
+        "body": [
+          {
+            "categoria": "conteudo",
+            "cor": "#b8531f",
+            "descricao": "Artigos, newsletters e copy com revisão de estilo e fact-check embutidos.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "DOCX"
+              },
+              {
+                "binario": false,
+                "nome": "MD"
+              },
+              {
+                "binario": false,
+                "nome": "HTML"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "editorial",
+            "nome": "Editorial / SEO",
+            "onda": 1,
+            "papeis": [
+              "Pauteiro",
+              "Redator",
+              "Revisor de estilo",
+              "Fact-checker"
+            ],
+            "perguntas": [
+              {
+                "label": "Qual é a pauta ou tema?",
+                "placeholder": "ex.: tendências de logística verde no Brasil"
+              },
+              {
+                "label": "Tom e estilo",
+                "placeholder": "ex.: analítico, direto, sem clichês"
+              },
+              {
+                "label": "Público e canal",
+                "placeholder": "ex.: newsletter B2B, ~1.200 palavras"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.4"
+          },
+          {
+            "categoria": "analise",
+            "cor": "#345f9e",
+            "descricao": "Dossiês, benchmarks e sínteses de decisão com evidência citada.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "PDF"
+              },
+              {
+                "binario": false,
+                "nome": "MD"
+              },
+              {
+                "binario": true,
+                "nome": "XLSX"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "pesquisa",
+            "nome": "Pesquisa & Inteligência",
+            "onda": 1,
+            "papeis": [
+              "Investigador",
+              "Analista",
+              "Sintetizador",
+              "Verificador"
+            ],
+            "perguntas": [
+              {
+                "label": "Pergunta de pesquisa",
+                "placeholder": "ex.: quem são os 5 maiores players de X e como cobram?"
+              },
+              {
+                "label": "Fontes prioritárias",
+                "placeholder": "ex.: relatórios setoriais, sites oficiais"
+              },
+              {
+                "label": "Formato da síntese",
+                "placeholder": "ex.: dossiê de 6 páginas + planilha comparativa"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.2"
+          },
+          {
+            "categoria": "analise",
+            "cor": "#1d6f63",
+            "descricao": "Análises recorrentes, gráficos e relatórios executivos a partir dos seus dados.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "XLSX"
+              },
+              {
+                "binario": false,
+                "nome": "CSV"
+              },
+              {
+                "binario": false,
+                "nome": "HTML"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "bi",
+            "nome": "BI / Dados",
+            "onda": 1,
+            "papeis": [
+              "Preparador de dados",
+              "Analista",
+              "Visualizador",
+              "Revisor"
+            ],
+            "perguntas": [
+              {
+                "label": "Fonte de dados",
+                "placeholder": "ex.: export CSV do ERP, planilha de vendas"
+              },
+              {
+                "label": "Pergunta de negócio",
+                "placeholder": "ex.: onde perdemos margem no último trimestre?"
+              },
+              {
+                "label": "Métricas-chave",
+                "placeholder": "ex.: margem por praça, ticket médio, churn"
+              }
+            ],
+            "publicado": true,
+            "versao": "v2.1"
+          },
+          {
+            "categoria": "operacoes",
+            "cor": "#57702b",
+            "descricao": "SOPs, playbooks e runbooks auditáveis, prontos para o time seguir.",
+            "formatos": [
+              {
+                "binario": false,
+                "nome": "MD"
+              },
+              {
+                "binario": true,
+                "nome": "PDF"
+              },
+              {
+                "binario": false,
+                "nome": "YAML"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "operacoes",
+            "nome": "Operações / SOPs",
+            "onda": 1,
+            "papeis": [
+              "Mapeador de processo",
+              "Redator técnico",
+              "Auditor de processo",
+              "Publicador"
+            ],
+            "perguntas": [
+              {
+                "label": "Qual processo documentar?",
+                "placeholder": "ex.: onboarding de cliente enterprise"
+              },
+              {
+                "label": "Quem executa hoje?",
+                "placeholder": "ex.: time de CS, 4 pessoas"
+              },
+              {
+                "label": "Nível de detalhe",
+                "placeholder": "ex.: passo a passo com checklists"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.0"
+          },
+          {
+            "categoria": "operacoes",
+            "cor": "#b0742c",
+            "descricao": "Propostas, battlecards e scripts de follow-up alinhados ao seu playbook.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "DOCX"
+              },
+              {
+                "binario": true,
+                "nome": "PDF"
+              },
+              {
+                "binario": true,
+                "nome": "Slides"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "sales",
+            "nome": "Sales enablement",
+            "onda": 1,
+            "papeis": [
+              "Estrategista",
+              "Redator de propostas",
+              "Battlecard writer",
+              "Revisor comercial"
+            ],
+            "perguntas": [
+              {
+                "label": "O que a squad vai produzir?",
+                "placeholder": "ex.: proposta para a conta Y"
+              },
+              {
+                "label": "Contexto do deal",
+                "placeholder": "ex.: concorrendo com Z, decisor é o CFO"
+              },
+              {
+                "label": "Materiais existentes",
+                "placeholder": "ex.: deck institucional, tabela de preços"
+              }
+            ],
+            "publicado": true,
+            "versao": "v2.0"
+          },
+          {
+            "categoria": "criativa",
+            "cor": "#8d3f6a",
+            "descricao": "Briefing → direção → geração → curadoria: packs visuais com guideline.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "PNG"
+              },
+              {
+                "binario": false,
+                "nome": "SVG"
+              },
+              {
+                "binario": true,
+                "nome": "PDF"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "imagem",
+            "nome": "Imagem / Branding",
+            "onda": 2,
+            "papeis": [
+              "Diretor de arte",
+              "Prompt designer",
+              "Curador",
+              "Finalizador"
+            ],
+            "perguntas": [
+              {
+                "label": "Briefing visual",
+                "placeholder": "ex.: campanha de lançamento, tom quente"
+              },
+              {
+                "label": "Referências",
+                "placeholder": "ex.: 3 links ou uploads de moodboard"
+              },
+              {
+                "label": "Usos previstos",
+                "placeholder": "ex.: social 1:1, banner site, impresso A4"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.0"
+          },
+          {
+            "categoria": "conteudo",
+            "cor": "#9a6b14",
+            "descricao": "Trilhas, apostilas, exercícios e rubricas de avaliação completas.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "PDF"
+              },
+              {
+                "binario": true,
+                "nome": "Slides"
+              },
+              {
+                "binario": false,
+                "nome": "Quiz"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "educacao",
+            "nome": "Educação",
+            "onda": 2,
+            "papeis": [
+              "Planejador pedagógico",
+              "Autor",
+              "Avaliador",
+              "Revisor"
+            ],
+            "perguntas": [
+              {
+                "label": "Tema e objetivo de aprendizagem",
+                "placeholder": "ex.: Excel intermediário para financeiro"
+              },
+              {
+                "label": "Perfil dos alunos",
+                "placeholder": "ex.: analistas juniores, 20 pessoas"
+              },
+              {
+                "label": "Carga e formato",
+                "placeholder": "ex.: 4 aulas de 1h + exercícios"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.0"
+          },
+          {
+            "categoria": "criativa",
+            "cor": "#2b7a8c",
+            "descricao": "Fluxos, wireframes, specs e auditorias de heurísticas.",
+            "formatos": [
+              {
+                "binario": false,
+                "nome": "SVG"
+              },
+              {
+                "binario": false,
+                "nome": "JSON"
+              },
+              {
+                "binario": false,
+                "nome": "HTML"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "design",
+            "nome": "Design / UX",
+            "onda": 2,
+            "papeis": [
+              "Pesquisador UX",
+              "Arquiteto de fluxo",
+              "Wireframer",
+              "Auditor de heurísticas"
+            ],
+            "perguntas": [
+              {
+                "label": "O que desenhar ou auditar?",
+                "placeholder": "ex.: fluxo de checkout do app"
+              },
+              {
+                "label": "Problema atual",
+                "placeholder": "ex.: 40% abandonam no frete"
+              },
+              {
+                "label": "Restrições",
+                "placeholder": "ex.: design system existente, mobile-first"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.0"
+          },
+          {
+            "categoria": "operacoes",
+            "cor": "#6b5744",
+            "descricao": "Minutas, revisão de cláusulas e checklists — sempre com revisão humana.",
+            "formatos": [
+              {
+                "binario": true,
+                "nome": "DOCX"
+              },
+              {
+                "binario": true,
+                "nome": "PDF"
+              },
+              {
+                "binario": false,
+                "nome": "Checklist"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "juridico",
+            "nome": "Jurídico documental",
+            "onda": 2,
+            "papeis": [
+              "Analista jurídico",
+              "Redator de minutas",
+              "Revisor de cláusulas",
+              "Compliance"
+            ],
+            "perguntas": [
+              {
+                "label": "Tipo de documento",
+                "placeholder": "ex.: NDA bilateral, prestação de serviços"
+              },
+              {
+                "label": "Partes e contexto",
+                "placeholder": "ex.: contratação de agência, prazo 12 meses"
+              },
+              {
+                "label": "Pontos sensíveis",
+                "placeholder": "ex.: propriedade intelectual, multa rescisória"
+              }
+            ],
+            "publicado": true,
+            "versao": "v1.0"
+          },
+          {
+            "categoria": "criativa",
+            "cor": "#6b4fae",
+            "descricao": "Composição e arranjo com partitura exportável — MusicXML, MIDI e PDF.",
+            "formatos": [
+              {
+                "binario": false,
+                "nome": "MusicXML"
+              },
+              {
+                "binario": true,
+                "nome": "MIDI"
+              },
+              {
+                "binario": true,
+                "nome": "PDF"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "musica",
+            "nome": "Música simbólica",
+            "onda": 3,
+            "papeis": [
+              "Compositor",
+              "Arranjador",
+              "Copista",
+              "Revisor técnico"
+            ],
+            "perguntas": [
+              {
+                "label": "Forma e caráter",
+                "placeholder": "ex.: peça AABA, lírica, ~2 min"
+              },
+              {
+                "label": "Instrumentação",
+                "placeholder": "ex.: quarteto de cordas"
+              },
+              {
+                "label": "Andamento e tonalidade",
+                "placeholder": "ex.: 72 bpm, Ré menor"
+              }
+            ],
+            "publicado": true,
+            "versao": "v0.9"
+          },
+          {
+            "categoria": "criativa",
+            "cor": "#c04a4a",
+            "descricao": "Pauta, roteiro, perguntas, cortes e show notes prontos para gravar.",
+            "formatos": [
+              {
+                "binario": false,
+                "nome": "Roteiro"
+              },
+              {
+                "binario": false,
+                "nome": "SRT"
+              },
+              {
+                "binario": false,
+                "nome": "Notes"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "podcast",
+            "nome": "Podcast",
+            "onda": 3,
+            "papeis": [
+              "Pauteiro",
+              "Roteirista",
+              "Editor de cortes",
+              "Produtor"
+            ],
+            "perguntas": [
+              {
+                "label": "Tema do episódio",
+                "placeholder": "ex.: entrevista sobre carreira em dados"
+              },
+              {
+                "label": "Convidado e ângulo",
+                "placeholder": "ex.: CTO de fintech, foco em decisões"
+              },
+              {
+                "label": "Duração alvo",
+                "placeholder": "ex.: 45 min + 3 cortes de 60s"
+              }
+            ],
+            "publicado": false,
+            "versao": "v0.6"
+          },
+          {
+            "categoria": "criativa",
+            "cor": "#444d99",
+            "descricao": "Roteiro, shot list, legendas e instruções de edição para sua produção.",
+            "formatos": [
+              {
+                "binario": false,
+                "nome": "Roteiro"
+              },
+              {
+                "binario": false,
+                "nome": "EDL"
+              },
+              {
+                "binario": false,
+                "nome": "SRT"
+              }
+            ],
+            "gates": [
+              "Aprovar o rascunho antes da revisão",
+              "Aprovar a entrega final antes da exportação"
+            ],
+            "id": "video",
+            "nome": "Vídeo",
+            "onda": 3,
+            "papeis": [
+              "Roteirista",
+              "Diretor de shot list",
+              "Legendador",
+              "Montador"
+            ],
+            "perguntas": [
+              {
+                "label": "O que é o vídeo?",
+                "placeholder": "ex.: institucional de 90s para o site"
+              },
+              {
+                "label": "Mensagem central",
+                "placeholder": "ex.: confiança e velocidade de entrega"
+              },
+              {
+                "label": "Recursos disponíveis",
+                "placeholder": "ex.: banco de imagens + locução própria"
+              }
+            ],
+            "publicado": false,
+            "versao": "v0.4"
+          }
+        ],
+        "content_type": "application/json",
+        "status": 200
+      }
+    }
+  ]
+}

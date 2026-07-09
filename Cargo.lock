@@ -333,6 +333,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "btv-golden"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "btv-llm"
 version = "0.1.0"
 dependencies = [
@@ -377,6 +385,7 @@ name = "btv-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "btv-golden",
  "btv-llm",
  "btv-schemas",
  "btv-store",

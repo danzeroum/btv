@@ -1,0 +1,87 @@
+{
+  "flow": "ledger",
+  "steps": [
+    {
+      "name": "tudo, mais recente primeiro",
+      "request": {
+        "method": "GET",
+        "path": "/api/ledger"
+      },
+      "response": {
+        "body": [
+          {
+            "actor": "humano",
+            "entry_hash": "0165efa66f86caed4599aee2c902a1f321e864da5de98f6ec373b71b6d9bfabe",
+            "kind": "session.end",
+            "payload": {
+              "ok": true
+            },
+            "prev_hash": "008932006034079fb7619526f465607f152c0994fbc8fe6504cd54c01ac6e543",
+            "seq": 3,
+            "ts": "2026-07-08T10:02:00Z"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "008932006034079fb7619526f465607f152c0994fbc8fe6504cd54c01ac6e543",
+            "kind": "tool.run",
+            "payload": {
+              "exit_code": 0,
+              "tool": "edit"
+            },
+            "prev_hash": "9ac8d1145f05eafc4b53a75efd20753f77bd666afba450f0be3dff4329d7155f",
+            "seq": 2,
+            "ts": "2026-07-08T10:01:00Z"
+          },
+          {
+            "actor": "humano",
+            "entry_hash": "9ac8d1145f05eafc4b53a75efd20753f77bd666afba450f0be3dff4329d7155f",
+            "kind": "session.start",
+            "payload": {
+              "task": "revisar contrato"
+            },
+            "prev_hash": "",
+            "seq": 1,
+            "ts": "2026-07-08T10:00:00Z"
+          }
+        ],
+        "content_type": "application/json",
+        "status": 200
+      }
+    },
+    {
+      "name": "filtro por actor combinado com limit (dentro do SQL)",
+      "request": {
+        "method": "GET",
+        "path": "/api/ledger?actor=humano&limit=2"
+      },
+      "response": {
+        "body": [
+          {
+            "actor": "humano",
+            "entry_hash": "0165efa66f86caed4599aee2c902a1f321e864da5de98f6ec373b71b6d9bfabe",
+            "kind": "session.end",
+            "payload": {
+              "ok": true
+            },
+            "prev_hash": "008932006034079fb7619526f465607f152c0994fbc8fe6504cd54c01ac6e543",
+            "seq": 3,
+            "ts": "2026-07-08T10:02:00Z"
+          },
+          {
+            "actor": "humano",
+            "entry_hash": "9ac8d1145f05eafc4b53a75efd20753f77bd666afba450f0be3dff4329d7155f",
+            "kind": "session.start",
+            "payload": {
+              "task": "revisar contrato"
+            },
+            "prev_hash": "",
+            "seq": 1,
+            "ts": "2026-07-08T10:00:00Z"
+          }
+        ],
+        "content_type": "application/json",
+        "status": 200
+      }
+    }
+  ]
+}

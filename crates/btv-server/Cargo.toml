@@ -38,3 +38,4 @@ path = "src/bin/loadgen.rs"
 
 [dev-dependencies]
 tempfile.workspace = true
+btv-golden.workspace = true
