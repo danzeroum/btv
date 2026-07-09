@@ -1,0 +1,256 @@
+{
+  "flow": "personas",
+  "steps": [
+    {
+      "name": "estado inicial: 4 papéis com prompt padrão, sem próprias",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/personas/editorial"
+      },
+      "response": {
+        "body": {
+          "personas": [
+            {
+              "editado": false,
+              "padrao": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante.",
+              "papel": "Pauteiro",
+              "prompt": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar.",
+              "papel": "Redator",
+              "prompt": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê.",
+              "papel": "Revisor de estilo",
+              "prompt": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência.",
+              "papel": "Fact-checker",
+              "prompt": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência."
+            }
+          ],
+          "proprias": [],
+          "template_id": "editorial"
+        },
+        "content_type": "application/json",
+        "status": 200
+      }
+    },
+    {
+      "name": "override do prompt do Redator",
+      "request": {
+        "body": {
+          "prompt": "Você escreve com humor seco e frases curtas."
+        },
+        "method": "PUT",
+        "path": "/api/btv/personas/editorial/Redator"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "override visível como editado, padrão preservado",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/personas/editorial"
+      },
+      "response": {
+        "body": {
+          "personas": [
+            {
+              "editado": false,
+              "padrao": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante.",
+              "papel": "Pauteiro",
+              "prompt": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante."
+            },
+            {
+              "editado": true,
+              "padrao": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar.",
+              "papel": "Redator",
+              "prompt": "Você escreve com humor seco e frases curtas."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê.",
+              "papel": "Revisor de estilo",
+              "prompt": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência.",
+              "papel": "Fact-checker",
+              "prompt": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência."
+            }
+          ],
+          "proprias": [],
+          "template_id": "editorial"
+        },
+        "content_type": "application/json",
+        "status": 200
+      }
+    },
+    {
+      "name": "cria persona própria",
+      "request": {
+        "body": {
+          "nome": "Ghostwriter",
+          "prompt": "Escreva como ghostwriter da marca."
+        },
+        "method": "POST",
+        "path": "/api/btv/personas/editorial/custom"
+      },
+      "response": {
+        "body": {
+          "id": 1
+        },
+        "content_type": "application/json",
+        "status": 201
+      }
+    },
+    {
+      "name": "atualiza persona própria",
+      "request": {
+        "body": {
+          "nome": "Ghostwriter Sênior",
+          "prompt": "Escreva como ghostwriter sênior."
+        },
+        "method": "PUT",
+        "path": "/api/btv/personas/editorial/custom/1"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "própria atualizada aparece na listagem",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/personas/editorial"
+      },
+      "response": {
+        "body": {
+          "personas": [
+            {
+              "editado": false,
+              "padrao": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante.",
+              "papel": "Pauteiro",
+              "prompt": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante."
+            },
+            {
+              "editado": true,
+              "padrao": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar.",
+              "papel": "Redator",
+              "prompt": "Você escreve com humor seco e frases curtas."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê.",
+              "papel": "Revisor de estilo",
+              "prompt": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência.",
+              "papel": "Fact-checker",
+              "prompt": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência."
+            }
+          ],
+          "proprias": [
+            {
+              "id": 1,
+              "nome": "Ghostwriter Sênior",
+              "prompt": "Escreva como ghostwriter sênior.",
+              "template_id": "editorial"
+            }
+          ],
+          "template_id": "editorial"
+        },
+        "content_type": "application/json",
+        "status": 200
+      }
+    },
+    {
+      "name": "remove persona própria",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/btv/personas/editorial/custom/1"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "restaura o Redator ao padrão",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/btv/personas/editorial/Redator"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "clear restaura todos e a listagem volta ao estado inicial",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/btv/personas/editorial"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "estado final igual ao inicial",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/personas/editorial"
+      },
+      "response": {
+        "body": {
+          "personas": [
+            {
+              "editado": false,
+              "padrao": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante.",
+              "papel": "Pauteiro",
+              "prompt": "Você é Pauteiro da squad Editorial / SEO. Abra o trabalho: interprete o briefing, estruture o plano e defina critérios de pronto. Fale em português claro, sem jargão. Entregue um plano curto e verificável antes de passar adiante."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar.",
+              "papel": "Redator",
+              "prompt": "Você é Redator da squad Editorial / SEO. Produza a primeira versão completa a partir do plano aprovado, respeitando tom, público e formato do briefing. Sinalize incertezas em vez de inventar."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê.",
+              "papel": "Revisor de estilo",
+              "prompt": "Você é Revisor de estilo da squad Editorial / SEO. Revise qualidade, consistência e clareza. Não reescreva do zero: melhore o que existe e registre o que mudou e por quê."
+            },
+            {
+              "editado": false,
+              "padrao": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência.",
+              "papel": "Fact-checker",
+              "prompt": "Você é Fact-checker da squad Editorial / SEO. Valide fatos, requisitos e conformidade antes da entrega. Se algo não puder ser verificado, bloqueie e explique — nunca aprove com pendência."
+            }
+          ],
+          "proprias": [],
+          "template_id": "editorial"
+        },
+        "content_type": "application/json",
+        "status": 200
+      }
+    }
+  ]
+}

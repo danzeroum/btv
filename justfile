@@ -15,6 +15,11 @@ lint:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all --check
 
+# Lint arquitetural da migração DDD (Trilha T4): fronteiras de camada
+# verificadas por máquina — ver scripts/arch-lint.sh.
+arch-lint:
+    ./scripts/arch-lint.sh
+
 # Pipeline de verificação determinística (evidência JSON — Fase 5 completa o /verify).
 verify: test lint
 
@@ -27,6 +32,11 @@ gen-proto: gen-proto-py
 
 gen-proto-py:
     cd python && uv run python ../scripts/gen_proto_py.py
+
+# Checa mudança breaking nos protos contra a main LOCAL (Trilha T5 da
+# migração DDD; no CI o baseline é o commit-base do PR). Requer buf.
+proto-breaking:
+    buf breaking schemas/proto --against '.git#branch=main,subdir=schemas/proto'
 
 # Regenera as fixtures de paridade de hash com a implementação Python de referência.
 gen-fixtures:

@@ -1,0 +1,99 @@
+{
+  "flow": "squad_activation_errors",
+  "steps": [
+    {
+      "name": "template desconhecido",
+      "request": {
+        "body": {
+          "template_id": "inexistente"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads"
+      },
+      "response": {
+        "body": {
+          "code": "unknown_template",
+          "error": "modelo de squad desconhecido: inexistente"
+        },
+        "content_type": "application/json",
+        "status": 404
+      }
+    },
+    {
+      "name": "todos os papéis desligados",
+      "request": {
+        "body": {
+          "papeis_off": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "template_id": "editorial"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads"
+      },
+      "response": {
+        "body": {
+          "code": "no_roles",
+          "error": "todos os papéis foram desligados — a squad precisa de ao menos um"
+        },
+        "content_type": "application/json",
+        "status": 422
+      }
+    },
+    {
+      "name": "gate sem HITL pendente",
+      "request": {
+        "body": {},
+        "method": "POST",
+        "path": "/api/btv/squads/sq999/gate"
+      },
+      "response": {
+        "body": {
+          "code": "hitl_not_found",
+          "error": "nenhum gate pendente para esta tarefa"
+        },
+        "content_type": "application/json",
+        "status": 404
+      }
+    },
+    {
+      "name": "ajuste com instrução vazia",
+      "request": {
+        "body": {
+          "instrucao": "   "
+        },
+        "method": "POST",
+        "path": "/api/btv/squads/sq999/ajuste"
+      },
+      "response": {
+        "body": {
+          "code": "empty_instruction",
+          "error": "instrução de ajuste vazia"
+        },
+        "content_type": "application/json",
+        "status": 400
+      }
+    },
+    {
+      "name": "ajuste em tarefa inexistente",
+      "request": {
+        "body": {
+          "instrucao": "melhorar o tom"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads/sq999/ajuste"
+      },
+      "response": {
+        "body": {
+          "code": "task_not_found",
+          "error": "tarefa de squad inexistente ou já encerrada"
+        },
+        "content_type": "application/json",
+        "status": 404
+      }
+    }
+  ]
+}

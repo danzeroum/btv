@@ -1,0 +1,92 @@
+{
+  "flow": "squad_activation",
+  "steps": [
+    {
+      "name": "ativação roda o motor real e responde 202",
+      "request": {
+        "body": {
+          "briefing": [
+            {
+              "label": "Qual é a pauta ou tema?",
+              "resposta": "logística verde no Brasil"
+            }
+          ],
+          "nome": "Newsletter de julho",
+          "papeis_off": [
+            3
+          ],
+          "refs": [],
+          "template_id": "editorial"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads"
+      },
+      "response": {
+        "body": {
+          "run_id": 1,
+          "task_id": "sq1"
+        },
+        "content_type": "application/json",
+        "status": 202
+      }
+    },
+    {
+      "name": "aprovar o gate HITL pendente",
+      "request": {
+        "body": {
+          "etapa": "Aprovar o rascunho antes da revisão"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads/sq1/gate"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    },
+    {
+      "name": "segunda ativação (run B) para o fluxo de ajuste",
+      "request": {
+        "body": {
+          "briefing": [
+            {
+              "label": "Qual é a pauta ou tema?",
+              "resposta": "logística verde no Brasil"
+            }
+          ],
+          "nome": "Newsletter de julho",
+          "papeis_off": [
+            3
+          ],
+          "refs": [],
+          "template_id": "editorial"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads"
+      },
+      "response": {
+        "body": {
+          "run_id": 2,
+          "task_id": "sq2"
+        },
+        "content_type": "application/json",
+        "status": 202
+      }
+    },
+    {
+      "name": "pedir ajuste no gate injeta a instrução e libera",
+      "request": {
+        "body": {
+          "etapa": "Aprovar o rascunho antes da revisão",
+          "instrucao": "use tom mais formal na abertura"
+        },
+        "method": "POST",
+        "path": "/api/btv/squads/sq2/ajuste"
+      },
+      "response": {
+        "body": null,
+        "status": 200
+      }
+    }
+  ]
+}

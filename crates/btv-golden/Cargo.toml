@@ -1,0 +1,10 @@
+[package]
+name = "btv-golden"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Harness de golden tests HTTP (Trilha T1 da migração DDD) — só dev-dependency"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

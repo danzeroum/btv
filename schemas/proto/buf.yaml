@@ -1,0 +1,14 @@
+# Módulo buf dos contratos gRPC (Trilha T5 do plano DDD multitenant).
+#
+# Só a checagem de BREAKING é configurada — o job `buf` do CI compara os
+# protos do PR contra a main (`--against '.git#branch=main,subdir=schemas/proto'`).
+# A regra do projeto (CLAUDE.md): protos evoluem só aditivamente; mudança
+# breaking exige arquivo .v2 + ADR novo — e, na migração DDD, só na janela
+# G3 com deploy coordenado Rust+Python.
+#
+# Sem seção `lint` de propósito: o default do buf reprovaria convenções dos
+# protos existentes (fora do escopo de T5, que é impedir breaking silencioso).
+version: v2
+breaking:
+  use:
+    - FILE

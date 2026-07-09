@@ -290,6 +290,7 @@ dependencies = [
  "anyhow",
  "axum",
  "btv-core",
+ "btv-golden",
  "btv-llm",
  "btv-proto",
  "btv-schemas",
@@ -330,6 +331,14 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "btv-golden"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -377,6 +386,7 @@ name = "btv-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "btv-golden",
  "btv-llm",
  "btv-schemas",
  "btv-store",
