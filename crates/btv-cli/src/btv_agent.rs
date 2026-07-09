@@ -1033,17 +1033,18 @@ async fn create_user_handler(
 
 /// `DELETE /api/btv/users/:id` — remove um perfil de vez (o toggle "ativo" só
 /// suspende). Registra `btv.user_removed` no ledger para trilha auditável.
-async fn delete_user_handler(
-    State(state): State<BtvAgentState>,
-    Path(id): Path<i64>,
-) -> Response {
+async fn delete_user_handler(State(state): State<BtvAgentState>, Path(id): Path<i64>) -> Response {
     let resultado = {
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
         store.delete_user(id)
     };
     match resultado {
         Ok(()) => {
-            let _ = append_ledger(&state.ledger, "btv.user_removed", serde_json::json!({ "id": id }));
+            let _ = append_ledger(
+                &state.ledger,
+                "btv.user_removed",
+                serde_json::json!({ "id": id }),
+            );
             StatusCode::OK.into_response()
         }
         Err(btv_store::BtvStoreError::NotFound) => (
