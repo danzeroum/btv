@@ -60,7 +60,7 @@ window.btvAudit = async function btvAudit(opts = {}) {
     // Fronteira de método: rotas POST-only não podem responder a GET
     await (async()=>{ const r = await req('GET','/api/ledger/verify'); r.status===405 ? P(V,'GET em rota POST-only (ledger/verify)','405 correto') : r.status===200 ? F(V,'GET em rota POST-only (ledger/verify)','200! método não checado') : W(V,'GET em rota POST-only (ledger/verify)',`veio ${r.status}`) })()
     await (async()=>{ const r = await req('GET','/api/verify/run'); r.status===405 ? P(V,'GET em rota POST-only (verify/run)','405 correto') : r.status===200 ? F(V,'GET em rota POST-only (verify/run)','200! disparou verify por GET') : W(V,'GET em rota POST-only (verify/run)',`veio ${r.status}`) })()
-    await (async()=>{ const r = await req('GET','/api/rota-que-nao-existe-'+Math.floor(performance.now())); r.status===404 ? P(V,'rota inexistente','404 correto') : W(V,'rota inexistente',`veio ${r.status}`) })()
+    await (async()=>{ const r = await req('GET','/api/rota-que-nao-existe-'+Math.floor(performance.now())); r.status===404 ? P(V,'rota inexistente','404 correto') : W(V,'rota inexistente',`veio ${r.status} — /api desconhecida cai no fallback SPA (index.html), não 404 JSON (por design)`) })()
   }
 
   // ===================== 2) HONESTIDADE / DADOS FABRICADOS =====================
@@ -192,8 +192,13 @@ window.btvAudit = async function btvAudit(opts = {}) {
         const imgInjetada = !![...document.querySelectorAll('#btv-root img')].find(i=>i.getAttribute('src')==='x')
         if (executou || imgInjetada) F(S,'XSS armazenado',`payload EXECUTOU/injetou <img> (executou=${executou} img=${imgInjetada})`)
         else P(S,'nome é escapado (sem XSS)','React renderizou o payload como texto literal')
-      } finally { if (id!=null) await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false }) }
-      I(S,'resíduo do teste intrusivo',`perfil ${id} criado e suspenso (não há delete) — nome com payload inerte`)
+      } finally {
+        if (id!=null) {
+          const del = await req('DELETE',`/api/btv/users/${id}`)
+          if (del.ok) I(S,'teste intrusivo sem resíduo',`perfil ${id} criado e REMOVIDO (payload inerte)`)
+          else { await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false }); I(S,'resíduo do teste intrusivo',`perfil ${id} suspenso (backend sem delete) — payload inerte`) }
+        }
+      }
     })()
   }
 

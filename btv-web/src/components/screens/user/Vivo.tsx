@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
+import { listDeliverables } from '../../../api/btv'
 
 /** Frases do papel ativo por etapa (copy do protótipo). */
 const DOING: Record<string, string> = {
@@ -44,6 +45,38 @@ export function Vivo() {
     const timer = window.setTimeout(() => setFilaHint(true), 5000)
     return () => window.clearTimeout(timer)
   }, [run, hasFeed, runDone])
+
+  // Ao concluir, conta as entregas REAIS desta task (arquivo gravado por
+  // ferramenta). O insert é server-side na conclusão, então pode chegar logo
+  // após o 'done' — daí um refetch curto antes de cravar "sem artefato".
+  const taskId = run?.taskId
+  const [artefatosDaTask, setArtefatosDaTask] = useState<number | null>(null)
+  useEffect(() => {
+    if (!runDone || !taskId) {
+      setArtefatosDaTask(null)
+      return
+    }
+    let cancel = false
+    const contar = async (): Promise<number> => {
+      try {
+        const ds = await listDeliverables()
+        return ds.filter((d) => d.task_id === taskId).length
+      } catch {
+        return 0
+      }
+    }
+    void (async () => {
+      let n = await contar()
+      if (n === 0) {
+        await new Promise((r) => setTimeout(r, 1400))
+        if (!cancel) n = await contar()
+      }
+      if (!cancel) setArtefatosDaTask(n)
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [runDone, taskId])
 
   if (!run || !view) {
     return (
@@ -289,32 +322,53 @@ export function Vivo() {
           )}
 
           {/* ── conclusão ── */}
-          {view.done && (
-            <div
-              data-testid="squad-done"
-              style={{ background: '#e7efe9', border: '1px solid #bcd4c8', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 14 }}
-            >
-              <span style={{ fontSize: 22 }}>◈</span>
-              <div>
-                <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15.5, color: 'var(--brandink)' }}>
-                  Entrega concluída
-                </div>
-                <div style={{ fontSize: 13, color: '#3f6355', marginTop: 3 }}>
-                  Os artefatos estão na{' '}
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      dispatch({ type: 'SET_SCREEN', screen: 'biblioteca' })
-                    }}
-                  >
-                    Biblioteca de entregas
-                  </a>
-                  , com trilha completa de procedência.
+          {view.done &&
+            (artefatosDaTask === 0 ? (
+              // Concluiu SEM gravar arquivo real: os agentes descreveram a
+              // entrega sem usar a ferramenta de escrita → nada na Biblioteca.
+              // Honestidade "Nada Fake": avisa em vez de apontar p/ tela vazia.
+              <div
+                data-testid="squad-done-sem-artefato"
+                style={{ background: 'var(--paper)', border: '1px solid var(--line2)', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'flex-start', gap: 14 }}
+              >
+                <span style={{ fontSize: 22 }}>⚠︎</span>
+                <div>
+                  <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15.5, color: 'var(--ink)' }}>
+                    Concluída, mas sem artefato real
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3, lineHeight: 1.6 }}>
+                    A squad terminou, mas <strong>nenhum arquivo foi gravado por ferramenta</strong> —
+                    os agentes descreveram a entrega em texto sem chamar a ferramenta de escrita, então{' '}
+                    <strong>nada foi para a Biblioteca</strong>. Tente novamente ou refine o briefing/modelo.
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div
+                data-testid="squad-done"
+                style={{ background: '#e7efe9', border: '1px solid #bcd4c8', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 14 }}
+              >
+                <span style={{ fontSize: 22 }}>◈</span>
+                <div>
+                  <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15.5, color: 'var(--brandink)' }}>
+                    Entrega concluída
+                  </div>
+                  <div style={{ fontSize: 13, color: '#3f6355', marginTop: 3 }}>
+                    Os artefatos estão na{' '}
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        dispatch({ type: 'SET_SCREEN', screen: 'biblioteca' })
+                      }}
+                    >
+                      Biblioteca de entregas
+                    </a>
+                    , com trilha completa de procedência.
+                  </div>
+                </div>
+              </div>
+            ))}
 
           {/* ── cockpit ── */}
           <div

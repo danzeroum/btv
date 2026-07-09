@@ -1583,3 +1583,82 @@ offline-first; um backend neural exige API de embeddings/modelo, opt-in de
 deploy); `PNG`/`MIDI` (exigem renderização/mídia real); a certificação plena de
 "Review por valor" (média ponderada das 4 dimensões) depende das duas dimensões
 de agente. Todos documentados no código, não escondidos.
+
+## Terceira onda — achados das sondas adversariais (console + bash)
+
+Os scripts `scripts/btv-audit-console.js` (`btvAudit()`) e
+`scripts/btv-adversarial.sh` foram rodados contra a produção real e acharam
+duas decisões silenciosas, ambas fechadas com teste:
+
+1. **`set-ativo` em id inexistente virava 200 (no-op silencioso)** — divergia de
+   `pin`/`verify-pin`, que já davam 404. `BtvStore::set_user_ativo` passa a
+   devolver `NotFound` quando nenhuma linha é afetada e o handler mapeia para
+   **404** (`user_not_found`). Provado por `set_ativo_em_id_inexistente_e_not_found`.
+2. **`/api/*` desconhecida caía no `index.html` da SPA (200 HTML)** — confundia
+   clientes de API. O fallback do `btv_server::router` ficou esperto: rota que
+   começa com `/api/` devolve **404 JSON** (`route_not_found`); qualquer outra
+   segue caindo no SPA (navegação client-side). Provado por
+   `rota_api_desconhecida_e_404_json_nao_o_spa` (e o SPA de `/designer` segue 200).
+
+3. **Não havia como apagar um perfil (só suspender)** — o toggle "ativo" desativa
+   mas não remove, então os perfis de teste `(SMOKE|FULL)·pin·…` das sondas
+   acumulavam sem volta. Fechado com a capacidade real: `BtvStore::delete_user`
+   (NotFound em id inexistente), `DELETE /api/btv/users/:id` (200/404, registra
+   `btv.user_removed` no ledger) e o botão **remover** no A6 (`Usuarios.tsx`, com
+   confirmação; limpa o perfil ativo se for ele). Provado por
+   `delete_user_remove_de_vez_e_404_em_id_inexistente`. Os scripts de smoke/
+   auditoria passaram a **remover** o perfil de teste ao fim (fallback gracioso a
+   "suspender" em backend sem a rota) — não geram mais resíduo.
+
+4. **Ledger "CADEIA VIOLADA" era corrida real de concorrência (não dado
+   herdado)** — cada `Session` do squad abre uma CONEXÃO própria a `.btv/btv.db`
+   (`session.rs`), separada da conexão do dashboard (`main.rs`). O `append` fazia
+   `SELECT último hash → calcula → INSERT` numa transação `DEFERRED`; sob WAL,
+   duas conexões concorrentes (o ledger mostrava DUAS sessões `sa…` iniciando no
+   mesmo minuto) liam o mesmo `prev_hash` e a segunda encadeava no hash errado →
+   `verify_chain` acusava violação. Fechado com `BEGIN IMMEDIATE` (o lock de
+   escrita é pego ANTES do SELECT → read-modify-write atômico entre conexões) +
+   `busy_timeout` (a 2ª espera em vez de estourar "database is locked"). Provado
+   por `appends_concorrentes_de_conexoes_separadas_mantem_a_cadeia` (6 threads ×
+   20 entradas, conexões separadas): passa com o conserto; sem ele, dá panic em
+   todas as rodadas. **O conserto impede novas quebras; as entradas já violadas
+   no volume atual permanecem (append-only não reescreve história) — um ledger
+   limpo exige arquivar/zerar o volume, decisão de ops.**
+
+5. **Gate do "Squad ao vivo" lançava erro não-tratado quando a sessão já
+   acabara** — "Aprovar e continuar" dava `ApiError: nenhum gate pendente` e
+   "Pedir ajuste" dava `tarefa inexistente ou já encerrada`. Causa: o gate HITL
+   vive só na memória do backend (`SquadHub`) e é efêmero — expira em ~5 min
+   (fail-closed, ADR 0017) e some se o container reinicia (ex.: redeploy). O
+   frontend seguia mostrando o gate obsoleto e o `void aprovar()` virava
+   "Uncaught (in promise)". Fechado no `SquadRunContext`: `aprovar`/`ajustar`
+   capturam a falha, limpam a squad ao vivo obsoleta e avisam o usuário
+   ("sessão já encerrada — inicie uma nova"). `tsc`/vitest verdes.
+
+6. **Aviso "concluída sem artefato real" (melhoria de UX)** — antes, uma run que
+   terminava sem gravar arquivo (modelo narrou a entrega sem chamar `edit`)
+   ficava só "concluída" e a Biblioteca aparecia vazia, confundindo. Agora a UI
+   sinaliza: helper puro `runSemArtefatoReal(status, nº entregas)` (vitest),
+   badge "sem artefato real" em Minhas squads (U6) e card honesto no Squad ao
+   vivo ("Concluída, mas sem artefato real…"). A fonte da verdade é a contagem
+   de entregas por run (`/api/btv/deliverables`, arquivo REAL de ferramenta) —
+   nada fabricado.
+
+**Como testar os consertos SEM frontend** (três camadas):
+- `cargo test -p btv-store -p btv-cli -p btv-server` — provas determinísticas:
+  `set_ativo_em_id_inexistente_e_not_found`, `rota_api_desconhecida_e_404_json_
+  nao_o_spa`, `delete_user_remove_de_vez_e_404_em_id_inexistente`,
+  `appends_concorrentes_de_conexoes_separadas_mantem_a_cadeia` (ledger).
+- `cd btv-web && npx vitest run` — lógica de front headless (Node, sem browser):
+  `runSemArtefatoReal` e as 31 specs de marca/estado.
+- `bash scripts/btv-regression.sh` (BASE/AUTH) — contrato HTTP na instância viva:
+  set-ativo→404, /api desconhecida→404 JSON, ciclo delete de usuário (self-clean),
+  gate/ajuste em task inexistente→404, `/api/btv/deliverables` como fonte do aviso.
+
+Observações não-bug (por design, não código): custo `$0` até tráfego novo com
+tokens; rodapé "Marina L." é placeholder (não há sessão/login real). **Entregas
+vazias numa run "concluída"** é honestidade (não bug): a Biblioteca só mostra
+arquivos REALMENTE gravados por ferramenta (`edit` exit 0); quando o modelo
+apenas NARRA em prosa que "gravou o arquivo" (ex.: deepseek dizendo exportar
+MusicXML/MIDI/PDF sem tool de renderização real), nada é capturado — o "Nada
+Fake" pega a entrega alucinada, e a UI agora avisa (item 6).

@@ -197,25 +197,52 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
     })
   }, [run, view, dispatch])
 
+  // O gate HITL vive só na memória do backend (SquadHub): expira em ~5 min sem
+  // resposta (fail-closed, ADR 0017) e some se o servidor reinicia. Quando
+  // aprovar/ajustar falham por isso, a tarefa já não existe — em vez de deixar
+  // o erro virar "Uncaught (in promise)" e o gate obsoleto clicável, limpamos a
+  // squad ao vivo e avisamos o usuário.
+  const finalizarSessaoObsoleta = useCallback(
+    (mensagem: string) => {
+      disconnectRef.current?.()
+      setRun(null)
+      dispatch({ type: 'SET_SQUAD', squad: null })
+      if (typeof window !== 'undefined') window.alert(mensagem)
+    },
+    [dispatch],
+  )
+  const GATE_ENCERRADO =
+    'Esta sessão do squad já foi encerrada — o gate espera no máximo ~5 min por sua decisão (e some se o servidor reiniciar). Não há mais o que aprovar aqui; inicie uma nova squad.'
+
   const aprovar = useCallback(async () => {
     if (!run || !view) return
     const etapa = run.etapas[Math.min(view.idx, run.etapas.length - 1)]?.nome ?? ''
-    await aprovarGate(run.taskId, etapa)
+    try {
+      await aprovarGate(run.taskId, etapa)
+    } catch {
+      finalizarSessaoObsoleta(GATE_ENCERRADO)
+      return
+    }
     setRun((r) =>
       r ? { ...r, acoes: [...r.acoes, { kind: 'gate_aprovado', afterEventIndex: r.events.length }] } : r,
     )
-  }, [run, view])
+  }, [run, view, finalizarSessaoObsoleta])
 
   const ajustar = useCallback(
     async (instrucao: string) => {
       if (!run || !view) return
       const etapa = run.etapas[Math.min(view.idx, run.etapas.length - 1)]?.nome ?? ''
-      await pedirAjuste(run.taskId, instrucao, etapa)
+      try {
+        await pedirAjuste(run.taskId, instrucao, etapa)
+      } catch {
+        finalizarSessaoObsoleta(GATE_ENCERRADO)
+        return
+      }
       setRun((r) =>
         r ? { ...r, acoes: [...r.acoes, { kind: 'ajuste', afterEventIndex: r.events.length }] } : r,
       )
     },
-    [run, view],
+    [run, view, finalizarSessaoObsoleta],
   )
 
   const enviarChat = useCallback(

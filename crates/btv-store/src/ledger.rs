@@ -5,7 +5,8 @@
 //! INSERT (overrides são novas entradas marcadas).
 
 use btv_schemas::ledger::LedgerEntry;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, TransactionBehavior};
+use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LedgerError {
@@ -34,6 +35,14 @@ impl LedgerStore {
         // concorrência latente, fechado só agora, Onda 6; mesmo padrão já
         // usado por `EventStore`/`RuleStore::open`).
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        // Escritores concorrentes (CLI/squad e dashboard têm CONEXÕES separadas
+        // ao mesmo arquivo) esperam o lock em vez de estourar "database is
+        // locked" — casado com o `BEGIN IMMEDIATE` do `append`, que serializa o
+        // read-modify-write que encadeia o hash. Sem isso, dois `append` liam o
+        // MESMO último hash e o segundo gravava `prev_hash` obsoleto → cadeia
+        // violada (o modo WAL, ao deixar leitor e escritor coexistirem, expunha
+        // exatamente essa corrida).
+        conn.busy_timeout(Duration::from_secs(10))?;
         Self::init(conn)
     }
 
@@ -55,7 +64,13 @@ impl LedgerStore {
 
     /// Anexa uma entrada, calculando `seq`, `prev_hash` e `entry_hash`.
     pub fn append(&mut self, mut entry: LedgerEntry) -> Result<LedgerEntry, LedgerError> {
-        let tx = self.conn.transaction()?;
+        // `Immediate`: pega o lock de escrita ANTES do `SELECT` do último hash,
+        // então o read-modify-write é atômico ENTRE conexões. Sem isso (o
+        // default `Deferred`), duas conexões concorrentes liam o mesmo
+        // `prev_hash` e a segunda encadeava no hash errado → cadeia violada.
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let prev_hash: String = tx
             .query_row(
                 "SELECT entry_hash FROM ledger ORDER BY seq DESC LIMIT 1",
@@ -171,6 +186,43 @@ mod tests {
         assert_eq!(first.seq, 1);
         assert_eq!(second.prev_hash, first.entry_hash);
         assert_eq!(store.verify_chain().unwrap(), 2);
+    }
+
+    #[test]
+    fn appends_concorrentes_de_conexoes_separadas_mantem_a_cadeia() {
+        // Reproduz a corrida real de produção: CLI/squad e dashboard têm
+        // CONEXÕES SEPARADAS ao mesmo `.btv/btv.db`. Antes do `BEGIN IMMEDIATE`,
+        // dois `append` simultâneos liam o mesmo último hash e a segunda
+        // entrada encadeava no hash errado → `verify_chain` acusava violação.
+        // Com o conserto, N threads × M entradas mantêm a cadeia íntegra.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ledger.db");
+        let p = path.to_str().unwrap().to_string();
+        // Semeia o schema uma vez (evita corrida no CREATE TABLE inicial).
+        LedgerStore::open(&p).unwrap();
+
+        let threads = 6u64;
+        let por_thread = 20u64;
+        let handles: Vec<_> = (0..threads)
+            .map(|t| {
+                let p = p.clone();
+                std::thread::spawn(move || {
+                    let mut store = LedgerStore::open(&p).unwrap();
+                    for _ in 0..por_thread {
+                        store
+                            .append(entry_with_actor("tool.run", &format!("t{t}")))
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // Conexão fresca valida a cadeia inteira: nenhuma quebra.
+        let store = LedgerStore::open(&p).unwrap();
+        assert_eq!(store.verify_chain().unwrap(), threads * por_thread);
     }
 
     #[test]

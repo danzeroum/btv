@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createUser, fetchUsers, setUserAtivo, verifyUserPin, type BtvUser } from '../../../api/admin'
+import { createUser, deleteUser, fetchUsers, setUserAtivo, verifyUserPin, type BtvUser } from '../../../api/admin'
 import { ErroBox, NotaHonesta, Pill, Toggle } from './comum'
 
 // Avatares em família grafite/taupe — iniciais discretas, sem cores funcionais
@@ -67,6 +67,16 @@ export function Usuarios() {
     })
   }
 
+  const remover = (u: BtvUser) => {
+    if (!window.confirm(`Remover o perfil "${u.nome}"? Esta ação não pode ser desfeita.`)) return
+    void deleteUser(u.id)
+      .then(() => {
+        if (ativo?.id === u.id) setAtivo(null)
+        recarregar()
+      })
+      .catch((e: Error) => setErro(e.message))
+  }
+
   return (
     <>
       {ativo && (
@@ -95,7 +105,7 @@ export function Usuarios() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {users.map((u, i) => (
-          <div key={u.id} data-testid={`user-${u.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1.6fr 120px auto auto', gap: 16, alignItems: 'center', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 20px' }}>
+          <div key={u.id} data-testid={`user-${u.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1.6fr 120px auto auto auto', gap: 16, alignItems: 'center', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: 12, padding: '14px 20px' }}>
             <span style={{ width: 34, height: 34, borderRadius: '50%', background: CORES[i % CORES.length], color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 13 }}>
               {u.nome[0]?.toUpperCase() ?? '?'}
             </span>
@@ -128,6 +138,15 @@ export function Usuarios() {
               style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, padding: '6px 13px', fontSize: 11.5, color: u.ativo ? 'var(--ink)' : 'var(--faint)', fontFamily: 'var(--mono)' }}
             >
               entrar
+            </button>
+            <button
+              data-testid={`remover-${u.id}`}
+              onClick={() => remover(u)}
+              title="remover perfil"
+              aria-label={`remover ${u.nome}`}
+              style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, padding: '6px 11px', fontSize: 11.5, color: 'var(--muted)', fontFamily: 'var(--mono)' }}
+            >
+              remover
             </button>
             {desafio === u.id && (
               <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>

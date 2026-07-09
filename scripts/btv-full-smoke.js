@@ -155,8 +155,11 @@ window.btvFull = async function btvFull(opts = {}) {
       const wrong = await req('POST',`/api/btv/users/${id}/verify-pin`,{ pin:'0000' }); need(wrong.data?.ok===false,'PIN errado deveria falhar')
       const right = await req('POST',`/api/btv/users/${id}/verify-pin`,{ pin:'4242' }); need(right.data?.ok===true,'PIN certo deveria passar')
       const clr = await req('POST',`/api/btv/users/${id}/pin`,{ pin:'' }); need(clr.ok,'clear '+clr.status)
-      const susp = await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false }); need(susp.ok,'ativo '+susp.status)
-      return `perfil ${id}: PIN ok, limpo, suspenso`
+      // Auto-limpeza: remove de vez (rota nova). Backend antigo sem DELETE → suspende.
+      const del = await req('DELETE',`/api/btv/users/${id}`)
+      if (del.ok) return `perfil ${id}: PIN ok, limpo, removido`
+      await req('POST',`/api/btv/users/${id}/ativo`,{ ativo:false })
+      return `perfil ${id}: PIN ok, limpo, suspenso (backend sem delete)`
     })
     await check(M, 'template publicação toggle', async () => {
       if(!apiTemplates.length) warn('sem templates'); const tid = apiTemplates[0].id ?? apiTemplates[0].template_id

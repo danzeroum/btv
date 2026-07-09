@@ -16,6 +16,10 @@ tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tower-http.workspace = true
+# `ServiceExt::oneshot` no fallback esperto da SPA (serve o index.html só para
+# rotas não-`/api`; `/api/*` desconhecida vira 404 JSON). Usado na lib, não só
+# nos testes — por isso dependência normal.
+tower = { workspace = true, features = ["util"] }
 # `created_at` dos prompts salvos (Fase 7 Onda 5) — mesma lib/formato que
 # `btv-cli`'s `now_rfc3339()` já usa (`session.rs`), só que aqui embutida
 # porque btv-server não depende de btv-cli.
@@ -33,5 +37,4 @@ name = "loadgen"
 path = "src/bin/loadgen.rs"
 
 [dev-dependencies]
-tower = { workspace = true, features = ["util"] }
 tempfile.workspace = true

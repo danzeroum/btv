@@ -35,6 +35,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use tower::util::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
 #[derive(Clone)]
@@ -145,7 +146,25 @@ pub fn router(
         .route("/api/verify/{id}", get(get_verify_status))
         .route("/api/designer/workflow", post(save_workflow))
         .route("/api/btv/templates", get(btv::list_templates))
-        .fallback_service(serve_dir);
+        // Fallback esperto: rota `/api/*` desconhecida devolve 404 JSON honesto
+        // (não o index.html da SPA, que confundia clientes de API); qualquer
+        // outra rota desconhecida é navegação client-side e cai no SPA.
+        .fallback(move |req: Request| {
+            let serve = serve_dir.clone();
+            async move {
+                if req.uri().path().starts_with("/api/") {
+                    return (
+                        StatusCode::NOT_FOUND,
+                        Json(ErrorBody::new("route_not_found", "rota inexistente")),
+                    )
+                        .into_response();
+                }
+                match serve.oneshot(req).await {
+                    Ok(resp) => resp.into_response(),
+                    Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                }
+            }
+        });
     let router = match dev_console {
         Some(svc) => router.nest_service("/dev", svc),
         None => router,
@@ -1153,6 +1172,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rota_api_desconhecida_e_404_json_nao_o_spa() {
+        let web_dir = fixture_web_dir();
+        let app = router(
+            Telemetry::open_in_memory().unwrap(),
+            prompt_library_vazia(),
+            ledger_vazio(),
+            web_dir.path(),
+            web_dir.path(),
+        );
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/nao-existe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // `/api/*` desconhecida NÃO cai no SPA: 404 JSON honesto.
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "route_not_found");
     }
 
     #[tokio::test]
