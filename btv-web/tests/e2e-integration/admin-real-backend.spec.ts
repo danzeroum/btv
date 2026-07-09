@@ -91,3 +91,26 @@ test('usuários: perfis locais criam, listam e suspendem', async ({ page }) => {
   await linha.getByRole('button', { name: /acesso de Marina/ }).click()
   await expect(linha).toContainText('suspenso')
 })
+
+test('usuários: PIN protege o perfil e é verificado pelo backend', async ({ page }) => {
+  await irParaAdmin(page, 'Usuários')
+  await page.getByPlaceholder('nome do perfil…').fill('Cofre')
+  await page.getByPlaceholder('PIN (opcional)').fill('4242')
+  await page.getByRole('button', { name: '+ Adicionar perfil' }).click()
+
+  // O perfil criado com PIN aparece com cadeado.
+  const cofre = page.locator('[data-testid^="user-"]', { hasText: 'Cofre' })
+  await expect(cofre.getByTitle('perfil protegido por PIN')).toBeVisible()
+
+  // "entrar" pede o PIN; um PIN errado é recusado pelo backend.
+  await cofre.getByRole('button', { name: 'entrar' }).click()
+  const pinInput = cofre.getByPlaceholder(/PIN de Cofre/)
+  await pinInput.fill('0000')
+  await cofre.getByRole('button', { name: 'confirmar' }).click()
+  await expect(cofre.getByText('PIN incorreto.')).toBeVisible()
+
+  // O PIN certo assume o perfil (verificação real, hash no backend).
+  await pinInput.fill('4242')
+  await cofre.getByRole('button', { name: 'confirmar' }).click()
+  await expect(page.getByText(/Perfil ativo:/)).toContainText('Cofre')
+})

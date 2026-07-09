@@ -95,24 +95,41 @@ export const setPublicacao = (templateId: string, publicado: boolean) =>
     body: JSON.stringify({ publicado }),
   })
 
-// A6 · perfis locais
+// A6 · perfis locais (com PIN opcional verificado pelo backend)
 export interface BtvUser {
   id: number
   nome: string
   email: string
   papel: string
   ativo: boolean
+  /** Se o perfil exige PIN para ser assumido (o hash nunca é exposto). */
+  has_pin: boolean
 }
 export const fetchUsers = () => fetchJson<BtvUser[]>('/api/btv/users')
-export const createUser = (nome: string, email: string, papel: string) =>
+export const createUser = (nome: string, email: string, papel: string, pin?: string) =>
   fetchJson<{ id: number }>('/api/btv/users', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ nome, email, papel }),
+    body: JSON.stringify(pin ? { nome, email, papel, pin } : { nome, email, papel }),
   })
 export const setUserAtivo = (id: number, ativo: boolean) =>
   fetchJson(`/api/btv/users/${id}/ativo`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ativo }),
+  })
+/** Define (ou limpa, com pin vazio) o PIN de um perfil. */
+export const setUserPin = (id: number, pin: string) =>
+  fetchJson(`/api/btv/users/${id}/pin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  })
+export type PinReason = 'no_pin' | 'ok' | 'wrong'
+/** Verifica o PIN de um perfil no backend (o hash nunca sai daqui). */
+export const verifyUserPin = (id: number, pin: string) =>
+  fetchJson<{ ok: boolean; reason: PinReason }>(`/api/btv/users/${id}/verify-pin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pin }),
   })
