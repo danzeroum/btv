@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
+
+def _format_recall(context: dict[str, Any] | None) -> str | None:
+    """Resume as memórias recuperadas (recall léxico) num bloco curto para o
+    prompt do planejador. `None` se não houver contexto — o planejador roda
+    igual, sem inventar histórico."""
+    if not context:
+        return None
+    docs = context.get("documents") or []
+    if not docs:
+        return None
+    linhas = []
+    for doc in docs[:5]:
+        texto = doc if isinstance(doc, str) else json.dumps(doc, ensure_ascii=False)
+        if len(texto) > 400:
+            texto = texto[:400] + "…"
+        linhas.append(f"- {texto}")
+    return (
+        "Decisões relevantes de tarefas anteriores (memória do squad, recuperação "
+        "léxica — pode não ser pertinente): use como contexto se ajudar, ignore se "
+        "não se aplicar a ESTA tarefa.\n" + "\n".join(linhas)
+    )
+
 _DECOMPOSE_SYSTEM_PROMPT = """Você é um planejador técnico sênior. Dada uma tarefa, decomponha-a em passos executáveis.
 Responda SOMENTE com um objeto JSON (sem markdown):
 {
@@ -71,18 +93,26 @@ class AdaptivePlanner:
     def attach_gateway(self, gateway: Any) -> None:
         self.gateway = gateway
 
-    async def create_adaptive_plan(self, task: dict[str, Any]) -> dict[str, Any]:
+    async def create_adaptive_plan(
+        self, task: dict[str, Any], relevant_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if self.gateway is None:
             raise RuntimeError(
                 "AdaptivePlanner sem gateway anexado — chame attach_gateway() antes de create_adaptive_plan()"
             )
 
+        # Memória recuperada (recall léxico TF-IDF) entra como contexto do
+        # planejamento — antes era só CONTADA (`context_recall_count`), agora
+        # informa a decomposição de verdade.
+        messages = [{"role": "system", "content": _DECOMPOSE_SYSTEM_PROMPT}]
+        context_note = _format_recall(relevant_context)
+        if context_note:
+            messages.append({"role": "system", "content": context_note})
+        messages.append({"role": "user", "content": json.dumps(task, ensure_ascii=False)})
+
         request = LlmRequest(
             model=self.model,
-            messages=[
-                {"role": "system", "content": _DECOMPOSE_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(task, ensure_ascii=False)},
-            ],
+            messages=messages,
             requester="planner",
         )
         raw = await self.gateway.generate(request)

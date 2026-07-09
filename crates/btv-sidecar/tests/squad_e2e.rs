@@ -123,6 +123,7 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
             verification_evidence_json: String::new(),
+            model: String::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -272,6 +273,7 @@ async fn kill_do_sidecar_dispara_fallback() {
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
             verification_evidence_json: String::new(),
+            model: String::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -562,6 +564,7 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
             // validate_results() de verdade (é o veredito final que a
             // definição de pronto exige observar).
             verification_evidence_json: evidence_json,
+            model: String::new(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");

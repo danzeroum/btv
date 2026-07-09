@@ -488,12 +488,14 @@ fn inject_cockpit_context(hub: &SquadHub, task_id: &str, req: &LlmRequest) -> Ll
 /// `btv squad` CLI, evidência para o auditor), adquire o único slot do
 /// pool, executa e drena o stream publicando cada evento cru + registrando
 /// o consenso no ledger.
+#[allow(clippy::too_many_arguments)]
 async fn run_squad_task<B>(
     hub: SquadHub,
     pool: Arc<SquadPool>,
     root: PathBuf,
     task_id: String,
     description: String,
+    model: String,
     backend_for: impl FnOnce(SquadHub, String, PathBuf, Arc<ToolRegistry>, PermissionEngine) -> B,
 ) where
     B: CoreBackend,
@@ -504,6 +506,7 @@ async fn run_squad_task<B>(
         root,
         task_id.clone(),
         description,
+        model,
         backend_for,
     )
     .await;
@@ -527,12 +530,14 @@ async fn run_squad_task<B>(
     hub.finish_task(&task_id);
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_squad_task_inner<B>(
     hub: SquadHub,
     pool: Arc<SquadPool>,
     root: PathBuf,
     task_id: String,
     description: String,
+    model: String,
     backend_for: impl FnOnce(SquadHub, String, PathBuf, Arc<ToolRegistry>, PermissionEngine) -> B,
 ) -> Result<(), String>
 where
@@ -573,13 +578,13 @@ where
         .map_err(|e| format!("falha ao serializar evidência: {e}"))?;
 
     // Abre a sessão de ledger ANTES de mover `description` para o
-    // `SquadTask` abaixo — mesma sessão/ledger que o resto da plataforma
-    // usa (`.btv/btv.db`). "model" aqui é rótulo informativo do que o
-    // pool está configurado pra usar (`squad_model()`), não uma escolha
-    // por-tarefa — a sessão de squad não escolhe modelo por si, e cada
-    // agente Python chama `Generate` com o modelo herdado do pool.
-    let mut ledger_session = crate::session::Session::open(&root, &description, &squad_model())
-        .map_err(|e| e.to_string())?;
+    // `SquadTask` abaixo — mesma sessão/ledger que o resto da plataforma usa
+    // (`.btv/btv.db`). O `model` agora é o modelo REAL escolhido para a
+    // tarefa (tela Modelo ou default do pool), propagado ao proto abaixo — o
+    // ledger deixa de registrar sempre o default e passa a refletir o
+    // modelo de fato.
+    let mut ledger_session =
+        crate::session::Session::open(&root, &description, &model).map_err(|e| e.to_string())?;
 
     let lease = pool
         .acquire()
@@ -587,10 +592,9 @@ where
         .map_err(|e: SidecarError| e.to_string())?;
     let mut client = lease.client().clone();
 
-    // Hardcoded, não lido de `RunSquadBody`: o campo é ignorado
-    // ponta-a-ponta pelo Python hoje (ver mesmo comentário em `squad.rs`) —
-    // wire-lo até a UI seria "o campo viajou" sem efeito real. Descope
-    // explícito da Onda 13 (ADR 0021), não esquecimento.
+    // `max_autonomy_level` segue hardcoded/ignorado ponta-a-ponta pelo Python
+    // (descope da Onda 13, ADR 0021). `model`, ao contrário, agora É lido pelo
+    // `server.py::ExecuteTask` e sobrepõe o default do pool por tarefa.
     let mut stream = client
         .execute_task(SquadTask {
             task_id: task_id.clone(),
@@ -598,6 +602,7 @@ where
             decision_type: "architecture".into(),
             max_autonomy_level: 3,
             verification_evidence_json,
+            model,
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -649,6 +654,10 @@ where
 #[derive(Deserialize)]
 struct RunSquadBody {
     task: String,
+    /// Modelo escolhido na tela Modelo para ESTA tarefa. Ausente/vazio =
+    /// herda o default do pool (`BTV_SQUAD_MODEL`).
+    #[serde(default)]
+    model: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -671,7 +680,13 @@ pub(crate) struct SquadAgentState {
 pub(crate) fn start_squad_task(
     state: &SquadAgentState,
     description: String,
+    model: Option<String>,
 ) -> Result<String, Box<Response>> {
+    // Modelo por-tarefa: a escolha da tela Modelo, ou o default do pool
+    // (`BTV_SQUAD_MODEL`) quando ausente/vazia.
+    let model = model
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or_else(squad_model);
     let root = match std::env::current_dir() {
         Ok(r) => r,
         Err(e) => {
@@ -696,6 +711,7 @@ pub(crate) fn start_squad_task(
             root,
             task_id_for_task,
             description,
+            model,
             |hub, task_id, root, tools, tool_permissions| ScriptedSquadCoreBackend {
                 hub,
                 task_id,
@@ -706,7 +722,9 @@ pub(crate) fn start_squad_task(
         ))
     } else {
         let opts = crate::RunOpts {
-            model: squad_model(),
+            // Tier de rate-limit segue o modelo REAL da tarefa (o texto do
+            // modelo enviado ao provider vem do Python via `core_generate`).
+            model: model.clone(),
             agent: "build".into(),
             yes: false,
             no_cache: false,
@@ -731,6 +749,7 @@ pub(crate) fn start_squad_task(
             root,
             task_id_for_task,
             description,
+            model,
             move |hub, task_id, root, tools, tool_permissions| WebSquadCoreBackend {
                 generator,
                 hub,
@@ -751,7 +770,7 @@ async fn run_squad_handler(
     State(state): State<SquadAgentState>,
     Json(body): Json<RunSquadBody>,
 ) -> Response {
-    match start_squad_task(&state, body.task) {
+    match start_squad_task(&state, body.task, body.model) {
         Ok(task_id) => (StatusCode::ACCEPTED, Json(RunSquadResponse { task_id })).into_response(),
         Err(resp) => *resp,
     }

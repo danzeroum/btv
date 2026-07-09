@@ -1,8 +1,21 @@
 import asyncio
 import json
 
-from btv_squad.gateway import LlmResponse, ScriptedGatewayClient
+from btv_squad.gateway import LlmRequest, LlmResponse, ScriptedGatewayClient
 from btv_squad.planning import AdaptivePlanner
+
+
+class _RecordingGateway:
+    """Gateway que registra a última request e devolve uma decomposição fixa —
+    para inspecionar o que o planejador de fato mandou ao gateway."""
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self.last_request: LlmRequest | None = None
+
+    async def generate(self, request: LlmRequest) -> LlmResponse:
+        self.last_request = request
+        return LlmResponse(text=self._text)
 
 
 def _decomposition_payload(**overrides):
@@ -107,3 +120,38 @@ def test_analyze_failure_classifica_erro_desconhecido():
     planner = AdaptivePlanner()
     result = planner.analyze_failure(ValueError("invalid input"), {"plan_id": "p1"})
     assert result["reason"] == "unknown"
+
+
+def _prompt_text(request: LlmRequest) -> str:
+    return "\n".join(m["content"] for m in request.messages)
+
+
+def test_recall_alimenta_o_prompt_do_planejador():
+    """Memória recuperada entra como contexto do planejamento — antes era só
+    contada. Prova pela request de fato enviada ao gateway."""
+    gw = _RecordingGateway(json.dumps(_decomposition_payload()))
+    planner = AdaptivePlanner()
+    planner.attach_gateway(gw)
+
+    relevant_context = {
+        "documents": [json.dumps({"decisao": "usar webhook idempotente no gateway de pagamento"})],
+        "ids": ["architect_2026"],
+    }
+    asyncio.run(
+        planner.create_adaptive_plan({"description": "integrar pagamento"}, relevant_context)
+    )
+    prompt = _prompt_text(gw.last_request)
+    assert "webhook idempotente" in prompt, "a memória recuperada deveria aparecer no prompt"
+    assert "memória do squad" in prompt
+
+
+def test_sem_recall_o_prompt_nao_inventa_contexto():
+    gw = _RecordingGateway(json.dumps(_decomposition_payload()))
+    planner = AdaptivePlanner()
+    planner.attach_gateway(gw)
+
+    asyncio.run(planner.create_adaptive_plan({"description": "tarefa nova"}))
+    prompt = _prompt_text(gw.last_request)
+    assert "memória do squad" not in prompt, "sem recall, nenhum bloco de contexto fabricado"
+    # Só as duas mensagens originais (system do decompose + user com a task).
+    assert len(gw.last_request.messages) == 2

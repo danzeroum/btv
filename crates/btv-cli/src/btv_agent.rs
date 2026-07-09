@@ -217,7 +217,9 @@ async fn ativar_squad_handler(
         })
         .collect();
 
-    let task_id = match start_squad_task(&state.squad, descricao) {
+    // A galeria BuildToValue não tem seletor de modelo por ativação (o produto
+    // usa o default do deploy, `BTV_SQUAD_MODEL`); `None` = herda esse default.
+    let task_id = match start_squad_task(&state.squad, descricao, None) {
         Ok(id) => id,
         Err(resp) => return *resp,
     };

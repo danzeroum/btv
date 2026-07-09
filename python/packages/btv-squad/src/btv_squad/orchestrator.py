@@ -137,7 +137,9 @@ class UnifiedOrchestrator:
         logger.info("Iniciando execução da tarefa %s", task_id)
 
         relevant_context = self.memory.recall_similar(task.get("description", ""), k=5)
-        plan = await self.planner.create_adaptive_plan(task)
+        # O contexto recuperado alimenta o planejamento (antes era só contado
+        # em `context_recall_count`).
+        plan = await self.planner.create_adaptive_plan(task, relevant_context)
         proposals = await self._get_squad_proposals(plan)
         consensus = self.consensus.reach_consensus(proposals, "architecture")
 

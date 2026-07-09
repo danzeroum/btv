@@ -75,11 +75,12 @@ export interface RunSquadResponse {
   task_id: string
 }
 
-export async function runSquad(task: string): Promise<RunSquadResponse> {
+export async function runSquad(task: string, model?: string): Promise<RunSquadResponse> {
   return fetchJson<RunSquadResponse>('/api/squad/run', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ task }),
+    // `model` (tela Modelo) vale por-tarefa; omitido = default do pool.
+    body: JSON.stringify(model ? { task, model } : { task }),
   })
 }
 
