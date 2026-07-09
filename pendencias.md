@@ -1635,10 +1635,30 @@ duas decisões silenciosas, ambas fechadas com teste:
    capturam a falha, limpam a squad ao vivo obsoleta e avisam o usuário
    ("sessão já encerrada — inicie uma nova"). `tsc`/vitest verdes.
 
-Observações não-bug registradas pelas sondas (por design, não código): custo
-`$0` até tráfego novo com tokens; rodapé "Marina L." é placeholder (não há
-sessão/login real). **Entregas vazias numa run "concluída"** também é honestidade
-(não bug): a Biblioteca só mostra arquivos REALMENTE gravados por ferramenta
-(`edit` exit 0); quando o modelo apenas ESCREVE em prosa que "gravou o arquivo"
-(ex.: deepseek dizendo exportar MusicXML/MIDI/PDF sem tool de renderização
-real), nada é capturado — o "Nada Fake" pega a entrega alucinada.
+6. **Aviso "concluída sem artefato real" (melhoria de UX)** — antes, uma run que
+   terminava sem gravar arquivo (modelo narrou a entrega sem chamar `edit`)
+   ficava só "concluída" e a Biblioteca aparecia vazia, confundindo. Agora a UI
+   sinaliza: helper puro `runSemArtefatoReal(status, nº entregas)` (vitest),
+   badge "sem artefato real" em Minhas squads (U6) e card honesto no Squad ao
+   vivo ("Concluída, mas sem artefato real…"). A fonte da verdade é a contagem
+   de entregas por run (`/api/btv/deliverables`, arquivo REAL de ferramenta) —
+   nada fabricado.
+
+**Como testar os consertos SEM frontend** (três camadas):
+- `cargo test -p btv-store -p btv-cli -p btv-server` — provas determinísticas:
+  `set_ativo_em_id_inexistente_e_not_found`, `rota_api_desconhecida_e_404_json_
+  nao_o_spa`, `delete_user_remove_de_vez_e_404_em_id_inexistente`,
+  `appends_concorrentes_de_conexoes_separadas_mantem_a_cadeia` (ledger).
+- `cd btv-web && npx vitest run` — lógica de front headless (Node, sem browser):
+  `runSemArtefatoReal` e as 31 specs de marca/estado.
+- `bash scripts/btv-regression.sh` (BASE/AUTH) — contrato HTTP na instância viva:
+  set-ativo→404, /api desconhecida→404 JSON, ciclo delete de usuário (self-clean),
+  gate/ajuste em task inexistente→404, `/api/btv/deliverables` como fonte do aviso.
+
+Observações não-bug (por design, não código): custo `$0` até tráfego novo com
+tokens; rodapé "Marina L." é placeholder (não há sessão/login real). **Entregas
+vazias numa run "concluída"** é honestidade (não bug): a Biblioteca só mostra
+arquivos REALMENTE gravados por ferramenta (`edit` exit 0); quando o modelo
+apenas NARRA em prosa que "gravou o arquivo" (ex.: deepseek dizendo exportar
+MusicXML/MIDI/PDF sem tool de renderização real), nada é capturado — o "Nada
+Fake" pega a entrega alucinada, e a UI agora avisa (item 6).

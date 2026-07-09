@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { listRuns, type BtvRun } from '../../../api/btv'
+import { listDeliverables, listRuns, type BtvDeliverable, type BtvRun } from '../../../api/btv'
 import { useTemplates } from '../../../state/TemplatesContext'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
+import { runSemArtefatoReal } from '../../../lib/entregas'
 
 // "aguardando você" NÃO está aqui de propósito: gate é decisão humana, sempre
 // terracota (renderizado com .status-gate abaixo). Âmbar seria erro semântico.
@@ -18,6 +19,7 @@ const PILL: Record<string, CSSProperties> = {
  *  encerradas reabrem o wizard do modelo. */
 export function Minhas() {
   const [runs, setRuns] = useState<BtvRun[] | null>(null)
+  const [entregas, setEntregas] = useState<BtvDeliverable[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const templates = useTemplates()
   const { run: liveRun, view, abrirRun } = useSquadRun()
@@ -27,6 +29,12 @@ export function Minhas() {
     listRuns()
       .then(setRuns)
       .catch((e: Error) => setErro(e.message))
+    // Conta entregas REAIS por run (arquivo gravado por ferramenta) para
+    // avisar quando uma run concluiu sem nenhum artefato. Falha aqui não
+    // derruba a lista — só omite o aviso.
+    listDeliverables()
+      .then(setEntregas)
+      .catch(() => setEntregas([]))
   }, [])
 
   if (erro) {
@@ -71,6 +79,10 @@ export function Minhas() {
             ? 100
             : 0
         const isGate = isLive && !!view?.gateOpen
+        // Entregas REAIS desta run (arquivo gravado por ferramenta). Concluída
+        // com zero = o modelo não chamou a ferramenta de escrita.
+        const numEntregas = entregas.filter((e) => e.run_id === r.id).length
+        const semArtefato = runSemArtefatoReal(r.status, numEntregas)
         const acao =
           r.status === 'ativa' && isLive
             ? { label: isGate ? 'Revisar' : 'abrir ao vivo', on: () => dispatch({ type: 'SET_SCREEN', screen: 'vivo' }) }
@@ -100,12 +112,24 @@ export function Minhas() {
                 {status}
               </span>
             ) : (
-              <span
-                className="mono"
-                style={{ fontSize: 10, letterSpacing: '0.06em', borderRadius: 999, padding: '5px 11px', textAlign: 'center', ...(PILL[status] ?? PILL['em produção']) }}
-              >
-                {status}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                <span
+                  className="mono"
+                  style={{ fontSize: 10, letterSpacing: '0.06em', borderRadius: 999, padding: '5px 11px', textAlign: 'center', ...(PILL[status] ?? PILL['em produção']) }}
+                >
+                  {status}
+                </span>
+                {semArtefato && (
+                  <span
+                    data-testid={`sem-artefato-${r.id}`}
+                    title="A run concluiu, mas nenhum arquivo foi gravado por ferramenta — o modelo pode ter apenas descrito a entrega. Nada aparece na Biblioteca."
+                    className="mono"
+                    style={{ fontSize: 9, letterSpacing: '0.03em', color: 'var(--muted)', background: 'var(--paper)', border: '1px solid var(--line2)', borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}
+                  >
+                    sem artefato real
+                  </span>
+                )}
+              </div>
             )}
             <div style={{ height: 7, background: 'var(--paper)', borderRadius: 99, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: cor, borderRadius: 99 }} />
