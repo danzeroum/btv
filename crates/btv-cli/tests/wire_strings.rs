@@ -193,15 +193,13 @@ proptest! {
 }
 
 /// Cada kind da fixture existe como literal no código-fonte de PRODUÇÃO
-/// (módulos de teste `#[cfg(test)]` e diretórios `tests/` excluídos): a
-/// fixture não pode inventar vocabulário que o código não emite. Kind
-/// removido do código sem atualizar a fixture ⇒ este teste falha.
+/// (módulos de teste `#[cfg(test)]`, diretórios `tests/` e linhas de
+/// comentário excluídos): a fixture não pode inventar vocabulário que o
+/// código não emite. Kind removido do código sem atualizar a fixture ⇒ este
+/// teste falha.
 #[test]
 fn todo_ledger_kind_da_fixture_existe_no_codigo_de_producao() {
-    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut fontes = String::new();
-    coleta_fontes_de_producao(&raiz.join("crates"), &mut fontes);
-
+    let fontes = fontes_de_producao();
     let ausentes: Vec<String> = fixture_set("ledger_kinds")
         .into_iter()
         .filter(|kind| !fontes.contains(&format!("\"{kind}\"")))
@@ -213,13 +211,58 @@ fn todo_ledger_kind_da_fixture_existe_no_codigo_de_producao() {
     );
 }
 
-/// Concatena os .rs de produção: pula diretórios `tests/`/`target/` e corta
+/// As exclusões CONSCIENTES registradas na fixture (`excluded`) são
+/// load-bearing, não documentais: cada item excluído (a) não pode estar na
+/// lista principal correspondente, e (b) não pode ter emissor no código de
+/// produção — `certification` vive só em módulo de teste e `rate.limited`
+/// só em doc-comment, ambos fora da varredura. Se um deles ganhar um
+/// emissor real, este teste falha mandando movê-lo (com a A3 decidindo o
+/// lugar dele no enum exaustivo).
+#[test]
+fn exclusoes_conscientes_nao_tem_emissor_de_producao() {
+    let fontes = fontes_de_producao();
+    for (lista, chave) in [
+        ("ledger_kinds", "ledger_kinds"),
+        ("telemetry_names", "telemetry_names"),
+    ] {
+        let incluidos = fixture_set(lista);
+        let excluidos = fixture()["excluded"][chave]
+            .as_object()
+            .unwrap_or_else(|| panic!("fixture sem excluded.{chave}"))
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(!excluidos.is_empty(), "excluded.{chave} vazio");
+        for nome in excluidos {
+            assert!(
+                !incluidos.contains(&nome),
+                "`{nome}` está ao mesmo tempo em {lista} e em excluded.{chave}"
+            );
+            assert!(
+                !fontes.contains(&format!("\"{nome}\"")),
+                "`{nome}` está em excluded.{chave} mas ganhou emissor de \
+                 produção — mova para a lista principal (e a A3 o inclui no enum)"
+            );
+        }
+    }
+}
+
+fn fontes_de_producao() -> String {
+    let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut fontes = String::new();
+    coleta_fontes_de_producao(&raiz.join("crates"), &mut fontes);
+    fontes
+}
+
+/// Concatena os .rs de produção: pula diretórios `tests/`/`target/`, corta
 /// cada arquivo no início do módulo de teste INLINE (`#[cfg(test)]` seguido
-/// de `mod tests`, convenção do repo — no fim do arquivo). Cortar em
-/// QUALQUER `#[cfg(test)]` seria errado: declarações como
+/// de `mod tests`, convenção do repo — no fim do arquivo) e descarta linhas
+/// de comentário (`//`/`///`/`//!`) — literal citado em doc-comment não é
+/// emissor (caso real: `rate.limited`, só exemplo em telemetry.rs). Cortar
+/// em QUALQUER `#[cfg(test)]` seria errado: declarações como
 /// `#[cfg(test)] mod test_support;` aparecem no TOPO de main.rs e o corte
 /// descartaria o arquivo inteiro (bug real pego por este próprio teste ao
-/// nascer: `skill.vetting`, emitido em main.rs:627, sumia da varredura).
+/// nascer: `skill.vetting`, emitido em main.rs, sumia da varredura).
 fn coleta_fontes_de_producao(dir: &Path, out: &mut String) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -237,7 +280,12 @@ fn coleta_fontes_de_producao(dir: &Path, out: &mut String) {
                     Some(idx) => &conteudo[..idx],
                     None => &conteudo,
                 };
-                out.push_str(producao);
+                for linha in producao.lines() {
+                    if !linha.trim_start().starts_with("//") {
+                        out.push_str(linha);
+                        out.push('\n');
+                    }
+                }
             }
         }
     }
