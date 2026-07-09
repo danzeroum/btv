@@ -1,0 +1,60 @@
+{
+  "flow": "deliverables",
+  "steps": [
+    {
+      "name": "biblioteca lista a entrega com trilha de procedência",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/deliverables"
+      },
+      "response": {
+        "body": [
+          {
+            "created_ts": "2026-07-08T10:10:00Z",
+            "formato": "MD",
+            "id": 1,
+            "nome": "artigo.md",
+            "path": "<volatil>",
+            "run_id": 1,
+            "task_id": "sq1",
+            "template_id": "editorial",
+            "trilha": "Pauteiro → Redator → Revisor de estilo · 1 gate(s) aprovado(s) por você",
+            "versao": "v1"
+          }
+        ],
+        "content_type": "application/json",
+        "status": 200
+      }
+    },
+    {
+      "name": "download de formato texto serve o conteúdo como está",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/deliverables/1/download"
+      },
+      "response": {
+        "body": {
+          "text": "# Artigo\n\nLogística verde no Brasil.\n"
+        },
+        "content_disposition": "attachment; filename=\"artigo.md\"",
+        "content_type": "text/plain; charset=utf-8",
+        "status": 200
+      }
+    },
+    {
+      "name": "entrega inexistente responde 404 honesto",
+      "request": {
+        "method": "GET",
+        "path": "/api/btv/deliverables/999/download"
+      },
+      "response": {
+        "body": {
+          "code": "not_found",
+          "error": "entrega inexistente"
+        },
+        "content_type": "application/json",
+        "status": 404
+      }
+    }
+  ]
+}

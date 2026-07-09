@@ -290,6 +290,7 @@ dependencies = [
  "anyhow",
  "axum",
  "btv-core",
+ "btv-golden",
  "btv-llm",
  "btv-proto",
  "btv-schemas",

@@ -6,6 +6,8 @@
 //! `squad` ativa o sidecar Python na Fase 4; `verify` completa na Fase 5.
 
 mod btv_agent;
+#[cfg(test)]
+mod btv_agent_golden;
 mod cache;
 mod convert;
 mod doctor_console;

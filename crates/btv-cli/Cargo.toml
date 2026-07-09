@@ -36,6 +36,7 @@ axum.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+btv-golden.workspace = true
 jsonschema = "0.26"
 reqwest.workspace = true
 tower = { workspace = true, features = ["util"] }
