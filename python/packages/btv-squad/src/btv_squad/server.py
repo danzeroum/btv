@@ -139,12 +139,25 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
 
     async def ExecuteTask(self, request, context):  # noqa: N802
         evidence, evidence_missing = _parse_verification_evidence(request.verification_evidence_json)
+        # Roster de personas (U7, Fase 1): cada uma vira agente cujo system
+        # prompt É `prompt`. Vazio = elenco fixo do motor (retrocompatível).
+        roster = [
+            {
+                "papel": p.papel,
+                "prompt": p.prompt,
+                "funcao": p.funcao,
+                "ordem": p.ordem,
+                "custom": p.custom,
+            }
+            for p in request.roster
+        ]
         task = {
             "task_id": request.task_id,
             "description": request.description,
             "decision_type": request.decision_type or "architecture",
             "verification_evidence": evidence,
             "verification_evidence_missing": evidence_missing,
+            "roster": roster,
         }
         queue: asyncio.Queue = asyncio.Queue()
 

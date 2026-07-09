@@ -28,6 +28,21 @@ class BaseAgent(ABC):
         #: agente fala com o gateway antes de attach_gateway() ser chamado.
         self.gateway: Optional[GatewayClient] = None
         self.tools: list[str] = []
+        #: System prompt da PERSONA (U7) em vigor nesta ativação — o roster do
+        #: `SquadTask` o injeta (Fase 1). Quando presente, é PREPENDIDO ao
+        #: system prompt operacional do agente (voz/objetivo da persona +
+        #: protocolo JSON/ferramentas do agente), em vez de substituí-lo — assim
+        #: editar a persona no frontend muda de fato como o agente trabalha, sem
+        #: quebrar o contrato de saída. `None` = comportamento padrão do motor.
+        self.persona_prompt: Optional[str] = None
+
+    def system_with_persona(self, base: str) -> str:
+        """Combina o prompt da persona (se houver) com o system prompt
+        operacional do agente. A persona vem primeiro (voz/objetivo); o `base`
+        (JSON/ferramentas) permanece para o contrato de saída não quebrar."""
+
+        persona = (self.persona_prompt or "").strip()
+        return f"{persona}\n\n{base}" if persona else base
 
     @abstractmethod
     async def execute(self, task: dict[str, Any]) -> dict[str, Any]:

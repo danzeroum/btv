@@ -27,6 +27,28 @@ message SquadTask {
   // default do pool/sidecar (`--model`). Permite a tela Modelo/o `--model`
   // controlarem o squad por tarefa, em vez de um modelo fixo por processo.
   string model = 6;
+  // Roster de personas desta ativação (U7). Cada uma vira um agente REAL cujo
+  // system prompt É `prompt` — editar/criar uma persona no frontend muda quem
+  // trabalha e como. Vazio = motor default (elenco fixo architect/developer/
+  // auditor/…), para retrocompatibilidade. `funcao`/`ordem` montam o pipeline
+  // por domínio (roster configurável em vez de agentes fixos).
+  repeated PersonaSpec roster = 7;
+}
+
+// Uma persona/papel do roster de uma squad.
+message PersonaSpec {
+  // Nome do papel/persona (ex.: "Redator", "Fact-checker").
+  string papel = 1;
+  // System prompt efetivo (override de U7 ?? padrão do arquétipo, ou o prompt
+  // de uma persona própria criada pelo usuário).
+  string prompt = 2;
+  // Função no workflow: "plan" | "produce" | "review" | "validate" | "deliver".
+  // Guia como o orquestrador encaixa a persona no pipeline por domínio.
+  string funcao = 3;
+  // Posição no roster (0-based) — a ordem em que a persona atua.
+  uint32 ordem = 4;
+  // Persona PRÓPRIA do usuário (U7), não um papel do arquétipo do template.
+  bool custom = 5;
 }
 
 message SquadEvent {

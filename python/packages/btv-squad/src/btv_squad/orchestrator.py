@@ -128,6 +128,26 @@ class UnifiedOrchestrator:
         if self._event_sink is not None:
             await self._event_sink(event)
 
+    def _apply_persona_roster(self, roster: list[dict[str, Any]]) -> None:
+        """Fase 1 (personas operacionais): usa o `prompt` de cada persona (U7)
+        como system prompt do agente do motor correspondente à sua `funcao`.
+        Mapeamento APROXIMADO (o roster por domínio da Fase 2 substitui isto):
+        plan→architect, produce→developer, review/validate→auditor. Roster
+        vazio = elenco fixo do motor, sem override. Editar a persona no frontend
+        passa a mudar de fato como o agente trabalha."""
+
+        funcao_para_agente = {
+            "plan": "architect",
+            "produce": "developer",
+            "review": "auditor",
+            "validate": "auditor",
+        }
+        for persona in roster:
+            agente = funcao_para_agente.get(str(persona.get("funcao", "")))
+            prompt = str(persona.get("prompt", "")).strip()
+            if agente and prompt and agente in self.agents:
+                self.agents[agente].persona_prompt = prompt
+
     async def execute_complex_task(
         self, task: dict[str, Any], event_sink: Optional[Any] = None
     ) -> dict[str, Any]:
@@ -135,6 +155,7 @@ class UnifiedOrchestrator:
         task_id = task.get("task_id", str(uuid.uuid4()))
         start = datetime.now(timezone.utc)
         logger.info("Iniciando execução da tarefa %s", task_id)
+        self._apply_persona_roster(task.get("roster") or [])
 
         relevant_context = self.memory.recall_similar(task.get("description", ""), k=5)
         # O contexto recuperado alimenta o planejamento (antes era só contado

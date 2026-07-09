@@ -82,6 +82,21 @@ pub struct BtvAgentState {
 /// Monta a descrição REAL da tarefa que o orquestrador recebe: briefing na
 /// linguagem da área + referências + equipe com os prompts efetivos de cada
 /// papel + entregas/gates esperados.
+/// Função da persona no pipeline por posição do papel na esteira (Fase 1):
+/// Planejamento[0]→plan, Produção[1]→produce, Revisão[2]→review,
+/// Validação[3]→validate; papéis extras caem em "produce". O "ops/deploy" fica
+/// FORA do roster do produto — só faz sentido em software (Fase 2 torna isso
+/// declarado por domínio em vez de posicional).
+fn funcao_por_indice(i: usize) -> &'static str {
+    match i {
+        0 => "plan",
+        1 => "produce",
+        2 => "review",
+        3 => "validate",
+        _ => "produce",
+    }
+}
+
 fn montar_descricao(
     template: &SquadTemplate,
     body: &AtivarSquadBody,
@@ -217,9 +232,26 @@ async fn ativar_squad_handler(
         })
         .collect();
 
+    // Roster de personas (Fase 1): cada papel ativo vira uma PersonaSpec cujo
+    // `prompt` (override de U7 ?? padrão do arquétipo) o Python usa como system
+    // prompt do agente do estágio. Assim editar a persona no frontend muda quem
+    // trabalha e como — não mais só texto no briefing. `funcao`/`ordem` guiam o
+    // encaixe no pipeline (personas próprias e roster por domínio vêm nas
+    // fases 2/3).
+    let roster: Vec<btv_proto::squad::PersonaSpec> = papeis_ativos
+        .iter()
+        .map(|(i, papel)| btv_proto::squad::PersonaSpec {
+            papel: papel.to_string(),
+            prompt: prompt_efetivo(*i, papel),
+            funcao: funcao_por_indice(*i).to_string(),
+            ordem: *i as u32,
+            custom: false,
+        })
+        .collect();
+
     // A galeria BuildToValue não tem seletor de modelo por ativação (o produto
     // usa o default do deploy, `BTV_SQUAD_MODEL`); `None` = herda esse default.
-    let task_id = match start_squad_task(&state.squad, descricao, None) {
+    let task_id = match start_squad_task(&state.squad, descricao, None, roster) {
         Ok(id) => id,
         Err(resp) => return *resp,
     };

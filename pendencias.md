@@ -1662,3 +1662,40 @@ arquivos REALMENTE gravados por ferramenta (`edit` exit 0); quando o modelo
 apenas NARRA em prosa que "gravou o arquivo" (ex.: deepseek dizendo exportar
 MusicXML/MIDI/PDF sem tool de renderização real), nada é capturado — o "Nada
 Fake" pega a entrega alucinada, e a UI agora avisa (item 6).
+
+## Quarta onda — teste guiado de squad ao vivo (Editorial / SEO)
+
+Rodando uma squad de verdade pela galeria, achados classificados (erro vs
+melhoria vs design):
+
+1. **`UNIQUE constraint failed: runs.task_id` ao ativar (erro)** — o `task_id`
+   é contador por-processo (`sq1`, `sq2`…) que reinicia a cada redeploy, mas a
+   tabela `runs` sobrevive no volume → colisão. Fechado semeando o contador do
+   maior `sq{n}` persistido (`max_run_task_seq`/`seed_task_seq`). PR #10.
+2. **Corrida no guard do `/api/verify/run` (erro)** — check-and-set em dois
+   locks separados deixava dois POST concorrentes reservarem juntos (2×202 +
+   dois pipelines no mesmo `target/`). Atomizado num único lock. PR #10.
+3. **Squad travou na Revisão, run `ativa` para sempre (erro)** — o gateway LLM
+   usava `reqwest::Client::new()` SEM timeout; uma chamada ao provider que não
+   responde pendura o agente/squad. Fechado com `read_timeout`(120s)+
+   `connect_timeout`(30s) e `reconcile_stale_runs()` no arranque (run `ativa`
+   órfã → `encerrada`). PR #11.
+4. **Nomes: feed/chat mostravam o agente do motor, não o papel (melhoria… revertida)**
+   — na PR #11 mapeei architect→Pauteiro etc. O teste seguinte mostrou que era
+   **enganoso**: revertido (feed/chat voltam ao agente REAL do motor). Em troca,
+   visibilidade honesta: `atividadeAtual` mostra "motor: agente X ativo desde
+   HH:MM" no card, deixando uma congelada visível.
+
+**Achado estrutural (o mais importante) — os 12 "modelos" são uma FACHADA sobre
+um único motor de engenharia de software.** O orquestrador Python (`btv_squad`)
+tem um elenco FIXO: `architect`, `designer`, `developer`, `auditor`, `ops`. O
+`agent_memories.jsonl` mostra-os produzindo ADR/"microservices"/"code", o `ops`
+definindo deploy "blue-green"/health-checks, e a verificação rodando
+`cargo test/clippy/fmt`. Uma tarefa NÃO-software (escrever um artigo) roda esse
+mesmo pipeline: faz um "ADR" do café, pede "código", roda `cargo test` no artigo
+(exit 101 → fail) e o `ops` quer estratégia de deploy. Os nomes editoriais
+(Pauteiro/Redator/…) da esteira são rótulos por posição — NÃO refletem o motor.
+Isto é um gap de produto (e de "Nada Fake" no nível do produto): a galeria
+promete squads por domínio que, por baixo, são sempre o mesmo squad de
+engenharia. Fix de verdade = agentes/verificação configuráveis por domínio
+(roadmap), não patch. Registrado aqui, não escondido.

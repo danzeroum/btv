@@ -1,26 +1,43 @@
+from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class SquadTask(_message.Message):
-    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence_json", "model")
+    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence_json", "model", "roster")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     DECISION_TYPE_FIELD_NUMBER: _ClassVar[int]
     MAX_AUTONOMY_LEVEL_FIELD_NUMBER: _ClassVar[int]
     VERIFICATION_EVIDENCE_JSON_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
+    ROSTER_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     description: str
     decision_type: str
     max_autonomy_level: int
     verification_evidence_json: str
     model: str
-    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence_json: _Optional[str] = ..., model: _Optional[str] = ...) -> None: ...
+    roster: _containers.RepeatedCompositeFieldContainer[PersonaSpec]
+    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence_json: _Optional[str] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ...) -> None: ...
+
+class PersonaSpec(_message.Message):
+    __slots__ = ("papel", "prompt", "funcao", "ordem", "custom")
+    PAPEL_FIELD_NUMBER: _ClassVar[int]
+    PROMPT_FIELD_NUMBER: _ClassVar[int]
+    FUNCAO_FIELD_NUMBER: _ClassVar[int]
+    ORDEM_FIELD_NUMBER: _ClassVar[int]
+    CUSTOM_FIELD_NUMBER: _ClassVar[int]
+    papel: str
+    prompt: str
+    funcao: str
+    ordem: int
+    custom: bool
+    def __init__(self, papel: _Optional[str] = ..., prompt: _Optional[str] = ..., funcao: _Optional[str] = ..., ordem: _Optional[int] = ..., custom: _Optional[bool] = ...) -> None: ...
 
 class SquadEvent(_message.Message):
     __slots__ = ("task_id", "ts", "proposal", "consensus", "handoff", "hitl", "step", "error", "chat")

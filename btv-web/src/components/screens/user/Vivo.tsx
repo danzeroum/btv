@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
 import { listDeliverables } from '../../../api/btv'
+import { atividadeAtual } from '../../../lib/esteira'
 
 /** Frases do papel ativo por etapa (copy do protótipo). */
 const DOING: Record<string, string> = {
@@ -109,6 +110,9 @@ export function Vivo() {
   const cor = run.template.cor
   const etapas = run.etapas
   const etapaAtual = view.idx < etapas.length ? etapas[view.idx] : null
+  // Agente REAL do motor ativo agora (architect/developer/ops/…) + desde quando
+  // — deixa uma congelada visível, sem disfarçar de papel do template.
+  const atividade = atividadeAtual(run.events)
   const roster = [
     ...new Set(etapas.map((e) => e.papel).filter((p) => p !== 'Você' && p !== 'BuildToValue')),
   ]
@@ -312,6 +316,11 @@ export function Vivo() {
                   {DOING[etapaAtual.nome] ?? `está trabalhando em "${etapaAtual.nome.toLowerCase()}"`}
                   <span style={{ animation: 'btvBlink 1s infinite', color: cor, fontWeight: 700 }}> ▮</span>
                 </span>
+                {atividade && (
+                  <span data-testid="agente-motor" className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
+                    motor: agente <strong style={{ color: 'var(--muted)' }}>{atividade.agente}</strong> ativo desde {atividade.desde}
+                  </span>
+                )}
                 {view.inferida && (
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
                     posição da esteira inferida dos eventos do orquestrador

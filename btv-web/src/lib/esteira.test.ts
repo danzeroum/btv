@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { esteiraFromEvents, feedFromEvents, makeEtapas, papelDoAgente, type Etapa } from './esteira'
+import { atividadeAtual, esteiraFromEvents, feedFromEvents, makeEtapas, type Etapa } from './esteira'
 import type { SquadEventEnvelope, SquadEventPayload } from '../api/squad'
 import type { SquadTemplate } from '../api/templates'
 
@@ -142,31 +142,32 @@ describe('feedFromEvents', () => {
     expect(feed[0].ts).toBe('10:15')
   })
 
-  it('com papeis, traduz o agente do motor para o papel do template', () => {
-    const papeis = ['Pauteiro', 'Redator', 'Revisor de estilo', 'Fact-checker']
-    const feed = feedFromEvents(
-      [ev({ Proposal: { agent: 'architect', confidence: 0.85, content_json: '{}' } })],
-      papeis,
-    )
-    // "architect" → papeis[0] = "Pauteiro" (alinha com a esteira).
-    expect(feed[0].txt).toContain('Pauteiro propôs')
-    expect(feed[0].txt).not.toContain('architect')
+  it('mostra o AGENTE REAL do motor no feed, sem disfarçar de papel do template', () => {
+    const feed = feedFromEvents([
+      ev({ Handoff: { from_agent: 'developer', to_agent: 'auditor', phase: 1, contract: '', payload_digest: '' } }),
+    ])
+    // Nome cru do motor — a esteira é que rotula posições; o feed é honesto.
+    expect(feed[0].txt).toContain('developer')
+    expect(feed[0].txt).toContain('auditor')
   })
 })
 
-describe('papelDoAgente', () => {
-  const papeis = ['Pauteiro', 'Redator', 'Revisor de estilo', 'Fact-checker']
-  it('mapeia agentes do motor (inglês e português) para o papel do template', () => {
-    expect(papelDoAgente('architect', papeis)).toBe('Pauteiro')
-    expect(papelDoAgente('Desenvolvedor', papeis)).toBe('Redator')
-    expect(papelDoAgente('reviewer', papeis)).toBe('Revisor de estilo')
-    expect(papelDoAgente('Auditor', papeis)).toBe('Fact-checker')
+describe('atividadeAtual', () => {
+  it('devolve o último agente real do motor que começou, e desde quando', () => {
+    const at = atividadeAtual([
+      ev({ Handoff: { from_agent: 'orchestrator', to_agent: 'developer', phase: 1, contract: '', payload_digest: '' } }),
+    ])
+    expect(at?.agente).toBe('developer')
+    expect(at?.desde).toBe('10:15')
   })
-  it('passa direto nomes que não são agentes (sem inventar rótulo)', () => {
-    expect(papelDoAgente('Você', papeis)).toBe('Você')
-    expect(papelDoAgente('Squad', papeis)).toBe('Squad')
+  it('ignora handoff de volta ao orchestrator (não é "trabalhando")', () => {
+    const at = atividadeAtual([
+      ev({ Proposal: { agent: 'architect', confidence: 0.8, content_json: '{}' } }),
+      ev({ Handoff: { from_agent: 'architect', to_agent: 'orchestrator', phase: 3, contract: '', payload_digest: '' } }),
+    ])
+    expect(at?.agente).toBe('architect')
   })
-  it('sem papeis, devolve o nome original', () => {
-    expect(papelDoAgente('architect', [])).toBe('architect')
+  it('null quando nada começou', () => {
+    expect(atividadeAtual([])).toBeNull()
   })
 })

@@ -28,7 +28,7 @@ use btv_core::PermissionEngine;
 use btv_llm::gateway::Generator;
 use btv_proto::core::{PermissionRequest, ToolCall, ToolResult};
 use btv_proto::llm::{LlmRequest, Usage};
-use btv_proto::squad::{squad_event, ChatMessage, SquadEvent, SquadTask};
+use btv_proto::squad::{squad_event, ChatMessage, PersonaSpec, SquadEvent, SquadTask};
 use btv_sidecar::{serve_core, CoreBackend, SidecarError, SquadPool};
 use btv_tools::ToolRegistry;
 use serde::{Deserialize, Serialize};
@@ -517,6 +517,7 @@ async fn run_squad_task<B>(
     task_id: String,
     description: String,
     model: String,
+    roster: Vec<PersonaSpec>,
     backend_for: impl FnOnce(SquadHub, String, PathBuf, Arc<ToolRegistry>, PermissionEngine) -> B,
 ) where
     B: CoreBackend,
@@ -528,6 +529,7 @@ async fn run_squad_task<B>(
         task_id.clone(),
         description,
         model,
+        roster,
         backend_for,
     )
     .await;
@@ -559,6 +561,7 @@ async fn run_squad_task_inner<B>(
     task_id: String,
     description: String,
     model: String,
+    roster: Vec<PersonaSpec>,
     backend_for: impl FnOnce(SquadHub, String, PathBuf, Arc<ToolRegistry>, PermissionEngine) -> B,
 ) -> Result<(), String>
 where
@@ -624,6 +627,10 @@ where
             max_autonomy_level: 3,
             verification_evidence_json,
             model,
+            // Roster de personas (U7): o Python usa `prompt` de cada uma como
+            // system prompt do agente do estágio correspondente. Vazio = elenco
+            // fixo do motor (retrocompatível).
+            roster,
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -702,6 +709,7 @@ pub(crate) fn start_squad_task(
     state: &SquadAgentState,
     description: String,
     model: Option<String>,
+    roster: Vec<PersonaSpec>,
 ) -> Result<String, Box<Response>> {
     // Modelo por-tarefa: a escolha da tela Modelo, ou o default do pool
     // (`BTV_SQUAD_MODEL`) quando ausente/vazia.
@@ -733,6 +741,7 @@ pub(crate) fn start_squad_task(
             task_id_for_task,
             description,
             model,
+            roster,
             |hub, task_id, root, tools, tool_permissions| ScriptedSquadCoreBackend {
                 hub,
                 task_id,
@@ -771,6 +780,7 @@ pub(crate) fn start_squad_task(
             task_id_for_task,
             description,
             model,
+            roster,
             move |hub, task_id, root, tools, tool_permissions| WebSquadCoreBackend {
                 generator,
                 hub,
@@ -791,7 +801,9 @@ async fn run_squad_handler(
     State(state): State<SquadAgentState>,
     Json(body): Json<RunSquadBody>,
 ) -> Response {
-    match start_squad_task(&state, body.task, body.model) {
+    // `/api/squad/run` (console dev) não tem personas de template — roster
+    // vazio = elenco fixo do motor.
+    match start_squad_task(&state, body.task, body.model, Vec::new()) {
         Ok(task_id) => (StatusCode::ACCEPTED, Json(RunSquadResponse { task_id })).into_response(),
         Err(resp) => *resp,
     }

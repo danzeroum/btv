@@ -321,3 +321,24 @@ def test_passo_implement_paralelizavel_ainda_ativa_tool_client_do_developer(tmp_
 
     assert len(tool_client.requests) >= 1, "regressão do fix de _extract_parallel_tasks (action/prior_results)"
     assert tool_client.requests[0].tool == "bash"
+
+
+def test_apply_persona_roster_injeta_o_prompt_nos_agentes_por_funcao(tmp_path):
+    """Fase 1: o roster de personas (U7) vira system prompt dos agentes por
+    funcao — editar a persona no frontend muda quem trabalha e como."""
+    orch = UnifiedOrchestrator(
+        _gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path)
+    )
+    orch._apply_persona_roster(
+        [
+            {"papel": "Pauteiro", "prompt": "P-plan", "funcao": "plan", "ordem": 0, "custom": False},
+            {"papel": "Redator", "prompt": "P-produce", "funcao": "produce", "ordem": 1, "custom": False},
+            {"papel": "Fact-checker", "prompt": "P-validate", "funcao": "validate", "ordem": 3, "custom": False},
+        ]
+    )
+    assert orch.agents["architect"].persona_prompt == "P-plan"
+    assert orch.agents["developer"].persona_prompt == "P-produce"
+    assert orch.agents["auditor"].persona_prompt == "P-validate"
+    # ops/designer sem funcao mapeada → seguem no comportamento default.
+    assert orch.agents["ops"].persona_prompt is None
+    assert orch.agents["designer"].persona_prompt is None
