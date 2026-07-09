@@ -1,0 +1,30 @@
+{
+  "comment": "Trilha T3 do plano DDD multitenant: inventário canônico das strings wire que os value objects da Trilha A (A3) devem reproduzir EXATAMENTE. Extraído dos emissores reais de produção (não de testes); consumido por crates/btv-cli/tests/wire_strings.rs. Mudança aqui é mudança de contrato de banco/API — revise como tal.",
+  "run_status": ["ativa", "concluida", "encerrada", "erro"],
+  "task_id": { "prefix": "sq", "radix": 16 },
+  "ledger_kinds": [
+    "btv.adjust_requested",
+    "btv.export_generated",
+    "btv.flow_saved",
+    "btv.gate_approved",
+    "btv.persona_updated",
+    "btv.squad_activated",
+    "btv.template_published",
+    "btv.user_removed",
+    "designer.workflow_saved",
+    "llm.turn",
+    "permission_rule.revoke",
+    "permission_rule.set",
+    "session.end",
+    "session.start",
+    "skill.vetting",
+    "squad.consensus",
+    "squad.tool_run",
+    "tool.denied",
+    "tool.result",
+    "tool.run",
+    "user.turn"
+  ],
+  "event_store_kinds": ["epoch.started.1", "message.1", "session.started.1"],
+  "telemetry_names": ["cache.hit", "cache.miss", "llm.call", "tool.run"]
+}

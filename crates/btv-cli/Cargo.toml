@@ -39,3 +39,6 @@ tempfile.workspace = true
 jsonschema = "0.26"
 reqwest.workspace = true
 tower = { workspace = true, features = ["util"] }
+# T3 (plano DDD multitenant): property tests de compatibilidade wire
+# (tests/wire_strings.rs) — round-trip das strings reais do banco.
+proptest = "1"
