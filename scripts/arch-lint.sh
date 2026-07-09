@@ -41,10 +41,11 @@ else
 fi
 
 # ── B: SQL cru em handlers HTTP ─────────────────────────────────────────────
-alvos=(
-    crates/btv-server/src/lib.rs
-    crates/btv-server/src/btv.rs
-    crates/btv-server/src/bin/loadgen.rs
+# btv-server inteiro por glob (a C2 decompôs lib.rs em handlers/ — lista
+# fixa deixaria os arquivos novos fora da varredura, lacuna real pega na
+# própria C2); os módulos-roteadores de btv-cli seguem nominais até a C4.
+mapfile -t alvos < <(find crates/btv-server/src -name '*.rs' | sort)
+alvos+=(
     crates/btv-cli/src/btv_agent.rs
     crates/btv-cli/src/web_agent.rs
     crates/btv-cli/src/squad_agent.rs

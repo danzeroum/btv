@@ -16,85 +16,42 @@
 //! direção oposta).
 
 pub mod btv;
+mod guard;
+mod handlers;
 
-use axum::extract::{Path as AxumPath, Query, Request, State};
-use axum::http::{header, Method, StatusCode};
-use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Json, Response};
+pub use guard::{origin_allowed, trusted_origin_hosts};
+pub(crate) use handlers::{db_error, now_rfc3339, ErrorBody};
+
+use axum::extract::Request;
+use axum::http::StatusCode;
+use axum::middleware;
+use axum::response::{IntoResponse, Json};
 use axum::routing::{get, post};
 use axum::Router;
-use btv_llm::model_tier::{tier_from_id, ModelTier};
-use btv_llm::rate_limit::RateLimiter;
-use btv_schemas::experiment::{ExperimentReport, VariantStats};
-use btv_schemas::workflow::SquadWorkflow;
 use btv_store::{LedgerStore, PromptLibrary, Telemetry};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use time::format_description::well_known::Rfc3339;
-use time::OffsetDateTime;
 use tower::util::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
+// C2 da Trilha C (plano DDD): os handlers moram em `handlers/` por área;
+// este arquivo é só wiring — estado, router, guarda de Origin e helpers
+// compartilhados. Movimento puro, contrato congelado pelos goldens T1.
+
 #[derive(Clone)]
-struct AppState {
-    telemetry: Telemetry,
-    prompt_library: Arc<Mutex<PromptLibrary>>,
-    ledger: Arc<Mutex<LedgerStore>>,
+pub(crate) struct AppState {
+    pub(crate) telemetry: Telemetry,
+    pub(crate) prompt_library: Arc<Mutex<PromptLibrary>>,
+    pub(crate) ledger: Arc<Mutex<LedgerStore>>,
     /// Raiz do workspace — para enumerar/vetar skills em `/api/skills` e
     /// resolver `btv.toml`/`git rev-parse` do `/verify`.
-    root: PathBuf,
+    pub(crate) root: PathBuf,
     /// Job de `/verify` em background (Fase 7 Onda 11) — só 1 slot, em
     /// memória (reinício do servidor perde o job em andamento; aceitável,
     /// documentado na tela). Não é um parâmetro de `router()`: é estado
     /// puramente interno do dashboard, sem persistência externa.
-    verify_job: VerifyJobSlot,
-}
-
-type VerifyJobSlot = Arc<Mutex<Option<VerifyJob>>>;
-
-#[derive(Clone)]
-struct VerifyJob {
-    run_id: String,
-    status: VerifyJobStatus,
-}
-
-#[derive(Clone)]
-enum VerifyJobStatus {
-    Running {
-        step: usize,
-        total: usize,
-    },
-    Done {
-        evidence: btv_schemas::verification::VerificationEvidence,
-    },
-    /// Panic dentro do pipeline (bug interno no glue — os passos em si nunca
-    /// panicam, devolvem `Result`). Sem este estado o slot ficaria "running"
-    /// para sempre, sem crash visível em lugar nenhum (risco aceito na Onda
-    /// 11, fechado na validação de pendencias.md).
-    Failed {
-        message: String,
-    },
-}
-
-/// Corpo de erro uniforme das rotas mutáveis — mesma forma que `btv-cli`'s
-/// `web_agent::ErrorBody` (duplicado, não importado: a direção de
-/// dependência entre os dois crates é a oposta).
-#[derive(Debug, Serialize)]
-struct ErrorBody {
-    error: String,
-    code: String,
-}
-
-impl ErrorBody {
-    fn new(code: &str, message: impl Into<String>) -> Self {
-        Self {
-            error: message.into(),
-            code: code.to_string(),
-        }
-    }
+    pub(crate) verify_job: handlers::verify::VerifyJobSlot,
 }
 
 /// Monta o router do dashboard sobre um handle de telemetria e uma
@@ -130,21 +87,36 @@ pub fn router(
         .then(|| ServeDir::new(&dev_dir).fallback(ServeFile::new(dev_dir.join("index.html"))));
 
     let router = Router::new()
-        .route("/api/summary", get(summary))
-        .route("/api/events", get(events))
-        .route("/api/skills", get(skills))
-        .route("/api/prompts", get(list_prompts).post(create_prompt))
-        .route("/api/prompts/{id}/favorite", post(favorite_prompt))
-        .route("/api/prompts/{id}", axum::routing::delete(delete_prompt))
-        .route("/api/ledger", get(list_ledger))
-        .route("/api/ledger/verify", post(verify_ledger))
-        .route("/api/models/usage", get(model_usage))
-        .route("/api/experiment/{nome}", get(get_experiment))
-        .route("/api/ratelimit", get(rate_limits))
-        .route("/api/providers", get(list_providers))
-        .route("/api/verify/run", post(run_verify_start))
-        .route("/api/verify/{id}", get(get_verify_status))
-        .route("/api/designer/workflow", post(save_workflow))
+        .route("/api/summary", get(handlers::telemetria::summary))
+        .route("/api/events", get(handlers::telemetria::events))
+        .route("/api/skills", get(handlers::admin::skills))
+        .route(
+            "/api/prompts",
+            get(handlers::prompts::list_prompts).post(handlers::prompts::create_prompt),
+        )
+        .route(
+            "/api/prompts/{id}/favorite",
+            post(handlers::prompts::favorite_prompt),
+        )
+        .route(
+            "/api/prompts/{id}",
+            axum::routing::delete(handlers::prompts::delete_prompt),
+        )
+        .route("/api/ledger", get(handlers::ledger::list_ledger))
+        .route("/api/ledger/verify", post(handlers::ledger::verify_ledger))
+        .route("/api/models/usage", get(handlers::telemetria::model_usage))
+        .route(
+            "/api/experiment/{nome}",
+            get(handlers::admin::get_experiment),
+        )
+        .route("/api/ratelimit", get(handlers::admin::rate_limits))
+        .route("/api/providers", get(handlers::providers::list_providers))
+        .route("/api/verify/run", post(handlers::verify::run_verify_start))
+        .route("/api/verify/{id}", get(handlers::verify::get_verify_status))
+        .route(
+            "/api/designer/workflow",
+            post(handlers::designer::save_workflow),
+        )
         .route("/api/btv/templates", get(btv::list_templates))
         // Fallback esperto: rota `/api/*` desconhecida devolve 404 JSON honesto
         // (não o index.html da SPA, que confundia clientes de API); qualquer
@@ -177,7 +149,7 @@ pub fn router(
             root: root.as_ref().to_path_buf(),
             verify_job: Arc::new(Mutex::new(None)),
         })
-        .layer(middleware::from_fn(require_local_origin))
+        .layer(middleware::from_fn(guard::require_local_origin))
 }
 
 /// Sobe o dashboard em `addr` (bloqueia até o processo ser encerrado).
@@ -219,693 +191,14 @@ pub fn default_dev_console_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("web/dist"))
 }
 
-/// Guarda de CSRF/DNS-rebinding local (Fase 7 Onda 1, ADR 0015): qualquer
-/// requisição ≠ GET com um `Origin` que não seja localhost recebe 403. Sem
-/// `Origin` (curl/CLI) passa — o cabeçalho só existe em requisições de
-/// navegador.
-///
-/// Exceção opt-in para hospedagem atrás de proxy/ingress: hosts extras podem
-/// ser liberados por `BTV_TRUSTED_ORIGINS` (ver `trusted_origin_hosts`). VAZIO
-/// por padrão → o comportamento é idêntico ao anterior (só localhost).
-async fn require_local_origin(req: Request, next: Next) -> Response {
-    if req.method() != Method::GET {
-        if let Some(origin) = req.headers().get(header::ORIGIN) {
-            let origin_str = origin.to_str().unwrap_or("");
-            if !origin_allowed(origin_str, &trusted_origin_hosts()) {
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(ErrorBody::new("forbidden_origin", "origin não permitida")),
-                )
-                    .into_response();
-            }
-        }
-    }
-    next.run(req).await
-}
-
-/// Extrai o host de uma `Origin`/URL ou de um host puro:
-/// "https://squad.exemplo.cloud:443/x" → "squad.exemplo.cloud". `None` só para
-/// string vazia.
-fn origin_host(origin: &str) -> Option<&str> {
-    let rest = origin
-        .strip_prefix("http://")
-        .or_else(|| origin.strip_prefix("https://"))
-        .unwrap_or(origin);
-    let host_port = rest.split('/').next().unwrap_or("");
-    let host = host_port
-        .rsplit_once(':')
-        .map(|(h, _)| h)
-        .unwrap_or(host_port);
-    (!host.is_empty()).then_some(host)
-}
-
-/// `true` para as origins de loopback de navegador (exige esquema http(s)://
-/// explícito — um host puro não é `Origin` válida). Comportamento original.
-fn is_local_origin(origin: &str) -> bool {
-    let has_scheme = origin.starts_with("http://") || origin.starts_with("https://");
-    has_scheme
-        && matches!(
-            origin_host(origin),
-            Some("127.0.0.1" | "localhost" | "::1" | "[::1]")
-        )
-}
-
-/// Núcleo testável da guarda: a `Origin` é aceita se for loopback OU se seu
-/// host estiver na lista de confiança `extra`. `pub` para que o agente web
-/// (`btv-cli::web_agent`), que tem a sua própria cópia da guarda nas rotas que
-/// aprovam execução, aplique EXATAMENTE a mesma regra.
-pub fn origin_allowed(origin: &str, extra: &[String]) -> bool {
-    if is_local_origin(origin) {
-        return true;
-    }
-    match origin_host(origin) {
-        Some(h) => {
-            let h = h.to_ascii_lowercase();
-            extra.contains(&h)
-        }
-        None => false,
-    }
-}
-
-/// Hosts extras confiáveis para requisições mutáveis, lidos de
-/// `BTV_TRUSTED_ORIGINS` (lista separada por vírgula; cada item pode ser um
-/// host puro `squad.exemplo.cloud` ou uma origin `https://squad.exemplo.cloud`).
-/// VAZIO por padrão → só localhost, como antes.
-///
-/// **Segurança:** afrouxar esta guarda reabre o vetor de CSRF que o ADR 0015
-/// fecha. Só use ao hospedar o dashboard atrás de um proxy/ingress **com
-/// autenticação na borda** — o dashboard executa código e guarda API keys.
-pub fn trusted_origin_hosts() -> Vec<String> {
-    std::env::var("BTV_TRUSTED_ORIGINS")
-        .ok()
-        .into_iter()
-        .flat_map(|v| {
-            v.split(',')
-                .filter_map(|e| origin_host(e.trim()).map(str::to_ascii_lowercase))
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-async fn summary(State(state): State<AppState>) -> impl IntoResponse {
-    Json(state.telemetry.summary())
-}
-
-#[derive(Deserialize)]
-struct EventsQuery {
-    limit: Option<u32>,
-}
-
-async fn events(State(state): State<AppState>, Query(q): Query<EventsQuery>) -> impl IntoResponse {
-    Json(state.telemetry.recent(q.limit.unwrap_or(50)))
-}
-
-#[derive(Serialize)]
-struct ModelUsageEntry {
-    model: String,
-    tier: ModelTier,
-    calls: u64,
-    cache_hits: u64,
-    cache_misses: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    /// Provider dono do preço tabelado (rótulo), `None` se sem preço.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    provider: Option<&'static str>,
-    /// Custo estimado em USD (tokens reais × preço tabelado). `None` quando o
-    /// modelo não tem preço na tabela — nunca fabricado.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    estimated_cost_usd: Option<f64>,
-}
-
-#[derive(Serialize)]
-struct ModelUsageResponse {
-    entries: Vec<ModelUsageEntry>,
-    /// Soma dos custos estimados dos modelos COM preço tabelado (USD).
-    total_estimated_cost_usd: f64,
-    /// Data de referência da tabela de preços (a estimativa envelhece).
-    pricing_as_of: &'static str,
-}
-
-/// `GET /api/models/usage` (Fase 7 Onda 7, A5; custo na validação de
-/// pendencias.md) — agrega os eventos reais (`llm.call`/`cache.hit`/
-/// `cache.miss`, gravados com `props.model` e, no `llm.call`, os tokens reais
-/// da resposta) por modelo. `tier` é derivado aqui via `tier_from_id`; o custo
-/// estimado vem de `pricing::estimate_cost_usd` (tokens reais × preço tabelado
-/// estático — uma ESTIMATIVA, com `pricing_as_of`, nunca um custo ao vivo).
-async fn model_usage(State(state): State<AppState>) -> impl IntoResponse {
-    let mut total = 0.0;
-    let entries: Vec<ModelUsageEntry> = state
-        .telemetry
-        .model_usage()
-        .into_iter()
-        .map(|u| {
-            let cost =
-                btv_llm::pricing::estimate_cost_usd(&u.model, u.input_tokens, u.output_tokens);
-            if let Some(c) = cost {
-                total += c;
-            }
-            ModelUsageEntry {
-                tier: tier_from_id(&u.model),
-                provider: btv_llm::pricing::price_for(&u.model).map(|p| p.provider),
-                estimated_cost_usd: cost,
-                model: u.model,
-                calls: u.calls,
-                cache_hits: u.cache_hits,
-                cache_misses: u.cache_misses,
-                input_tokens: u.input_tokens,
-                output_tokens: u.output_tokens,
-            }
-        })
-        .collect();
-    Json(ModelUsageResponse {
-        entries,
-        total_estimated_cost_usd: total,
-        pricing_as_of: btv_llm::pricing::AS_OF,
-    })
-}
-
-/// `GET /api/experiment/:nome` (Fase 7 Onda 9, A2) — relatório de A/B sobre a
-/// telemetria real. Mesma validação que `run_experiment` já aplica na CLI
-/// (`main.rs`): aceita 2+ variantes (multivariante, Bonferroni). `404` quando o experimento não
-/// tem nenhum evento (`props.experiment` nunca bateu); `422` quando tem
-/// eventos mas só 1 variante distinta (não dá pra comparar) — a requisição em
-/// si é válida, é o experimento que não está no formato certo. Nenhum DTO
-/// novo: `ExperimentReport` já deriva `Serialize`+`JsonSchema` (`experiment.v1`).
-async fn get_experiment(
-    State(state): State<AppState>,
-    AxumPath(nome): AxumPath<String>,
-) -> Response {
-    let variants = state.telemetry.experiment_variants(&nome);
-    if variants.is_empty() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody::new(
-                "experiment_not_found",
-                format!("nenhum evento com props.experiment='{nome}' na telemetria"),
-            )),
-        )
-            .into_response();
-    }
-    // Multivariante: 2+ variantes são aceitas (correção de Bonferroni). Só
-    // uma variante (`len() == 1`) não é um experimento comparável → 422.
-    if variants.len() < 2 {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorBody::new(
-                "experiment_needs_variants",
-                format!(
-                    "um experimento comparável exige >=2 variantes; '{nome}' tem {}",
-                    variants.len()
-                ),
-            )),
-        )
-            .into_response();
-    }
-    let stats: Vec<VariantStats> = variants
-        .into_iter()
-        .map(|(v, n, s)| VariantStats::new(v, n, s))
-        .collect();
-    let report = ExperimentReport::from_variants(nome, "success_rate", stats, now_rfc3339());
-    Json(report).into_response()
-}
-
-#[derive(Serialize)]
-struct RateLimitTierEntry {
-    tier: ModelTier,
-    cap: usize,
-    window_secs: u64,
-}
-
-/// `GET /api/ratelimit` (Fase 7 Onda 10, A4) — os TETOS configurados
-/// (`RateLimiter::for_tier`), um por tier. **Não é uso ao vivo**: cada
-/// requisição constrói um `RateLimiter` novo e vazio — o limitador que
-/// realmente governa uma sessão vive dentro do processo `btv run`/`chat`/
-/// `tui` daquela sessão (`RateLimitedGenerator`), um processo diferente do
-/// `btv dashboard` que serve esta rota; não há estado compartilhado para
-/// ler. A tela mostra isso explicitamente, não finge um "usado" que não
-/// existe. Sem campo "models": `ModelTier` classifica por regex, não por uma
-/// lista enumerável de ids — inventar uma lista de exemplo seria fabricar
-/// dado (régua Nada Fake).
-async fn rate_limits() -> impl IntoResponse {
-    let entries: Vec<RateLimitTierEntry> = [ModelTier::Small, ModelTier::Medium, ModelTier::Large]
-        .into_iter()
-        .map(|tier| {
-            let limiter = RateLimiter::for_tier(tier);
-            RateLimitTierEntry {
-                tier,
-                cap: limiter.max_requests(),
-                window_secs: limiter.window().as_secs(),
-            }
-        })
-        .collect();
-    Json(entries)
-}
-
-/// Ordem fixa de fallback que `btv_llm::gateway::Gateway::from_env` usa
-/// (Anthropic → DeepSeek → OpenAI). A antiga `btv_llm::FallbackChain` era
-/// código morto (`Gateway::generate` nunca a consultava) e foi removida.
-const KNOWN_PROVIDERS: [&str; 3] = ["anthropic", "deepseek", "openai"];
-
-#[derive(Serialize)]
-struct ProviderView {
-    id: &'static str,
-    /// Se a env var da key está definida e não-vazia — a MESMA checagem que
-    /// `Gateway::from_env` faz para decidir se o provider entra na cadeia.
-    configured: bool,
-}
-
-/// `GET /api/providers` (Fase 7 Onda 12, piso) — quais providers uma sessão
-/// REAL (`btv run`/`chat`) conseguiria usar agora, lendo os mesmos env
-/// vars que `Gateway::from_env` lê. Zero dependência nova (`btv-llm` já
-/// é dependência do crate, via `model_tier`/`rate_limit`). Sem mutação: o
-/// degrau (reordenar fallback, ajustar teto do rate limiter) fica de fora
-/// desta onda — ver `pendencias.md` para o porquê (`FallbackChain` morto +
-/// o dashboard não compartilha processo com nenhuma sessão real, mesmo
-/// achado da Onda 10 sobre "uso ao vivo").
-async fn list_providers() -> impl IntoResponse {
-    let gateway = btv_llm::gateway::Gateway::from_env();
-    let available: std::collections::HashSet<String> = gateway.available().into_iter().collect();
-    let providers: Vec<ProviderView> = KNOWN_PROVIDERS
-        .into_iter()
-        .map(|id| ProviderView {
-            id,
-            configured: available.contains(id),
-        })
-        .collect();
-    Json(providers)
-}
-
-#[derive(Serialize)]
-struct VerifyRunStarted {
-    run_id: String,
-}
-
-/// `POST /api/verify/run` (Fase 7 Onda 11) — dispara o pipeline `/verify`
-/// em background (`spawn_blocking`, os passos são subprocessos reais e
-/// bloqueantes) usando a MESMA config que `btv verify`: `btv.toml` na
-/// raiz do workspace, ou `default_steps()` (espelha o job `rust` do CI) na
-/// ausência dele — não uma segunda fonte de verdade sobre o que roda. A
-/// resposta imediata é só o `run_id`; o cliente acompanha via `GET
-/// /api/verify/:id` (polling). Execuções concorrentes são serializadas: só
-/// 1 job por vez — `409` com o `run_id` já em andamento em vez de dois
-/// pipelines disputando o mesmo `target/`.
-async fn run_verify_start(State(state): State<AppState>) -> Response {
-    let run_id = new_verify_run_id();
-    {
-        // Check-and-reserve ATÔMICO sob um ÚNICO lock: verifica se há job
-        // rodando e, no mesmo escopo, reserva o slot. Antes eram dois locks
-        // separados — entre eles o mutex era liberado, então dois POST
-        // concorrentes liam `None` e AMBOS reservavam (dois pipelines no mesmo
-        // `target/` + o slot do primeiro sobrescrito), retornando os dois `202`.
-        // É a corrida que o teste `verify-concurrency` pegou de forma
-        // intermitente; o `409` só é garantido com a checagem-e-reserva atômica.
-        let mut guard = state.verify_job.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(job) = guard.as_ref() {
-            if matches!(job.status, VerifyJobStatus::Running { .. }) {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(VerifyRunStarted {
-                        run_id: job.run_id.clone(),
-                    }),
-                )
-                    .into_response();
-            }
-        }
-        *guard = Some(VerifyJob {
-            run_id: run_id.clone(),
-            status: VerifyJobStatus::Running { step: 0, total: 0 },
-        });
-    }
-
-    let job_slot = Arc::clone(&state.verify_job);
-    let root = state.root.clone();
-    let run_id_for_task = run_id.clone();
-    tokio::task::spawn_blocking(move || {
-        let config_path = root.join("btv.toml");
-        let steps = match btv_verify::config::load_config(&config_path) {
-            Ok(Some(cfg)) => cfg.to_step_specs(),
-            _ => btv_verify::config::default_steps(),
-        };
-        let sha = verify_git_sha(&root).unwrap_or_else(|| "unknown".to_string());
-        let produced_at = now_rfc3339();
-        let progress_slot = Arc::clone(&job_slot);
-        // `catch_unwind`: um panic aqui seria engolido pelo `JoinHandle`
-        // descartado do `spawn_blocking` e o job ficaria "running" eterno.
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            btv_verify::run_pipeline_with_progress(
-                &run_id_for_task,
-                &sha,
-                &produced_at,
-                &steps,
-                move |step, total, _completed| {
-                    let mut guard = progress_slot.lock().unwrap_or_else(|e| e.into_inner());
-                    if let Some(job) = guard.as_mut() {
-                        job.status = VerifyJobStatus::Running { step, total };
-                    }
-                },
-            )
-        }));
-        settle_verify_job(&job_slot, result);
-    });
-
-    (StatusCode::ACCEPTED, Json(VerifyRunStarted { run_id })).into_response()
-}
-
-/// Registra o desfecho do job no slot — inclusive um panic capturado por
-/// `catch_unwind` (vira `Failed`, nunca "running" eterno).
-fn settle_verify_job(
-    job_slot: &VerifyJobSlot,
-    result: std::thread::Result<btv_schemas::verification::VerificationEvidence>,
-) {
-    let mut guard = job_slot.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(job) = guard.as_mut() {
-        job.status = match result {
-            Ok(evidence) => VerifyJobStatus::Done { evidence },
-            Err(panic) => VerifyJobStatus::Failed {
-                message: panic_to_message(panic.as_ref()),
-            },
-        };
-    }
-}
-
-fn panic_to_message(panic: &(dyn std::any::Any + Send)) -> String {
-    if let Some(s) = panic.downcast_ref::<&str>() {
-        (*s).to_string()
-    } else if let Some(s) = panic.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "panic sem mensagem".to_string()
-    }
-}
-
-/// `GET /api/verify/:id` — status do job (polling). `404` se não houver
-/// nenhum job, ou se `id` não bater com o job atual (só 1 slot — um job novo
-/// substitui o anterior, e um reinício do servidor perde o registro).
-async fn get_verify_status(
-    State(state): State<AppState>,
-    AxumPath(id): AxumPath<String>,
-) -> Response {
-    let guard = state.verify_job.lock().unwrap_or_else(|e| e.into_inner());
-    match guard.as_ref() {
-        Some(job) if job.run_id == id => match &job.status {
-            VerifyJobStatus::Running { step, total } => Json(serde_json::json!({
-                "status": "running",
-                "run_id": job.run_id,
-                "step": step,
-                "total": total,
-            }))
-            .into_response(),
-            VerifyJobStatus::Done { evidence } => Json(serde_json::json!({
-                "status": "done",
-                "run_id": job.run_id,
-                "evidence": evidence,
-                // Review por valor DERIVADO da evidência real (technical/
-                // security + gates duros) — substitui o mock do frontend.
-                "review": btv_schemas::review::ValueReview::from_evidence(evidence),
-            }))
-            .into_response(),
-            VerifyJobStatus::Failed { message } => Json(serde_json::json!({
-                "status": "failed",
-                "run_id": job.run_id,
-                "message": message,
-            }))
-            .into_response(),
-        },
-        _ => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody::new(
-                "verify_run_not_found",
-                format!("run '{id}' não encontrado"),
-            )),
-        )
-            .into_response(),
-    }
-}
-
-fn new_verify_run_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("run-{:x}", nanos & 0xffff_ffff_ffff)
-}
-
-/// Mesma lógica de `btv-cli`'s `git_sha()` (duplicada, não importada —
-/// direção de dependência oposta), só que com `current_dir` explícito em vez
-/// de confiar no cwd ambiente do processo: o dashboard resolve tudo contra
-/// `state.root`, não o cwd real do binário.
-fn verify_git_sha(root: &Path) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout)
-        .ok()
-        .map(|s| s.trim().to_string())
-}
-
-/// Lista as skills (built-in de `skills/` + terceiro de `.btv/skills/`) com o
-/// status REAL do vetter — o que liga a tela admin `skills` ao mecanismo (o
-/// mock `vetSkill` do frontend vira este fetch). Read-only: o vetter decide, o
-/// usuário não sobrepõe (a régua fail-closed da fase).
-async fn skills(State(state): State<AppState>) -> impl IntoResponse {
-    use btv_verify::vetter::list_skill_statuses;
-    let mut all = list_skill_statuses(&state.root.join("skills"), "builtin");
-    all.extend(list_skill_statuses(
-        &state.root.join(".btv").join("skills"),
-        "third-party",
-    ));
-    Json(all)
-}
-
-fn now_rfc3339() -> String {
-    OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
-}
-
-fn db_error(message: impl std::fmt::Display) -> Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorBody::new("prompt_library_error", message.to_string())),
-    )
-        .into_response()
-}
-
-fn prompt_not_found() -> Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorBody::new("prompt_not_found", "prompt inexistente")),
-    )
-        .into_response()
-}
-
-#[derive(Deserialize)]
-struct ListPromptsQuery {
-    tag: Option<String>,
-}
-
-/// `GET /api/prompts?tag=` — lista os prompts salvos (mais recentes
-/// primeiro), opcionalmente filtrados por uma tag exata. Mesma biblioteca
-/// (`.btv/prompt_library.db`) que o `/prompt library` do CLI já usa — não
-/// uma segunda fonte de verdade.
-async fn list_prompts(
-    State(state): State<AppState>,
-    Query(q): Query<ListPromptsQuery>,
-) -> Response {
-    let library = state
-        .prompt_library
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    match library.list(q.tag.as_deref()) {
-        Ok(prompts) => Json(prompts).into_response(),
-        Err(e) => db_error(e),
-    }
-}
-
-#[derive(Deserialize)]
-struct CreatePromptBody {
-    name: String,
-    generator: String,
-    #[serde(default)]
-    fields: Value,
-    rendered: String,
-    #[serde(default)]
-    tags: Vec<String>,
-}
-
-/// `POST /api/prompts` — salva um prompt já renderizado (o render em si é
-/// `POST /api/prompt/render`, rota separada no router mesclado de
-/// `btv-cli`). Devolve o registro completo; `created_at` é gerado pelo
-/// servidor, nunca confiado ao corpo da requisição.
-async fn create_prompt(
-    State(state): State<AppState>,
-    Json(body): Json<CreatePromptBody>,
-) -> Response {
-    let library = state
-        .prompt_library
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    let created_at = now_rfc3339();
-    let id = match library.save(
-        &body.name,
-        &body.generator,
-        &body.fields,
-        &body.rendered,
-        &body.tags,
-        &created_at,
-    ) {
-        Ok(id) => id,
-        Err(e) => return db_error(e),
-    };
-    match library.get(id) {
-        Ok(Some(saved)) => (StatusCode::CREATED, Json(saved)).into_response(),
-        Ok(None) => db_error("prompt salvo mas não encontrado logo em seguida"),
-        Err(e) => db_error(e),
-    }
-}
-
-/// `POST /api/prompts/:id/favorite` — inverte o favorito; `404` se o id não existir.
-async fn favorite_prompt(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Response {
-    let library = state
-        .prompt_library
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    match library.toggle_favorite(id) {
-        Ok(Some(favorite)) => Json(serde_json::json!({ "favorite": favorite })).into_response(),
-        Ok(None) => prompt_not_found(),
-        Err(e) => db_error(e),
-    }
-}
-
-/// `DELETE /api/prompts/:id` — remove; `404` se o id não existir.
-async fn delete_prompt(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Response {
-    let library = state
-        .prompt_library
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    match library.delete(id) {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => prompt_not_found(),
-        Err(e) => db_error(e),
-    }
-}
-
-#[derive(Deserialize)]
-struct LedgerQuery {
-    limit: Option<u32>,
-    actor: Option<String>,
-}
-
-/// `GET /api/ledger?limit=&actor=` — entradas mais recentes primeiro, mesmo
-/// `.btv/btv.db` que a CLI grava via `LedgerStore::append`. O filtro por
-/// `actor` é resolvido dentro de `LedgerStore::recent` (SQL, combinado com o
-/// `LIMIT`), não aqui.
-async fn list_ledger(State(state): State<AppState>, Query(q): Query<LedgerQuery>) -> Response {
-    let ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
-    match ledger.recent(q.limit.unwrap_or(50), q.actor.as_deref()) {
-        Ok(entries) => Json(entries).into_response(),
-        Err(e) => db_error(e),
-    }
-}
-
-#[derive(Serialize)]
-struct VerifyResponse {
-    ok: bool,
-    verified: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-}
-
-/// `POST /api/ledger/verify` — percorre a cadeia inteira. Uma corrupção é
-/// sinalizada por `ok:false` no corpo, não por um status HTTP de erro: a
-/// requisição em si teve sucesso, o que ela relata é que o *dado* está
-/// corrompido — a distinção que a tela precisa pra diferenciar "servidor
-/// falhou" de "alguém adulterou o ledger".
-async fn verify_ledger(State(state): State<AppState>) -> Response {
-    let ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
-    match ledger.verify_chain() {
-        Ok(verified) => Json(VerifyResponse {
-            ok: true,
-            verified,
-            error: None,
-        })
-        .into_response(),
-        Err(btv_store::ledger::LedgerError::BrokenChain { seq, .. }) => Json(VerifyResponse {
-            ok: false,
-            verified: seq.saturating_sub(1),
-            error: Some(format!("cadeia corrompida na seq {seq}")),
-        })
-        .into_response(),
-        Err(e) => db_error(e),
-    }
-}
-
-#[derive(Serialize)]
-struct SaveWorkflowResponse {
-    seq: u64,
-    workflow_id: &'static str,
-}
-
-/// `POST /api/designer/workflow` (Fase 7 Onda 14) — valida o grafo do Squad
-/// Designer contra `squad.workflow.v1` (schema + integridade de arestas via
-/// `SquadWorkflow::validate_edges`) e grava no ledger (mesmo
-/// `LedgerStore::append` que toda outra escrita de auditoria já usa — zero
-/// mudança de ledger). "Salvar honesto": confirma que o grafo foi validado e
-/// persistido, nunca que o orquestrador passou a usá-lo — os 5 agentes
-/// fixos do `UnifiedOrchestrator` continuam decidindo, sem reescrita nesta
-/// fase (aplicar o grafo real é trabalho futuro).
-async fn save_workflow(
-    State(state): State<AppState>,
-    Json(workflow): Json<SquadWorkflow>,
-) -> Response {
-    if let Err(e) = workflow.validate_edges() {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorBody::new("invalid_workflow", e)),
-        )
-            .into_response();
-    }
-    let payload = match serde_json::to_value(&workflow) {
-        Ok(v) => v,
-        Err(e) => return db_error(e),
-    };
-    let entry = btv_schemas::ledger::LedgerEntry {
-        seq: 0,
-        prev_hash: String::new(),
-        entry_hash: String::new(),
-        kind: "designer.workflow_saved".into(),
-        actor: "web:designer".into(),
-        payload,
-        r#override: None,
-        fake_marker: None,
-        ts: now_rfc3339(),
-    };
-    let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
-    match ledger.append(entry) {
-        Ok(saved) => (
-            StatusCode::CREATED,
-            Json(SaveWorkflowResponse {
-                seq: saved.seq,
-                workflow_id: "squad.workflow.v1",
-            }),
-        )
-            .into_response(),
-        Err(e) => db_error(e),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
+    use btv_llm::model_tier::ModelTier;
+    use btv_llm::rate_limit::RateLimiter;
+    use serde_json::Value;
     use tower::ServiceExt;
 
     fn telemetry_com_um_evento() -> Telemetry {
@@ -927,44 +220,7 @@ mod tests {
         Arc::new(Mutex::new(LedgerStore::open_in_memory().unwrap()))
     }
 
-    #[test]
-    fn origin_host_extrai_host_de_varias_formas() {
-        assert_eq!(
-            origin_host("https://squad.exemplo.cloud"),
-            Some("squad.exemplo.cloud")
-        );
-        assert_eq!(
-            origin_host("https://squad.exemplo.cloud:443/x"),
-            Some("squad.exemplo.cloud")
-        );
-        assert_eq!(
-            origin_host("squad.exemplo.cloud"),
-            Some("squad.exemplo.cloud")
-        );
-        assert_eq!(origin_host(""), None);
-    }
-
-    #[test]
-    fn origin_allowed_so_localhost_por_padrao() {
-        // Sem allowlist: mantém exatamente o comportamento do ADR 0015.
-        let vazio: &[String] = &[];
-        assert!(origin_allowed("http://localhost:5173", vazio));
-        assert!(origin_allowed("http://127.0.0.1:7878", vazio));
-        assert!(!origin_allowed("https://squad.exemplo.cloud", vazio));
-        assert!(!origin_allowed("https://evil.example", vazio));
-    }
-
-    #[test]
-    fn origin_allowed_libera_hosts_da_allowlist() {
-        let extra = vec!["squad.exemplo.cloud".to_string()];
-        assert!(origin_allowed("https://squad.exemplo.cloud", &extra));
-        // case-insensitive no host
-        assert!(origin_allowed("https://SQUAD.exemplo.CLOUD", &extra));
-        // localhost continua valendo mesmo com allowlist
-        assert!(origin_allowed("http://localhost", &extra));
-        // host fora da lista continua bloqueado
-        assert!(!origin_allowed("https://outro.exemplo.cloud", &extra));
-    }
+    // (testes unitários da guarda de Origin moveram com ela para guard.rs na C2.)
 
     /// Fixture de `web/dist` com estrutura aninhada (não só um `index.html`
     /// solto) — exercita o `ServeDir` real: subpasta `assets/` com JS/CSS e
@@ -1495,7 +751,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/api/prompts")
-                    .header(header::ORIGIN, "https://evil.example")
+                    .header(axum::http::header::ORIGIN, "https://evil.example")
                     .header("content-type", "application/json")
                     .body(Body::from(body.clone()))
                     .unwrap(),
@@ -2227,28 +1483,8 @@ mod tests {
         assert_eq!(second_json["run_id"], first_run_id);
     }
 
-    /// Um panic dentro do pipeline (bug interno de glue) assenta o slot em
-    /// `Failed` com a mensagem do panic — nunca um "running" eterno que o
-    /// polling não consegue distinguir de um job vivo.
-    #[test]
-    fn panic_no_pipeline_assenta_o_job_em_failed_nao_running_eterno() {
-        let slot: VerifyJobSlot = Arc::new(Mutex::new(Some(VerifyJob {
-            run_id: "vrun-panic".into(),
-            status: VerifyJobStatus::Running { step: 0, total: 0 },
-        })));
-        let result =
-            std::panic::catch_unwind(|| -> btv_schemas::verification::VerificationEvidence {
-                panic!("bug interno de glue")
-            });
-        settle_verify_job(&slot, result);
-        let guard = slot.lock().unwrap();
-        match &guard.as_ref().unwrap().status {
-            VerifyJobStatus::Failed { message } => {
-                assert!(message.contains("bug interno de glue"));
-            }
-            _ => panic!("esperava VerifyJobStatus::Failed"),
-        }
-    }
+    // (o teste unitário de `settle_verify_job` — panic assenta em Failed —
+    // moveu com o código para `handlers/verify.rs` na C2.)
 
     /// `id` que não bate com nenhum job (ou nunca existiu) é `404` — não um
     /// estado "running" fabricado.
