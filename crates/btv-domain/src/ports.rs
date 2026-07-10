@@ -138,6 +138,17 @@ pub struct DomainEvent {
 /// `btv.*` do inventário (`wire-strings.v1.json`) e o teste deste módulo
 /// prova que os DOIS conjuntos são idênticos — variante órfã ou kind sem
 /// variante quebram o build (pedido da revisão do G1).
+/// Hash de procedência do prompt efetivo de UM membro da ativação —
+/// shape FECHADO (C3.0): `custom` distingue persona própria de papel de
+/// template, e o DTO do adapter omite a chave quando `false` (o wire
+/// sempre foi assim: a chave só aparece nas personas próprias).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptHash {
+    pub role: String,
+    pub prompt_sha256: String,
+    pub custom: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainEventKind {
     /// `btv.squad_activated`
@@ -145,6 +156,21 @@ pub enum DomainEventKind {
         task_id: TaskId,
         run_id: i64,
         template_id: String,
+        // C3.0 (decisão (a) do dono): a variante alcança o payload REAL do
+        // emissor — o wire congelado pelos goldens é a verdade.
+        template_version: String,
+        name: String,
+        /// Papéis ativos (nomes) — já sem os desligados.
+        roles: Vec<String>,
+        /// Nomes das personas próprias incluídas na ativação (U7).
+        custom_personas: Vec<String>,
+        /// Procedência: hash do prompt EFETIVO de cada membro (shape
+        /// fechado — a cerca do `Value` não se aplica: o dono do schema é
+        /// este tipo).
+        prompt_hashes: Vec<PromptHash>,
+        /// Referências fornecidas no briefing (URLs/caminhos livres do
+        /// usuário — conteúdo opaco, mas a FORMA é lista de strings).
+        refs: Vec<String>,
     },
     /// `btv.gate_approved` — carrega o contador APÓS o incremento: o evento
     /// é o fato consumado que o ledger registra.
@@ -166,6 +192,9 @@ pub enum DomainEventKind {
         deliverable_id: i64,
         name: String,
         format: String,
+        /// Trilha de procedência exibida na Biblioteca (U4) — ex.:
+        /// "Redator · 1 gate(s)" (C3.0: o emissor sempre a gravou).
+        trail: String,
     },
     /// `btv.persona_updated` — hash, nunca o prompt em claro (procedência).
     PersonaUpdated {
@@ -508,6 +537,16 @@ mod tests {
                 task_id: TaskId::new(1),
                 run_id: 1,
                 template_id: "editorial".into(),
+                template_version: "v1.4".into(),
+                name: "Ativação".into(),
+                roles: vec!["Redator".into()],
+                custom_personas: vec![],
+                prompt_hashes: vec![PromptHash {
+                    role: "Redator".into(),
+                    prompt_sha256: "abc".into(),
+                    custom: false,
+                }],
+                refs: vec![],
             },
             DomainEventKind::GateApproved {
                 task_id: TaskId::new(1),
@@ -525,6 +564,7 @@ mod tests {
                 deliverable_id: 1,
                 name: "artigo.md".into(),
                 format: "MD".into(),
+                trail: "Redator · 1 gate(s)".into(),
             },
             DomainEventKind::PersonaUpdated {
                 template_id: "editorial".into(),
