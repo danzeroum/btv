@@ -17,6 +17,13 @@ pub(crate) struct LedgerQuery {
 /// `.btv/btv.db` que a CLI grava via `LedgerStore::append`. O filtro por
 /// `actor` é resolvido dentro de `LedgerStore::recent` (SQL, combinado com o
 /// `LIMIT`), não aqui.
+///
+/// Cruzamento de goldens (declarado nos DOIS lados): o contrato DESTA ROTA
+/// (status/shape/envelope) é pinado por `ledger.golden.json` (T1); os CORPOS
+/// que ela serve, quando produzidos pelo fluxo real, são pinados por
+/// `ledger_bodies.golden.json` (harness de `btv-cli`, C3.1) — que serializa
+/// `Vec<LedgerEntry>` como o `Json(entries)` daqui. Wrapper/campo novo nesta
+/// rota quebra LÁ no T1; mudança de corpo de emissor quebra no ledger_bodies.
 pub(crate) async fn list_ledger(
     State(state): State<AppState>,
     Query(q): Query<LedgerQuery>,
