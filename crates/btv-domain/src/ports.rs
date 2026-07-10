@@ -142,6 +142,15 @@ pub struct DomainEvent {
 /// shape FECHADO (C3.0): `custom` distingue persona própria de papel de
 /// template, e o DTO do adapter omite a chave quando `false` (o wire
 /// sempre foi assim: a chave só aparece nas personas próprias).
+/// Fatos da ativação que o `Run` NÃO persiste mas o evento carrega
+/// (procedência e briefing) — insumos de [`Run::activation_event`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ActivationFacts {
+    pub custom_personas: Vec<String>,
+    pub prompt_hashes: Vec<PromptHash>,
+    pub refs: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptHash {
     pub role: String,
@@ -254,6 +263,11 @@ pub enum RunError {
     InvalidTransition { from: RunStatus, to: RunStatus },
     #[error("status fora do vocabulário do banco: {0}")]
     InvalidStatus(String),
+    /// C3.1 endpoint 2: o evento de ativação DERIVA do agregado persistido —
+    /// pedi-lo antes do save (id = 0) ou sobre estado corrompido
+    /// (`papeis_json` não-parseável) é erro, nunca evento fabricado.
+    #[error("estado do run inválido para derivar evento: {0}")]
+    InvalidState(String),
 }
 
 /// Semântica de persistência SEM tipo de driver: o adapter (SQLite/Postgres,
@@ -288,6 +302,99 @@ impl Run {
     /// (vai no evento, como o payload atual do ledger carrega); `ts` é o
     /// relógio do CHAMADOR (o domínio não lê relógio — determinismo). O
     /// agregado segue decidindo; o chamador só fornece insumos.
+    /// Factory da ativação (C3.1 endpoint 2, decisão exposta no rito do
+    /// G1): VALIDA E CONSTRÓI o run nascente — `task_id` e `ts` são INSUMOS
+    /// de infraestrutura (quem sequencia é o hub via `max_task_seq`; quem
+    /// carimba hora é o chamador — o domínio não lê contador nem relógio,
+    /// mesma decisão do `ts` no A4). `papeis_json` é DERIVADO de `roles`
+    /// aqui dentro (fonte única: o estado e o evento futuro não podem
+    /// divergir porque nascem do mesmo vetor). `roles` vazio é recusado —
+    /// a mesma regra que o handler sempre aplicou, agora no agregado.
+    ///
+    /// EVOLUÇÃO vs. o prior da revisão (`activate -> (Run, DomainEvent)`),
+    /// declarada: o `run_id` do evento é numerado pelo STORAGE no save —
+    /// retornar o par aqui exigiria placeholder ou porta nova. Em vez
+    /// disso, o evento DERIVA do agregado persistido
+    /// ([`Run::activation_event`], fail-closed em `id == 0`): coerência
+    /// run↔evento por construção — mais forte que o par, porque o evento é
+    /// FUNÇÃO do estado salvo, não um irmão que se espera igual.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate(
+        ctx: &TenantContext,
+        task_id: TaskId,
+        template_id: String,
+        template_versao: String,
+        nome: String,
+        briefing_json: String,
+        roles: &[String],
+        ts: String,
+    ) -> Result<Run, RunError> {
+        if roles.is_empty() {
+            return Err(RunError::InvalidState(
+                "ativação exige ao menos um papel ativo".into(),
+            ));
+        }
+        let papeis_json = serde_json::to_string(roles)
+            .map_err(|e| RunError::InvalidState(format!("papéis não serializáveis: {e}")))?;
+        Ok(Run {
+            id: 0, // numerado pelo storage no primeiro save (contrato do B2)
+            task_id,
+            template_id,
+            template_versao,
+            nome,
+            briefing_json,
+            papeis_json,
+            status: RunStatus::Ativa,
+            gates_aprovados: 0,
+            created_ts: ts.clone(),
+            updated_ts: ts,
+            tenant: ctx.tenant,
+        })
+    }
+
+    /// O evento `btv.squad_activated` DERIVADO do agregado PERSISTIDO —
+    /// `id == 0` é recusado fail-closed (o wire carrega o `run_id` que o
+    /// storage numerou; sem save não há fato a auditar). `roles` volta de
+    /// `papeis_json` (a fonte única que a factory gravou); os fatos da
+    /// ativação que o run NÃO persiste (procedência de prompts, personas
+    /// próprias, refs do briefing) entram como insumos.
+    ///
+    /// Este é o evento de NASCIMENTO, emitido EXATAMENTE UMA VEZ pelo
+    /// serviço de ativação, logo após o primeiro save — o método é
+    /// publicamente chamável em qualquer run persistido, e a UNICIDADE é
+    /// contrato do CHAMADOR: chamá-lo de novo (num replay, numa releitura)
+    /// fabricaria uma segunda ativação que nunca aconteceu.
+    pub fn activation_event(
+        &self,
+        ctx: &TenantContext,
+        facts: ActivationFacts,
+        ts: String,
+    ) -> Result<DomainEvent, RunError> {
+        if self.id == 0 {
+            return Err(RunError::InvalidState(
+                "evento de ativação exige run persistido (id numerado pelo storage)".into(),
+            ));
+        }
+        let roles: Vec<String> = serde_json::from_str(&self.papeis_json)
+            .map_err(|e| RunError::InvalidState(format!("papeis_json corrompido: {e}")))?;
+        Ok(DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts,
+            kind: DomainEventKind::SquadActivated {
+                task_id: self.task_id,
+                run_id: self.id,
+                template_id: self.template_id.clone(),
+                template_version: self.template_versao.clone(),
+                name: self.nome.clone(),
+                roles,
+                custom_personas: facts.custom_personas,
+                prompt_hashes: facts.prompt_hashes,
+                refs: facts.refs,
+            },
+        })
+    }
+
     pub fn approve_gate(
         &mut self,
         ctx: &TenantContext,

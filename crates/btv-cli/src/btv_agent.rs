@@ -242,21 +242,20 @@ async fn ativar_squad_handler(
     // efetivo em vigor na ativação — fecha U7 (personas) ↔ U4 (trilha).
     // Inclui as personas próprias (Fase 3): o prompt delas de fato roda, então
     // o hash entra na trilha como o dos papéis de template.
-    let mut prompt_hashes: Vec<serde_json::Value> = papeis_ativos
+    let mut prompt_hashes: Vec<btv_domain::ports::PromptHash> = papeis_ativos
         .iter()
-        .map(|(i, papel)| {
-            serde_json::json!({
-                "papel": papel,
-                "prompt_sha256": btv_schemas::sha256_hex(&prompt_efetivo(*i, papel)),
-            })
+        .map(|(i, papel)| btv_domain::ports::PromptHash {
+            role: papel.to_string(),
+            prompt_sha256: btv_schemas::sha256_hex(&prompt_efetivo(*i, papel)),
+            custom: false,
         })
         .collect();
     for cp in &proprias {
-        prompt_hashes.push(serde_json::json!({
-            "papel": cp.nome,
-            "custom": true,
-            "prompt_sha256": btv_schemas::sha256_hex(&cp.prompt),
-        }));
+        prompt_hashes.push(btv_domain::ports::PromptHash {
+            role: cp.nome.clone(),
+            prompt_sha256: btv_schemas::sha256_hex(&cp.prompt),
+            custom: true,
+        });
     }
 
     // Roster de personas (Fase 1): cada papel ativo vira uma PersonaSpec cujo
@@ -306,22 +305,67 @@ async fn ativar_squad_handler(
             .collect::<Vec<_>>(),
     )
     .unwrap_or_else(|_| "[]".into());
-    let papeis_json =
-        serde_json::to_string(&papeis_ativos.iter().map(|(_, p)| *p).collect::<Vec<_>>())
-            .unwrap_or_else(|_| "[]".into());
-
-    let run_id = {
-        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        match store.insert_run(
-            &task_id,
-            &template.id,
-            &template.versao,
-            &nome,
-            &briefing_json,
-            &papeis_json,
-            &crate::session::now_rfc3339(),
-        ) {
-            Ok(id) => id,
+    // C3.1 endpoint 2: factory do agregado + portas no lugar de insert_run
+    // cru + JSON solto. `task_id`/`ts` são INSUMOS (o hub sequenciou acima; o
+    // relógio é do chamador); o evento DERIVA do run PERSISTIDO — o id é
+    // numerado pelo storage no save, então salvamos, relemos e só então o
+    // agregado emite (fail-closed em id=0). Contexto de fonte LOCAL fixa,
+    // como no gate — a E1s troca a fonte. Hub/SSE/pool ficaram acima: o
+    // serviço orquestra domínio+portas, não streaming.
+    let ctx = btv_domain::TenantContext::local(
+        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+    );
+    let roles: Vec<String> = papeis_ativos.iter().map(|(_, p)| p.to_string()).collect();
+    let ts = crate::session::now_rfc3339();
+    let run = match btv_domain::Run::activate(
+        &ctx,
+        match btv_domain::TaskId::parse(&task_id) {
+            Ok(t) => t,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("task_id_error", e.to_string())),
+                )
+                    .into_response()
+            }
+        },
+        template.id.clone(),
+        template.versao.clone(),
+        nome.clone(),
+        briefing_json.clone(),
+        &roles,
+        ts.clone(),
+    ) {
+        Ok(run) => run,
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(ErrorBody::new("activate_error", e.to_string())),
+            )
+                .into_response()
+        }
+    };
+    let (run_id, evento) = {
+        use btv_domain::ports::RunRepository;
+        let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = store.save(&ctx, &run) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("store_error", e.to_string())),
+            )
+                .into_response();
+        }
+        // Relê para obter o id que o storage numerou — o evento deriva do
+        // agregado persistido, nunca de um placeholder.
+        let salvo = match store.get(&ctx, &task_id) {
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("store_error", "run sumiu após o save")),
+                )
+                    .into_response()
+            }
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -329,27 +373,32 @@ async fn ativar_squad_handler(
                 )
                     .into_response()
             }
+        };
+        let facts = btv_domain::ports::ActivationFacts {
+            custom_personas: proprias.iter().map(|c| c.nome.clone()).collect(),
+            prompt_hashes,
+            refs: body.refs.clone(),
+        };
+        match salvo.activation_event(&ctx, facts, ts) {
+            Ok(evento) => (salvo.id, evento),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("event_error", e.to_string())),
+                )
+                    .into_response()
+            }
         }
     };
 
-    if let Err(e) = append_ledger(
-        &state.ledger,
-        "btv.squad_activated",
-        serde_json::json!({
-            "task_id": task_id,
-            "run_id": run_id,
-            "template_id": template.id,
-            "template_versao": template.versao,
-            "nome": nome,
-            "papeis": papeis_ativos.iter().map(|(_, p)| *p).collect::<Vec<_>>(),
-            "personas_proprias": proprias.iter().map(|c| c.nome.as_str()).collect::<Vec<_>>(),
-            "prompt_hashes": prompt_hashes,
-            "refs": body.refs,
-        }),
-    ) {
-        // Ledger indisponível é falha de auditoria — reporta, não esconde
-        // (a squad já está rodando; o cliente decide o que fazer).
-        eprintln!("btv: falha ao registrar ativação no ledger: {e}");
+    {
+        use btv_domain::ports::LedgerRepository;
+        let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+            // Ledger indisponível é falha de auditoria — reporta, não esconde
+            // (a squad já está rodando; o cliente decide o que fazer).
+            eprintln!("btv: falha ao registrar ativação no ledger: {e}");
+        }
     }
 
     // Watcher: quando o stream da tarefa terminar, transiciona o status do
