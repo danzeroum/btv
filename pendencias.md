@@ -1984,3 +1984,13 @@ vazio = wire pré-D2t → None (nunca LOCAL fabricado — quem resolve tenant
 SquadEvent de erro antes de abrir qualquer canal. Protocols existentes
 intocados; o eco nos eventos segue verbatim. O espelho Pydantic COMPLETO
 do D4t (demais tipos) continua na janela dele.
+
+**[registro]** As duas decisões do dono SAÍRAM (comentário no PR #28 +
+registro no thread do #25): (1) ADR 0029 ACEITO íntegro e sem ressalva —
+Trilha E aberta, E1s implementa o modelo como aceito (inclusive o item 5
+do bootstrap e o não-escopo "1 sessão → 1 tenant"); (2) escalação do B3
+decidida em **(a)** — enriquecer as variantes: o wire atual é a verdade,
+`refs`/`prompt_hashes` ganham tipo pela regra da cerca, goldens intactos;
+o campo `tenant` entra no corpo das entradas novas com regravação
+justificada (ADR 0027). C3 DESTRAVADO. Fila de código: E1s e C3 abertos
+em paralelo — aguardando as coordenadas do revisor sobre a ordem.
