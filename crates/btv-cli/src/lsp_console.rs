@@ -1,6 +1,8 @@
-//! Fase 7 Onda 10 (A7): enumera `.btv/lsp.toml` para exibição. Mora aqui
-//! (não em `btv-server`) porque reusa `crate::skills::read_lsp_server_configs`
-//! (precisa de `btv-tools`).
+//! Fase 7 Onda 10 (A7): enumera `.btv/lsp.toml` para exibição via
+//! `btv_tools::lsp::read_server_configs`. C4-3 extraiu esse leitor do
+//! `skills.rs` para `btv-tools` (dono do tipo), então o antigo motivo de morar
+//! na `btv-cli` (reusar `crate::skills`) caiu — este console está pronto para
+//! migrar a `btv-server` no C4-4.
 //!
 //! **Zero probe sob demanda**: esta rota NUNCA sobe o processo do language
 //! server para "ver se está rodando" — isso quebraria exatamente a
@@ -34,7 +36,7 @@ struct LspServerView {
 /// `GET /api/lsp` — servidores declarados em `.btv/lsp.toml`, sem subir
 /// nenhum processo.
 async fn list_lsp(State(state): State<LspConsoleState>) -> impl IntoResponse {
-    let servers: Vec<LspServerView> = crate::skills::read_lsp_server_configs(&state.root)
+    let servers: Vec<LspServerView> = btv_tools::lsp::read_server_configs(&state.root)
         .into_iter()
         .map(|c| LspServerView {
             id: c.id,

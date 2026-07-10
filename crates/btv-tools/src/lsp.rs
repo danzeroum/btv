@@ -46,6 +46,47 @@ pub struct LspServerConfig {
     pub root: PathBuf,
 }
 
+/// Lê `<root>/.btv/lsp.toml` e devolve os servidores declarados, SEM subir
+/// nenhum processo (só parsing). C4-3: helper multi-consumidor extraído do
+/// `skills.rs` da btv-cli para o dono do tipo — compartilhado entre o
+/// registry-builder do agente (`skills::load_lsp_servers`, que registra as
+/// consultas para uso real) e o console de LSP (`lsp_console`, que só enumera
+/// para exibição). Ausente ou inválido → vazio (fail-soft).
+pub fn read_server_configs(root: &std::path::Path) -> Vec<LspServerConfig> {
+    let config_path = root.join(".btv").join("lsp.toml");
+    let Ok(raw) = std::fs::read_to_string(&config_path) else {
+        return Vec::new();
+    };
+    #[derive(serde::Deserialize)]
+    struct LspConfigFile {
+        #[serde(default)]
+        server: Vec<ServerEntry>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ServerEntry {
+        id: String,
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+    }
+    let cfg: LspConfigFile = match toml::from_str(&raw) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  lsp: .btv/lsp.toml inválido ({e}) — ignorado");
+            return Vec::new();
+        }
+    };
+    cfg.server
+        .into_iter()
+        .map(|s| LspServerConfig {
+            id: s.id,
+            command: s.command,
+            args: s.args,
+            root: root.to_path_buf(),
+        })
+        .collect()
+}
+
 /// As consultas que expomos como tool. Fixas (o LSP oferece um conjunto
 /// conhecido), diferente do MCP onde as tools são anunciadas dinamicamente.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

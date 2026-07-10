@@ -41,6 +41,46 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
 }
 
+/// Lê `<root>/.btv/mcp.toml` e devolve os servidores declarados, SEM conectar a
+/// nenhum (só parsing). C4-3: helper multi-consumidor extraído do `skills.rs`
+/// da btv-cli para o dono do tipo — compartilhado entre o registry-builder do
+/// agente (`skills::load_mcp_servers`, que registra as tools para uso real) e o
+/// console MCP (`mcp_console`, que só enumera/probe para exibição). Ausente ou
+/// inválido → vazio (fail-soft).
+pub fn read_server_configs(root: &std::path::Path) -> Vec<McpServerConfig> {
+    let config_path = root.join(".btv").join("mcp.toml");
+    let Ok(raw) = std::fs::read_to_string(&config_path) else {
+        return Vec::new();
+    };
+    #[derive(serde::Deserialize)]
+    struct McpConfigFile {
+        #[serde(default)]
+        server: Vec<ServerEntry>,
+    }
+    #[derive(serde::Deserialize)]
+    struct ServerEntry {
+        id: String,
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+    }
+    let cfg: McpConfigFile = match toml::from_str(&raw) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  mcp: .btv/mcp.toml inválido ({e}) — ignorado");
+            return Vec::new();
+        }
+    };
+    cfg.server
+        .into_iter()
+        .map(|s| McpServerConfig {
+            id: s.id,
+            command: s.command,
+            args: s.args,
+        })
+        .collect()
+}
+
 /// Metadados de uma tool anunciada por um servidor MCP.
 #[derive(Serialize)]
 pub struct McpToolMeta {

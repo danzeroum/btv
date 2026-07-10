@@ -9,6 +9,10 @@ description = "Ferramentas determinísticas da plataforma BuildToValue: read, gr
 btv-domain.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# C4-3: leitores de `.btv/{lsp,mcp}.toml` migram do `skills.rs` da btv-cli para
+# cá (dono de `Lsp/McpServerConfig` + `register_*`) — lar compartilhado do
+# helper multi-consumidor (o registry-builder do agente E os consoles lsp/mcp).
+toml.workspace = true
 thiserror.workspace = true
 ignore.workspace = true
 grep.workspace = true

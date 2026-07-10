@@ -68,7 +68,9 @@ pub fn build_registry_with_vetting(root: &Path) -> (ToolRegistry, Vec<SkillStatu
 /// um comando inválido só falha ali (não derruba o CLI). A raiz analisada é o
 /// próprio workspace do BuildToValue.
 fn load_lsp_servers(registry: &mut ToolRegistry, root: &Path) {
-    for config in read_lsp_server_configs(root) {
+    // C4-3: os leitores de config moram em btv-tools (dono do tipo), reusados
+    // pelo console de LSP — este é o consumidor "registry do agente".
+    for config in btv_tools::lsp::read_server_configs(root) {
         let n = btv_tools::lsp::register_lsp_server(registry, &config);
         if n > 0 {
             eprintln!("  lsp '{}': {n} consulta(s) registrada(s)", config.id);
@@ -76,98 +78,19 @@ fn load_lsp_servers(registry: &mut ToolRegistry, root: &Path) {
     }
 }
 
-/// Lê `<root>/.btv/lsp.toml` e devolve os servidores declarados, sem subir
-/// nenhum processo (só parsing) — compartilhado entre `load_lsp_servers`
-/// (registra as consultas no `ToolRegistry` para uso real do agente) e o
-/// console de LSP da Fase 7 Onda 10 (`lsp_console.rs`, só enumera para
-/// exibição). Mesmo padrão de `read_mcp_server_configs`. Ausente ou inválido
-/// → vazio (fail-soft).
-pub(crate) fn read_lsp_server_configs(root: &Path) -> Vec<btv_tools::LspServerConfig> {
-    let config_path = root.join(".btv").join("lsp.toml");
-    let Ok(raw) = std::fs::read_to_string(&config_path) else {
-        return Vec::new();
-    };
-    #[derive(serde::Deserialize)]
-    struct LspConfigFile {
-        #[serde(default)]
-        server: Vec<ServerEntry>,
-    }
-    #[derive(serde::Deserialize)]
-    struct ServerEntry {
-        id: String,
-        command: String,
-        #[serde(default)]
-        args: Vec<String>,
-    }
-    let cfg: LspConfigFile = match toml::from_str(&raw) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("  lsp: .btv/lsp.toml inválido ({e}) — ignorado");
-            return Vec::new();
-        }
-    };
-    cfg.server
-        .into_iter()
-        .map(|s| btv_tools::LspServerConfig {
-            id: s.id,
-            command: s.command,
-            args: s.args,
-            root: root.to_path_buf(),
-        })
-        .collect()
-}
-
 /// Carrega servidores MCP declarados em `<root>/.btv/mcp.toml` (Fase 6 Onda 4)
 /// e registra suas tools (namespaced `mcp__<server>__<tool>`) no registry, sob o
 /// permission-engine. **Fail-soft:** sem config, config inválida, ou servidor
 /// indisponível → loga e segue (um MCP quebrado não derruba o CLI).
 fn load_mcp_servers(registry: &mut ToolRegistry, root: &Path) {
-    for config in read_mcp_server_configs(root) {
+    // C4-3: leitor em btv-tools, reusado pelo console MCP.
+    for config in btv_tools::mcp::read_server_configs(root) {
         match btv_tools::mcp::register_mcp_server(registry, &config) {
             Ok(n) if n > 0 => eprintln!("  mcp '{}': {n} tool(s) registrada(s)", config.id),
             Ok(_) => {}
             Err(e) => eprintln!("  mcp '{}' indisponível — ignorado ({e})", config.id),
         }
     }
-}
-
-/// Lê `<root>/.btv/mcp.toml` e devolve os servidores declarados, sem
-/// conectar a nenhum (só parsing) — compartilhado entre `load_mcp_servers`
-/// (registra no `ToolRegistry` para uso real do agente) e o console MCP da
-/// Fase 7 Onda 7 (`mcp_console.rs`, só enumera/probe para exibição). Ausente
-/// ou inválido → vazio (mesmo fail-soft de `load_mcp_servers`).
-pub(crate) fn read_mcp_server_configs(root: &Path) -> Vec<btv_tools::McpServerConfig> {
-    let config_path = root.join(".btv").join("mcp.toml");
-    let Ok(raw) = std::fs::read_to_string(&config_path) else {
-        return Vec::new();
-    };
-    #[derive(serde::Deserialize)]
-    struct McpConfigFile {
-        #[serde(default)]
-        server: Vec<ServerEntry>,
-    }
-    #[derive(serde::Deserialize)]
-    struct ServerEntry {
-        id: String,
-        command: String,
-        #[serde(default)]
-        args: Vec<String>,
-    }
-    let cfg: McpConfigFile = match toml::from_str(&raw) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("  mcp: .btv/mcp.toml inválido ({e}) — ignorado");
-            return Vec::new();
-        }
-    };
-    cfg.server
-        .into_iter()
-        .map(|s| btv_tools::McpServerConfig {
-            id: s.id,
-            command: s.command,
-            args: s.args,
-        })
-        .collect()
 }
 
 /// Descobre subdiretórios de `skills_dir`, veta cada um e registra os
