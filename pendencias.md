@@ -1984,3 +1984,30 @@ vazio = wire pré-D2t → None (nunca LOCAL fabricado — quem resolve tenant
 SquadEvent de erro antes de abrir qualquer canal. Protocols existentes
 intocados; o eco nos eventos segue verbatim. O espelho Pydantic COMPLETO
 do D4t (demais tipos) continua na janela dele.
+
+**[registro]** As duas decisões do dono SAÍRAM (comentário no PR #28 +
+registro no thread do #25): (1) ADR 0029 ACEITO íntegro e sem ressalva —
+Trilha E aberta, E1s implementa o modelo como aceito (inclusive o item 5
+do bootstrap e o não-escopo "1 sessão → 1 tenant"); (2) escalação do B3
+decidida em **(a)** — enriquecer as variantes: o wire atual é a verdade,
+`refs`/`prompt_hashes` ganham tipo pela regra da cerca, goldens intactos;
+o campo `tenant` entra no corpo das entradas novas com regravação
+justificada (ADR 0027). C3 DESTRAVADO. Fila de código: E1s e C3 abertos
+em paralelo — aguardando as coordenadas do revisor sobre a ordem.
+
+**[registro]** C3.0 ENTREGUE — as lacunas de payload da escalação do B3
+estão FECHADAS pela decisão (a): `SquadActivated` alcançou o wire real
+(`template_versao`/`nome`/`papeis`/`personas_proprias`/`prompt_hashes`/
+`refs`) e `DeliverableProduced` ganhou `trilha`. `prompt_hashes` é shape
+FECHADO tipado (`Vec<PromptHash>` — role/prompt_sha256/custom; a cerca do
+`Value` não se aplicou: o dono do schema é o tipo, e o DTO reproduz a
+assimetria do wire — `custom` só presente nas personas próprias). `refs`
+é `Vec<String>` (conteúdo livre do usuário, forma fechada). Wire IMÓVEL
+neste PR: os emissores continuam gravando JSON direto; goldens verdes sem
+regravação. A troca dos emissores pela porta (e a PRIMEIRA regravação de
+golden da migração — o `tenant` no corpo, ADR 0027) pertence à C3.1, com
+o rito ratificado pela revisão: commit próprio só da regravação, diff da
+fixture na descrição, justificativa citando o ADR. Ordem aprovada:
+C3.0 → C3.1 → E1s → (C3.2 ∥ C3.3) → C3.4; primeiro endpoint da C3.1 =
+POST /api/btv/squads/{task_id}/gate (menor com agregado no meio, vira o
+exemplo canônico) — UM ENDPOINT POR PR (D5 do plano-mestre).

@@ -1,7 +1,11 @@
 # ADR 0029 — modelo de identidade e resolução de tenant na borda HTTP
 
-- Status: proposta (aguardando revisão humana — abre a Trilha E, decisão
-  assinada pelo dono no G2; nós não implementamos decisão não tomada)
+- Status: aceito (comentário do dono no PR #28, íntegro e sem ressalva:
+  "Aceito o ADR 0029 como decisão operante da E1s: tenant só de sessão
+  autenticada server-side (X-Tenant-Id vetado), fail-closed sem fallback
+  para LOCAL, tabela de sessões como a exceção única e nomeada do
+  bootstrap (item 5), actor como parte da identidade (item 6), não-escopo
+  conforme declarado.")
 - Data: 2026-07-10
 
 ## Contexto

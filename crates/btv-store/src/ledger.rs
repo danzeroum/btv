@@ -305,10 +305,41 @@ pub(crate) fn payload_wire(kind: &DomainEventKind) -> serde_json::Value {
             task_id,
             run_id,
             template_id,
+            template_version,
+            name,
+            roles,
+            custom_personas,
+            prompt_hashes,
+            refs,
         } => serde_json::json!({
             "task_id": task_id,
             "run_id": run_id,
             "template_id": template_id,
+            "template_versao": template_version,
+            "nome": name,
+            "papeis": roles,
+            "personas_proprias": custom_personas,
+            // O wire de sempre: `custom` só aparece nas personas próprias
+            // (chave ausente = papel de template) — o DTO reproduz a
+            // assimetria em vez de normalizá-la.
+            "prompt_hashes": prompt_hashes
+                .iter()
+                .map(|h| {
+                    if h.custom {
+                        serde_json::json!({
+                            "papel": h.role,
+                            "custom": true,
+                            "prompt_sha256": h.prompt_sha256,
+                        })
+                    } else {
+                        serde_json::json!({
+                            "papel": h.role,
+                            "prompt_sha256": h.prompt_sha256,
+                        })
+                    }
+                })
+                .collect::<Vec<_>>(),
+            "refs": refs,
         }),
         DomainEventKind::GateApproved {
             task_id,
@@ -335,11 +366,13 @@ pub(crate) fn payload_wire(kind: &DomainEventKind) -> serde_json::Value {
             deliverable_id,
             name,
             format,
+            trail,
         } => serde_json::json!({
             "task_id": task_id,
             "deliverable_id": deliverable_id,
             "nome": name,
             "formato": format,
+            "trilha": trail,
         }),
         DomainEventKind::PersonaUpdated {
             template_id,
@@ -794,6 +827,82 @@ mod tests {
         assert!(
             LedgerRepository::append(&mut store, &ctx_local(), &evento(&ctx_b(), "t")).is_err()
         );
+    }
+
+    /// C3.0 (decisão (a) do dono): as variantes enriquecidas produzem o
+    /// payload EXATO que os emissores de `btv_agent.rs` sempre gravaram —
+    /// incluindo a assimetria do `custom` em `prompt_hashes` (chave presente
+    /// SÓ nas personas próprias). É o contrato que a C3.1 vai plugar nos
+    /// handlers com os goldens como juízes.
+    #[test]
+    fn variantes_enriquecidas_produzem_o_wire_real_dos_emissores() {
+        let mut store = LedgerStore::open_in_memory().unwrap();
+        let ctx = ctx_local();
+        let ativacao = DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts: "t1".into(),
+            kind: DomainEventKind::SquadActivated {
+                task_id: btv_domain::TaskId::new(1),
+                run_id: 7,
+                template_id: "editorial".into(),
+                template_version: "v1.4".into(),
+                name: "Artigo do lançamento".into(),
+                roles: vec!["Pauteiro".into(), "Redator".into()],
+                custom_personas: vec!["Minha Revisora".into()],
+                prompt_hashes: vec![
+                    btv_domain::ports::PromptHash {
+                        role: "Redator".into(),
+                        prompt_sha256: "aaa".into(),
+                        custom: false,
+                    },
+                    btv_domain::ports::PromptHash {
+                        role: "Minha Revisora".into(),
+                        prompt_sha256: "bbb".into(),
+                        custom: true,
+                    },
+                ],
+                refs: vec!["https://exemplo.com/estudo".into()],
+            },
+        };
+        LedgerRepository::append(&mut store, &ctx, &ativacao).unwrap();
+        let entrega = DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts: "t2".into(),
+            kind: DomainEventKind::DeliverableProduced {
+                task_id: btv_domain::TaskId::new(1),
+                deliverable_id: 3,
+                name: "artigo.md".into(),
+                format: "MD".into(),
+                trail: "Redator · 1 gate(s)".into(),
+            },
+        };
+        LedgerRepository::append(&mut store, &ctx, &entrega).unwrap();
+
+        let tudo = LedgerRepository::export(&store, &ctx).unwrap();
+        let a = &tudo[0].payload;
+        assert_eq!(a["template_versao"], "v1.4");
+        assert_eq!(a["nome"], "Artigo do lançamento");
+        assert_eq!(a["papeis"], serde_json::json!(["Pauteiro", "Redator"]));
+        assert_eq!(
+            a["personas_proprias"],
+            serde_json::json!(["Minha Revisora"])
+        );
+        assert_eq!(a["refs"], serde_json::json!(["https://exemplo.com/estudo"]));
+        // A assimetria do wire: papel de template SEM a chave `custom`;
+        // persona própria COM `custom: true` — como o emissor sempre gravou.
+        assert_eq!(
+            a["prompt_hashes"][0],
+            serde_json::json!({"papel": "Redator", "prompt_sha256": "aaa"})
+        );
+        assert_eq!(
+            a["prompt_hashes"][1],
+            serde_json::json!({"papel": "Minha Revisora", "custom": true, "prompt_sha256": "bbb"})
+        );
+        let e = &tudo[1].payload;
+        assert_eq!(e["trilha"], "Redator · 1 gate(s)");
+        assert_eq!(e["formato"], "MD");
     }
 
     /// Onda 6: `LedgerStore::open` liga WAL (bug de concorrência latente,
