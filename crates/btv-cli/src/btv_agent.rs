@@ -230,14 +230,19 @@ async fn ativar_squad_handler(
         std::collections::HashMap<String, String>,
         Vec<btv_store::CustomPersona>,
     ) = {
+        // C3.2: a ativação também LÊ personas — pela porta, com o contexto da
+        // borda (o handler já o tem desde a E1s.3). Fecha o último toque cru de
+        // persona no arquivo; wire imóvel (a descrição/procedência não muda —
+        // golden de ativação é o juiz).
+        use btv_domain::ports::PersonaRepository;
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
         let overrides = store
-            .list_persona_overrides(&template.id)
+            .list_overrides(&ctx, &template.id)
             .unwrap_or_default()
             .into_iter()
             .map(|o| (o.papel, o.prompt))
             .collect();
-        let proprias = store.list_custom_personas(&template.id).unwrap_or_default();
+        let proprias = store.list_custom(&ctx, &template.id).unwrap_or_default();
         (overrides, proprias)
     };
     let template_nome = template.nome.clone();
@@ -855,7 +860,12 @@ struct PersonasResponse {
 async fn list_personas_handler(
     State(state): State<BtvAgentState>,
     Path(template_id): Path<String>,
+    Tenant(ctx): Tenant,
 ) -> Response {
+    // C3.2 (leitura pela porta): mesmo tipo (`PersonaOverride`/`CustomPersona`
+    // re-exportados do domínio desde A2), wire byte-idêntico — o golden
+    // `personas` é o juiz. Contexto da borda; leitura não é fato auditável.
+    use btv_domain::ports::PersonaRepository;
     let Some(template) = btv_schemas::squad_template::builtin_templates()
         .iter()
         .find(|t| t.id == template_id)
@@ -868,7 +878,7 @@ async fn list_personas_handler(
     };
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
     let overrides: std::collections::HashMap<String, String> = store
-        .list_persona_overrides(&template_id)
+        .list_overrides(&ctx, &template_id)
         .unwrap_or_default()
         .into_iter()
         .map(|o| (o.papel, o.prompt))
@@ -891,7 +901,7 @@ async fn list_personas_handler(
             }
         })
         .collect();
-    let proprias = store.list_custom_personas(&template_id).unwrap_or_default();
+    let proprias = store.list_custom(&ctx, &template_id).unwrap_or_default();
     Json(PersonasResponse {
         template_id,
         personas,
@@ -956,9 +966,11 @@ async fn set_override_handler(
 async fn delete_override_handler(
     State(state): State<BtvAgentState>,
     Path((template_id, papel)): Path<(String, String)>,
+    Tenant(ctx): Tenant,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.delete_persona_override(&template_id, &papel) {
+    use btv_domain::ports::PersonaRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.delete_override(&ctx, &template_id, &papel) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -972,9 +984,11 @@ async fn delete_override_handler(
 async fn clear_overrides_handler(
     State(state): State<BtvAgentState>,
     Path(template_id): Path<String>,
+    Tenant(ctx): Tenant,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.clear_persona_overrides(&template_id) {
+    use btv_domain::ports::PersonaRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.clear_overrides(&ctx, &template_id) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -993,15 +1007,12 @@ struct CustomPersonaBody {
 async fn create_custom_handler(
     State(state): State<BtvAgentState>,
     Path(template_id): Path<String>,
+    Tenant(ctx): Tenant,
     Json(body): Json<CustomPersonaBody>,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.insert_custom_persona(
-        &template_id,
-        &body.nome,
-        &body.prompt,
-        &crate::session::now_rfc3339(),
-    ) {
+    use btv_domain::ports::PersonaRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.insert_custom(&ctx, &template_id, &body.nome, &body.prompt) {
         Ok(id) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1014,11 +1025,12 @@ async fn create_custom_handler(
 async fn update_custom_handler(
     State(state): State<BtvAgentState>,
     Path((_template_id, id)): Path<(String, i64)>,
+    Tenant(ctx): Tenant,
     Json(body): Json<CustomPersonaBody>,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.update_custom_persona(id, &body.nome, &body.prompt, &crate::session::now_rfc3339())
-    {
+    use btv_domain::ports::PersonaRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.update_custom(&ctx, id, &body.nome, &body.prompt) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1031,9 +1043,11 @@ async fn update_custom_handler(
 async fn delete_custom_handler(
     State(state): State<BtvAgentState>,
     Path((_template_id, id)): Path<(String, i64)>,
+    Tenant(ctx): Tenant,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.delete_custom_persona(id) {
+    use btv_domain::ports::PersonaRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.delete_custom(&ctx, id) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
