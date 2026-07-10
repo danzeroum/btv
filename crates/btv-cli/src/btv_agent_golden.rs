@@ -652,23 +652,22 @@ async fn golden_squad_activation() {
         );
         assert!(persona.payload["prompt_sha256"].is_string());
 
-        // C3.3a ato 1: `set_publicacao` ainda é LEGADO (`append_ledger` cru) —
-        // reintroduz DE PROPÓSITO o estado misto. O golden pina o corpo legado
-        // (`publicado`, SEM tenant) antes do estrangulamento (ato 2); a
-        // regravação com tenant é o ato 3.
+        // C3.3a ato 2: `set_publicacao` ESTRANGULADO — a publicação nasce da
+        // porta do ledger; o corpo carrega `tenant` (ADR 0027). O estado misto
+        // FECHOU de novo: todo emissor `btv.*` deste fluxo passa pela porta. (O
+        // `published → "publicado"` do adapter mantém o payload byte-idêntico; o
+        // ganho é a linha `tenant`, regravada no golden no ato 3.)
         let publicacao = entradas
             .iter()
             .find(|e| e.kind == "btv.template_published")
             .expect("entrada de publicação existe");
-        assert_eq!(publicacao.tenant, None, "publicação ainda LEGADA (ato 1)");
         assert_eq!(publicacao.payload["template_id"], "editorial");
         assert_eq!(publicacao.payload["publicado"], true);
         assert!(
             entradas
                 .iter()
-                .filter(|e| e.kind != "btv.template_published")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "todos os JÁ estrangulados têm tenant; só a publicação (legado) não"
+            "nenhum emissor legado restante no fluxo (publicação estrangulada)"
         );
     }
     {
