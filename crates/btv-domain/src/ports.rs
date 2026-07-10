@@ -746,3 +746,46 @@ mod tests {
         );
     }
 }
+
+// ── D1t: portas do runtime de agente (LlmPort / ToolsPort) ─────────────────
+//
+// A violação 4 do levantamento fecha aqui: o loop de agente (`btv-core`)
+// passa a depender SÓ destas traits — `Gateway` (btv-llm) e `ToolRegistry`
+// (btv-tools) viram implementações que o binário injeta. As assinaturas
+// preservam o shape que o loop sempre consumiu (o `Generator` histórico e a
+// dupla iter/get do registry) — nenhuma idiossincrasia de HTTP entra aqui:
+// streaming é um callback de texto (`on_delta`), não um tipo de provider.
+
+/// Erro da porta de LLM — as MESMAS três variantes do `GatewayError`
+/// histórico (nenhuma carrega tipo de driver; `btv-llm` re-exporta este
+/// tipo sob o nome antigo).
+#[derive(Debug, thiserror::Error)]
+pub enum LlmError {
+    #[error("nenhum provider configurado — defina ANTHROPIC_API_KEY, DEEPSEEK_API_KEY ou OPENAI_API_KEY")]
+    NoProvider,
+    #[error("todos os providers falharam: {0}")]
+    AllFailed(String),
+    #[error("limite de requisições excedido: {0}")]
+    RateLimited(String),
+}
+
+/// Porta de geração de texto/tool-use. Streaming entra como callback de
+/// deltas — o transporte (SSE, terminal, buffer de teste) é problema do
+/// chamador; o provider é problema do adapter.
+pub trait LlmPort {
+    fn generate(
+        &self,
+        req: crate::chat::GenerateRequest,
+        on_delta: &mut (dyn FnMut(&str) + Send),
+    ) -> impl std::future::Future<Output = Result<crate::chat::AssistantTurn, LlmError>> + Send;
+}
+
+/// Porta do conjunto de ferramentas disponível ao loop: o anúncio ao
+/// modelo (`specs`) e a resolução por nome (`get`) — exatamente a
+/// superfície que o loop sempre consumiu do `ToolRegistry`. `Send + Sync`
+/// como supertrait porque o loop cruza `.await` dentro de `tokio::spawn`
+/// segurando a referência (o registry sempre foi ambos; mocks idem).
+pub trait ToolsPort: Send + Sync {
+    fn specs(&self) -> Vec<crate::chat::ToolSpec>;
+    fn get(&self, name: &str) -> Option<&dyn crate::tool::Tool>;
+}

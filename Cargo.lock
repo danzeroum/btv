@@ -348,14 +348,10 @@ dependencies = [
 name = "btv-core"
 version = "0.1.0"
 dependencies = [
- "btv-llm",
- "btv-schemas",
- "btv-store",
- "btv-tools",
+ "btv-domain",
  "criterion",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
 ]
@@ -383,6 +379,7 @@ dependencies = [
 name = "btv-llm"
 version = "0.1.0"
 dependencies = [
+ "btv-domain",
  "btv-schemas",
  "criterion",
  "futures-util",
@@ -464,6 +461,7 @@ name = "btv-store"
 version = "0.1.0"
 dependencies = [
  "btv-contract",
+ "btv-core",
  "btv-domain",
  "btv-schemas",
  "rusqlite",
@@ -480,6 +478,8 @@ name = "btv-tools"
 version = "0.1.0"
 dependencies = [
  "bollard",
+ "btv-core",
+ "btv-domain",
  "futures-util",
  "grep",
  "ignore",

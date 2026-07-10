@@ -550,7 +550,11 @@ fn build_loop<'a, G: Generator>(
 }
 
 /// Abre a sessão durável (nova ou retomada) em `.btv/sessions.db`.
-fn open_durable(root: &std::path::Path, opts: &RunOpts, task_hint: &str) -> Result<DurableSession> {
+fn open_durable(
+    root: &std::path::Path,
+    opts: &RunOpts,
+    task_hint: &str,
+) -> Result<DurableSession<EventStore>> {
     let store = EventStore::open(
         root.join(".btv")
             .join("sessions.db")
@@ -565,7 +569,12 @@ fn open_durable(root: &std::path::Path, opts: &RunOpts, task_hint: &str) -> Resu
             .unwrap_or(0);
         format!("s{:x}", nanos & 0xffff_ffff_ffff)
     });
-    let durable = DurableSession::open(store, &session_id, task_hint, &opts.model)?;
+    // D1t: a sessão declara em nome de quem opera — o CLI local É o
+    // tenant LOCAL (mesma decisão de porta legada do B2).
+    let ctx = btv_domain::TenantContext::local(
+        btv_domain::ActorId::new("cli:run").expect("actor fixo válido"),
+    );
+    let durable = DurableSession::open(store, ctx, &session_id, task_hint, &opts.model)?;
     if durable.resumed_messages() > 0 {
         eprintln!(
             "sessão {session_id} retomada — {} mensagem(ns) no histórico",
@@ -582,7 +591,7 @@ fn open_durable(root: &std::path::Path, opts: &RunOpts, task_hint: &str) -> Resu
 async fn maybe_compact<G: Generator>(
     generator: &G,
     opts: &RunOpts,
-    durable: &mut DurableSession,
+    durable: &mut DurableSession<EventStore>,
     session: &mut session::Session,
     force: bool,
 ) -> Result<bool> {

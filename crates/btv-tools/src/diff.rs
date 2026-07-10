@@ -9,14 +9,9 @@
 //! muito distantes entre si, o "meio" pode incluir trechos inalterados —
 //! aceitável para um diff informativo, não para um patch aplicável.
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DiffLine {
-    Context(String),
-    Removed(String),
-    Added(String),
-}
+// D1t: o TIPO mora em `btv-domain::tool` (o loop repassa o diff aos
+// observadores sem conhecer este crate); o CÁLCULO continua aqui.
+pub use btv_domain::tool::DiffLine;
 
 /// Linhas de contexto mantidas ao redor da região alterada.
 const CONTEXT_LINES: usize = 2;

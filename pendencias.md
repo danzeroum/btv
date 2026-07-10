@@ -1921,3 +1921,27 @@ DONO mas ainda SEM decisão (enriquecer variantes vs. regravação
 consciente) — C3 segue bloqueado até ela sair. Statuses dos ADRs
 0024–0028 atualizados para aceito com as citações dos portões (os
 arquivos estavam atrás dos fatos desde o G0/PR #15).
+
+**[decisão]** D1t — assinaturas e emendas expostas para revisão (rito do
+G1): (a) `LlmPort`/`ToolsPort` no domínio preservam o shape que o loop
+sempre consumiu (streaming = callback `on_delta`, nada de tipo de provider
+na trait); `ToolsPort: Send + Sync` como supertrait (o loop cruza await em
+tokio::spawn segurando a referência). (b) Os tipos de conversa
+(`chat`), ferramenta (`tool`) e evento (`event`) moram no domínio,
+byte-idênticos — re-exports mantêm os caminhos históricos; `ModelTier`
+(enum+threshold) veio junto, `tier_from_id` (regex de nomes de mercado)
+ficou em btv-llm. (c) EMENDA DECLARADA da regra de deps do A1: serde_json
+entra no domínio (puro, zero I/O — args de ferramenta e payloads sempre
+foram `Value` no wire). (d) `DurableSession` vira genérica sobre
+`EventStorePort` e ganha `ctx: TenantContext` no open — a sessão declara
+em nome de quem opera; o CLI local passa `TenantContext::local`. (e)
+`impl EventStorePort for EventStore` é o adapter do modo LOCAL (sem coluna
+de tenant): contexto de outro tenant é RECUSADO fail-closed, nunca aceito
+fingindo isolamento — mesma regra da porta legada do B2.
+
+**[nota]** D1t — os testes do fio com ferramentas REAIS (edit/bash/skills
+em subprocesso) moveram de btv-core para btv-tools/tests (dev-dep em
+btv-core — sem ciclo: o core não depende mais de btv-tools); a composição
+sessão×SQLite real para btv-store/tests. Cenários idênticos, nenhum assert
+afrouxado. O unit do core virou 100% mock (<100ms afirmado no teste, DoD
+literal da Fase 2 do plano-mestre).

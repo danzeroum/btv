@@ -6,6 +6,7 @@ license.workspace = true
 description = "Gateway LLM da plataforma BuildToValue: providers, streaming, ModelTier, cache por hash, fallback, rate limiting"
 
 [dependencies]
+btv-domain.workspace = true
 btv-schemas.workspace = true
 serde.workspace = true
 serde_json.workspace = true

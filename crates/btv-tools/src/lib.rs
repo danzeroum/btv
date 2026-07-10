@@ -22,44 +22,16 @@ pub use registry::ToolRegistry;
 pub use sandbox::{Sandbox, SandboxError, SandboxOutput};
 pub use skill::SkillTool;
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, thiserror::Error)]
-pub enum ToolError {
-    #[error("argumentos inválidos: {0}")]
-    InvalidArgs(String),
-    #[error("falha de execução: {0}")]
-    Execution(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolOutput {
-    pub content: String,
-    /// Quando o output excede o limite, ele é truncado e o restante vai
-    /// para um arquivo gerenciado (Managed Tool Output File).
-    pub truncated: bool,
-    /// Caminho (relativo à raiz do workspace) do output completo, quando
-    /// truncado e persistido por [`bound_output_managed`].
-    pub overflow_path: Option<String>,
-    /// Diff de linhas, quando a ferramenta alterou um arquivo texto
-    /// (hoje: `edit`) — consumido pela TUI para o bloco colorido.
-    pub diff: Option<Vec<diff::DiffLine>>,
-}
-
-/// Contrato de ferramenta: identidade estável, schema para o modelo,
-/// escopo para o motor de permissões e execução com args JSON.
-pub trait Tool: Send + Sync {
-    fn name(&self) -> &str;
-    fn description(&self) -> &str;
-    /// JSON Schema dos argumentos, anunciado ao modelo.
-    fn input_schema(&self) -> Value;
-    /// Escopo avaliado pelo motor de permissões (caminho, comando...).
-    fn scope(&self, args: &Value) -> String;
-    fn run(&self, args: &Value) -> Result<ToolOutput, ToolError>;
-}
+// D1t: o contrato `Tool` e os tipos `ToolOutput`/`ToolError`/`DiffLine`
+// moram em `btv-domain::tool` (o loop de agente os consome via `ToolsPort`
+// sem conhecer este crate); re-exportados aqui sob os caminhos históricos.
+// As implementações (bash/edit/sandbox/MCP/LSP) e os helpers de
+// truncamento continuam neste crate.
+pub use btv_domain::tool::{Tool, ToolError, ToolOutput};
 
 /// Limite padrão de bytes devolvidos inline ao contexto do modelo.
 pub const DEFAULT_OUTPUT_LIMIT: usize = 32 * 1024;

@@ -8,25 +8,10 @@ use crate::provider::ProviderId;
 use crate::sse::SseParser;
 use futures_util::StreamExt;
 
-#[derive(Debug, thiserror::Error)]
-pub enum GatewayError {
-    #[error("nenhum provider configurado — defina ANTHROPIC_API_KEY, DEEPSEEK_API_KEY ou OPENAI_API_KEY")]
-    NoProvider,
-    #[error("todos os providers falharam: {0}")]
-    AllFailed(String),
-    #[error("limite de requisições excedido: {0}")]
-    RateLimited(String),
-}
-
-/// Contrato de geração consumido pelo loop de agente (btv-core). O loop é
-/// genérico sobre este trait, então testes usam um gerador roteirizado.
-pub trait Generator {
-    fn generate(
-        &self,
-        req: GenerateRequest,
-        on_delta: &mut (dyn FnMut(&str) + Send),
-    ) -> impl std::future::Future<Output = Result<AssistantTurn, GatewayError>> + Send;
-}
+// D1t: o contrato de geração e seu erro moram em `btv-domain::ports`
+// (`LlmPort`/`LlmError`) — o loop de agente os consome de lá; este crate
+// re-exporta sob os nomes históricos e implementa a porta no `Gateway`.
+pub use btv_domain::ports::{LlmError as GatewayError, LlmPort as Generator};
 
 #[derive(Debug, Clone)]
 struct ProviderConfig {
