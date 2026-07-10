@@ -1151,6 +1151,7 @@ struct PublicacaoBody {
 async fn set_publicacao_handler(
     State(state): State<BtvAgentState>,
     Path(template_id): Path<String>,
+    Tenant(ctx): Tenant,
     Json(body): Json<PublicacaoBody>,
 ) -> Response {
     if !btv_schemas::squad_template::builtin_templates()
@@ -1163,13 +1164,12 @@ async fn set_publicacao_handler(
         )
             .into_response();
     }
+    // C3.3a: a publicação vai pela PORTA (`TemplatePublicationRepository`) com o
+    // contexto da borda; o `updated_ts` é escrituração do adapter.
     {
-        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        if let Err(e) = store.set_template_publicado(
-            &template_id,
-            body.publicado,
-            &crate::session::now_rfc3339(),
-        ) {
+        use btv_domain::ports::TemplatePublicationRepository;
+        let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = store.set_published(&ctx, &template_id, body.publicado) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody::new("store_error", e.to_string())),
@@ -1177,21 +1177,37 @@ async fn set_publicacao_handler(
                 .into_response();
         }
     }
-    if let Err(e) = append_ledger(
-        &state.ledger,
-        "btv.template_published",
-        serde_json::json!({ "template_id": template_id, "publicado": body.publicado }),
-    ) {
-        eprintln!("btv: falha ao registrar publicação no ledger: {e}");
+    // O fato `btv.template_published` pela porta do ledger — o corpo ganha
+    // `tenant` (ADR 0027); o mapeamento `published → "publicado"` já vive no
+    // adapter desde o B3. `append_ledger` legado morto neste caminho.
+    {
+        use btv_domain::ports::LedgerRepository;
+        let evento = btv_domain::ports::DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts: crate::session::now_rfc3339(),
+            kind: btv_domain::ports::DomainEventKind::TemplatePublished {
+                template_id,
+                published: body.publicado,
+            },
+        };
+        let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+            eprintln!("btv: falha ao registrar publicação no ledger: {e}");
+        }
     }
     StatusCode::OK.into_response()
 }
 
 /// `GET /api/btv/templates/publicacao` — overrides persistidos (a tela A5
 /// mescla com o `publicado` embutido dos templates).
-async fn list_publicacao_handler(State(state): State<BtvAgentState>) -> Response {
+async fn list_publicacao_handler(
+    State(state): State<BtvAgentState>,
+    Tenant(ctx): Tenant,
+) -> Response {
+    use btv_domain::ports::TemplatePublicationRepository;
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.list_template_pub() {
+    match store.list_published(&ctx) {
         Ok(list) => Json(
             list.into_iter()
                 .map(|(id, publicado)| serde_json::json!({ "template_id": id, "publicado": publicado }))

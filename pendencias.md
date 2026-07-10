@@ -2081,3 +2081,28 @@ NUNCA implementado (o B5 real ligou `BTV_MODE` na E1s.2, sem a parte do
 doctor; grep confirmou zero menção de modo em `doctor_console.rs`). Fica na
 FILA, não no escopo de nenhuma onda — o padrão "emissores são a verdade"
 corrigiu a memória do plano tanto quanto corrige o palpite.
+
+**[registro — semântica do grep de fechamento da C3]** O grep definitivo da
+C3.4 (`append_ledger` não existe mais) prova "todo emissor **`btv.*`** pela
+porta de DOMÍNIO" — NÃO "tudo pela porta de domínio". Os kinds OPERACIONAIS
+(`designer.workflow_saved` do console btv-server, `session.*`, `tool.*`,
+`llm.turn`, `user.turn`, `squad.*`, `permission_rule.*`, `skill.vetting`)
+seguem legitimamente pela porta de INSTRUMENTAÇÃO, por DECISÃO do G1 (fronteira
+fato-de-domínio × instrumentação, diferida conscientemente), não por
+esquecimento. Sem esta linha, alguém lê "append_ledger morto" como "tudo pela
+porta de domínio" e abre um bug fantasma. O `btv.flow_saved` (produto) e o
+`designer.workflow_saved` (console) são DUAS superfícies em DOIS crates — não um
+rename; C3.3 estrangula só o primeiro.
+
+**[registro]** C3.2 (personas) e C3.3a (publicação de templates) ENTREGUES. O
+dividendo do B3 (o `payload_wire` mapeia TODAS as variantes byte-idênticas, por
+match exaustivo do enum no G1) valeu para persona (`role→papel`) e template
+(`published→publicado`): cada estrangulamento é a mesma forma de três atos
+(pina o corpo legado → estrangula → regrava a linha `tenant`), payload imóvel.
+C3.3a abriu a porta MÍNIMA `TemplatePublicationRepository` (decisão exposta:
+porta própria, não gaveta; nome que afirma só o estado, não o catálogo
+estático) + a tabela `template_pub` no PG (adiada de propósito no B4 até ter
+porta). Restam na lista de morte do `append_ledger`: `btv.flow_saved`
+(C3.3b) + `btv.export_generated` e `btv.user_removed` (C3.4, a onda de
+encerramento — agrupa por FORMA DE TRABALHO, não por costura, DESVIO declarado
+para que o commit final delete a função e cumpra a profecia do rustdoc).

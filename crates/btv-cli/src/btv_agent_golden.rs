@@ -574,6 +574,21 @@ async fn golden_squad_activation() {
     )
     .await;
 
+    // C3.3a (cobertura NOVA — ato 1, ANTES de estrangular `set_publicacao`):
+    // dispara o emissor de publicação de template LEGADO (`append_ledger` cru:
+    // SEM tenant) para o golden pinar `btv.template_published` antes da troca de
+    // porta. Mesma lição do C3.2 ato 1 — o juiz existe antes da mudança.
+    let _ = reqwest_step(
+        &client,
+        &base,
+        "publicar template (emissor legado — pré-estrangulamento C3.3)",
+        "POST",
+        "/api/btv/templates/editorial/publicacao",
+        Some(serde_json::json!({"publicado": true})),
+        &[],
+    )
+    .await;
+
     // Anti-fake, fora do golden: o fluxo EXECUTOU — auditoria no ledger e
     // contador de gates persistido, não só respostas HTTP bem formadas.
     {
@@ -584,6 +599,11 @@ async fn golden_squad_activation() {
         assert_eq!(conta("btv.gate_approved"), 1);
         assert_eq!(conta("btv.adjust_requested"), 1);
         assert_eq!(conta("btv.persona_updated"), 1, "C3.2 ato 1: 1 override");
+        assert_eq!(
+            conta("btv.template_published"),
+            1,
+            "C3.3 ato 1: 1 publicação"
+        );
         guard.verify_chain().unwrap();
 
         // C3.1 (primeiro estrangulado): a entrada de gate agora nasce da
@@ -631,11 +651,23 @@ async fn golden_squad_activation() {
             "adapter mapeia role→papel"
         );
         assert!(persona.payload["prompt_sha256"].is_string());
+
+        // C3.3a ato 2: `set_publicacao` ESTRANGULADO — a publicação nasce da
+        // porta do ledger; o corpo carrega `tenant` (ADR 0027). O estado misto
+        // FECHOU de novo: todo emissor `btv.*` deste fluxo passa pela porta. (O
+        // `published → "publicado"` do adapter mantém o payload byte-idêntico; o
+        // ganho é a linha `tenant`, regravada no golden no ato 3.)
+        let publicacao = entradas
+            .iter()
+            .find(|e| e.kind == "btv.template_published")
+            .expect("entrada de publicação existe");
+        assert_eq!(publicacao.payload["template_id"], "editorial");
+        assert_eq!(publicacao.payload["publicado"], true);
         assert!(
             entradas
                 .iter()
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "nenhum emissor legado restante no fluxo (persona estrangulada)"
+            "nenhum emissor legado restante no fluxo (publicação estrangulada)"
         );
     }
     {

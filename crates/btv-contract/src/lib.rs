@@ -12,6 +12,7 @@
 
 use btv_domain::ports::{
     DomainEvent, DomainEventKind, LedgerRepository, PersonaRepository, RunRepository, RunStatus,
+    TemplatePublicationRepository,
 };
 use btv_domain::tenant::{ActorId, TenantContext, TenantId};
 use btv_domain::{Deliverable, Run, TaskId};
@@ -287,6 +288,50 @@ pub fn suite_persona_repository<P: PersonaRepository>(mut make: impl FnMut() -> 
             repo.list_custom(&ctx_b(), "editorial").unwrap()[0].id,
             id_b,
             "a persona de B segue intacta"
+        );
+    }
+}
+
+/// Contrato do `TemplatePublicationRepository` (C3.3).
+pub fn suite_template_publication_repository<T: TemplatePublicationRepository>(
+    mut make: impl FnMut() -> T,
+) {
+    // publicar/despublicar dentro do tenant (upsert, não duplica).
+    {
+        let mut repo = make();
+        let ctx = ctx_a();
+        repo.set_published(&ctx, "editorial", true)
+            .expect("publica");
+        repo.set_published(&ctx, "newsletter", false)
+            .expect("despublica");
+        // upsert: reescrever o mesmo template troca o flag, não duplica.
+        repo.set_published(&ctx, "editorial", false)
+            .expect("upsert");
+        let mut lista = repo.list_published(&ctx).expect("list");
+        lista.sort();
+        assert_eq!(
+            lista,
+            vec![
+                ("editorial".to_string(), false),
+                ("newsletter".to_string(), false),
+            ]
+        );
+    }
+
+    // ISOLAMENTO fail-closed: a publicação de A é indistinguível de inexistente
+    // para B; e o override de B não toca o de A.
+    {
+        let mut repo = make();
+        repo.set_published(&ctx_a(), "editorial", true).unwrap();
+        assert!(
+            repo.list_published(&ctx_b()).unwrap().is_empty(),
+            "B não vê a publicação de A (fail-closed)"
+        );
+        repo.set_published(&ctx_b(), "editorial", false).unwrap();
+        assert_eq!(
+            repo.list_published(&ctx_a()).unwrap(),
+            vec![("editorial".to_string(), true)],
+            "o override de B não altera o de A"
         );
     }
 }

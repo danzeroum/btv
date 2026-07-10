@@ -33,6 +33,16 @@ fn adapter_pg_passa_o_contrato_de_persona_repository() {
 }
 
 #[test]
+fn adapter_pg_passa_o_contrato_de_template_publication_repository() {
+    if !harness::disponivel() {
+        return;
+    }
+    btv_contract::suite_template_publication_repository(|| {
+        harness::abrir_isolado().expect("PG do harness").store
+    });
+}
+
+#[test]
 fn adapter_pg_passa_o_contrato_de_ledger_repository() {
     if !harness::disponivel() {
         return;
