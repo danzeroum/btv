@@ -12,12 +12,14 @@
 //! `TenantContext` (hoje `TenantId::LOCAL` fixo; a coluna real chega em B2).
 //! Expor tenant por rota é decisão da Trilha E, não um vazamento acidental.
 //!
-//! `status`/`task_id` seguem `String` AQUI de propósito: virar `RunStatus`/
-//! `TaskId` tipados é a tarefa A3, com o round-trip provado pelos property
-//! tests T3 (`wire-strings.v1.json`) — um passo por PR.
+//! A4: `status: RunStatus` e `task_id: TaskId` — o compilador impede
+//! `status = "qualquer_string"` e id fora de `sq{hex}`; o wire não move um
+//! byte (serde dos dois tipos usa exatamente a representação antiga —
+//! goldens T1 e T3 como juízes, sem regravação).
 
 use serde::Serialize;
 
+use crate::ports::RunStatus;
 use crate::tenant::TenantId;
 
 /// Uma squad ativada (execução) — linha de "Minhas squads" (U6) e âncora da
@@ -25,7 +27,7 @@ use crate::tenant::TenantId;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Run {
     pub id: i64,
-    pub task_id: String,
+    pub task_id: TaskId,
     pub template_id: String,
     pub template_versao: String,
     pub nome: String,
@@ -33,8 +35,9 @@ pub struct Run {
     pub briefing_json: String,
     /// Papéis ativos (JSON: `["Pauteiro", ...]` — já sem os desligados).
     pub papeis_json: String,
-    /// `ativa` | `concluida` | `encerrada` | `erro` (enum tipado em A3).
-    pub status: String,
+    /// Máquina de transições em `RunStatus` — mutação só pelo agregado
+    /// (`approve_gate`/`transition_to`, ports.rs).
+    pub status: RunStatus,
     /// Quantos gates humanos já foram aprovados neste run (trilha de U4).
     pub gates_aprovados: i64,
     pub created_ts: String,
@@ -51,7 +54,7 @@ pub struct Run {
 pub struct Deliverable {
     pub id: i64,
     pub run_id: i64,
-    pub task_id: String,
+    pub task_id: TaskId,
     pub template_id: String,
     pub nome: String,
     pub path: String,
@@ -75,13 +78,13 @@ mod tests {
     fn tenant_fica_fora_do_wire() {
         let run = Run {
             id: 1,
-            task_id: "sq1".into(),
+            task_id: TaskId::new(1),
             template_id: "editorial".into(),
             template_versao: "v1.4".into(),
             nome: "Newsletter".into(),
             briefing_json: "[]".into(),
             papeis_json: "[]".into(),
-            status: "ativa".into(),
+            status: RunStatus::Ativa,
             gates_aprovados: 0,
             created_ts: "2026-07-08T10:00:00Z".into(),
             updated_ts: "2026-07-08T10:00:00Z".into(),
@@ -89,13 +92,14 @@ mod tests {
         };
         let json = serde_json::to_value(&run).unwrap();
         assert!(json.get("tenant").is_none(), "tenant não vaza no wire");
-        assert_eq!(json["status"], "ativa");
+        assert_eq!(json["status"], "ativa", "enum serializa a string antiga");
+        assert_eq!(json["task_id"], "sq1", "TaskId serializa sq{{hex}}");
         assert_eq!(json.as_object().unwrap().len(), 11, "11 campos de wire");
 
         let entrega = Deliverable {
             id: 1,
             run_id: 1,
-            task_id: "sq1".into(),
+            task_id: TaskId::new(1),
             template_id: "editorial".into(),
             nome: "artigo.md".into(),
             path: "/tmp/artigo.md".into(),
