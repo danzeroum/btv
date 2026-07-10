@@ -9,7 +9,9 @@
 //! o `LedgerStore` — este store guarda estado consultável, não trilha
 //! imutável.
 
-use btv_domain::ports::{PersonaRepository, RepositoryError, RunRepository, RunStatus};
+use btv_domain::ports::{
+    PersonaRepository, RepositoryError, RunRepository, RunStatus, TemplatePublicationRepository,
+};
 use btv_domain::{TaskId, TenantContext, TenantId};
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -1053,6 +1055,41 @@ impl PersonaRepository for BtvStore {
             return Err(RepositoryError::NotFound);
         }
         Ok(())
+    }
+}
+
+impl TemplatePublicationRepository for BtvStore {
+    fn set_published(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        published: bool,
+    ) -> Result<(), RepositoryError> {
+        // `updated_ts` é escrituração do adapter (o port não carrega relógio,
+        // decisão do G1) — o do banco, mesmo formato do restante.
+        self.conn
+            .execute(
+                "INSERT INTO template_pub (tenant_id, template_id, publicado, updated_ts)
+                 VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                 ON CONFLICT(tenant_id, template_id)
+                 DO UPDATE SET publicado = ?3, updated_ts = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+                params![ctx.tenant.to_string(), template_id, published as i64],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    fn list_published(&self, ctx: &TenantContext) -> Result<Vec<(String, bool)>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT template_id, publicado FROM template_pub WHERE tenant_id = ?1")
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+            })
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
     }
 }
 

@@ -23,7 +23,7 @@
 use crate::btv::{exige_mesmo_tenant, DELIVERABLE_COLS, RUN_COLS};
 use crate::ledger::{entry_de_dominio, verifica_cadeia_rows};
 use btv_domain::ports::{DomainEvent, LedgerRepository, PersonaRepository, RunRepository};
-use btv_domain::ports::{RepositoryError, RunStatus};
+use btv_domain::ports::{RepositoryError, RunStatus, TemplatePublicationRepository};
 use btv_domain::{ActorId, CustomPersona, Deliverable, PersonaOverride, Run, TaskId};
 use btv_domain::{TenantContext, TenantId};
 use btv_schemas::ledger::LedgerEntry;
@@ -584,6 +584,62 @@ impl PersonaRepository for PgStore {
             return Err(RepositoryError::NotFound);
         }
         Ok(())
+    }
+}
+
+impl TemplatePublicationRepository for PgStore {
+    fn set_published(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        published: bool,
+    ) -> Result<(), RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        self.rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                sqlx::query(&format!(
+                    "INSERT INTO template_pub (tenant_id, template_id, publicado, updated_ts)
+                     VALUES ($1, $2, $3, {NOW_UTC_SQL})
+                     ON CONFLICT (tenant_id, template_id)
+                     DO UPDATE SET publicado = EXCLUDED.publicado, updated_ts = {NOW_UTC_SQL}"
+                ))
+                .bind(&tenant)
+                .bind(template_id)
+                .bind(published)
+                .execute(&mut *tx)
+                .await?;
+                tx.commit().await
+            })
+            .map_err(storage)
+    }
+
+    fn list_published(&self, ctx: &TenantContext) -> Result<Vec<(String, bool)>, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let rows = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let rows = sqlx::query(
+                    "SELECT template_id, publicado FROM template_pub WHERE tenant_id = $1",
+                )
+                .bind(&tenant)
+                .fetch_all(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(rows)
+            })
+            .map_err(storage)?;
+        rows.iter()
+            .map(|row| {
+                Ok((
+                    row.try_get::<String, _>(0).map_err(storage)?,
+                    row.try_get::<bool, _>(1).map_err(storage)?,
+                ))
+            })
+            .collect()
     }
 }
 

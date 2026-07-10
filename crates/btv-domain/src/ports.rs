@@ -554,6 +554,27 @@ pub trait PersonaRepository {
     fn delete_custom(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError>;
 }
 
+/// Publicação de templates (A5) — área "só tipagem" (ADR 0024). Nome que
+/// afirma só o que faz: o CATÁLOGO em si é estático (`include_str!` dos modelos
+/// embutidos), esta porta governa APENAS o override de `publicado` por
+/// template, com tenant — daí `TemplatePublication`, não `TemplateCatalog` (um
+/// port que possuísse o catálogo prometeria posse do que é de outro dono).
+/// O emissor `btv.template_published` já é fato de domínio no `LedgerRepository`
+/// desde o G1; esta porta é o acesso de ESTADO que faltava (C3.3).
+pub trait TemplatePublicationRepository {
+    /// Publica/despublica um template no tenant do contexto (upsert).
+    fn set_published(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        published: bool,
+    ) -> Result<(), RepositoryError>;
+
+    /// Overrides de publicação persistidos no tenant. Leitura fail-closed: a
+    /// publicação de outro tenant é indistinguível de inexistente.
+    fn list_published(&self, ctx: &TenantContext) -> Result<Vec<(String, bool)>, RepositoryError>;
+}
+
 /// Trilha auditável POR TENANT (ADR 0027): append consome `DomainEvent`
 /// (não string — A5), a cadeia encadeia dentro do tenant e o export é
 /// verificável isoladamente.
