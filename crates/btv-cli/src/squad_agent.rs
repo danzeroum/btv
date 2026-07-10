@@ -111,6 +111,10 @@ fn chat_event(task_id: &str, author: &str, author_role: &str, text: String) -> S
             text,
             in_reply_to: String::new(),
         })),
+        // D2t: eventos sintetizados pelo hub carregam o mesmo dono dos do
+        // orquestrador — hoje o modo local (o tenant real chega com a E1s).
+        tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+        actor: "web:squad".into(),
     }
 }
 
@@ -343,6 +347,8 @@ impl SquadHub {
                 payload: Some(squad_event::Payload::Error(format!(
                     "squad interrompido (kill-switch): {reason}"
                 ))),
+                tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+                actor: "web:squad".into(),
             },
         );
         self.finish_task(task_id);
@@ -543,6 +549,8 @@ async fn run_squad_task<B>(
                     task_id: task_id.clone(),
                     ts: now_rfc3339(),
                     payload: Some(squad_event::Payload::Error(reason)),
+                    tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+                    actor: "web:squad".into(),
                 },
             );
         }
@@ -643,6 +651,10 @@ where
             // system prompt do agente do estágio correspondente. Vazio = elenco
             // fixo do motor (retrocompatível).
             roster,
+            // D2t: hoje TODO caller é o modo local — o tenant vira real na
+            // borda com a E1s; o Python só PROPAGA (ecoado em todo evento).
+            tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+            actor: "web:squad".into(),
         })
         .await
         .map_err(|e| e.to_string())?;

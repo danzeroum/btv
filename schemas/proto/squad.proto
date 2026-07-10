@@ -33,6 +33,13 @@ message SquadTask {
   // auditor/…), para retrocompatibilidade. `funcao`/`ordem` montam o pipeline
   // por domínio (roster configurável em vez de agentes fixos).
   repeated PersonaSpec roster = 7;
+  // D2t (pós-G2): dono e operador da tarefa — o encanamento multitenant
+  // existe ANTES de a E1s torná-lo real na borda HTTP. Hoje todo caller
+  // envia o tenant LOCAL; o orquestrador PROPAGA (nunca inventa) os dois
+  // campos em todo SquadEvent emitido. Aditivo: vazio = comportamento
+  // pré-D2t (nenhum broker no meio exige os campos).
+  string tenant_id = 8;
+  string actor = 9;
 }
 
 // Uma persona/papel do roster de uma squad.
@@ -54,6 +61,10 @@ message PersonaSpec {
 message SquadEvent {
   string task_id = 1;
   string ts = 2;
+  // D2t: ecoados VERBATIM do SquadTask que originou o stream — o Python
+  // propaga, nunca decide tenant. Vazio quando o task veio sem (pré-D2t).
+  string tenant_id = 10;
+  string actor = 11;
   oneof payload {
     Proposal proposal = 3;
     Consensus consensus = 4;
