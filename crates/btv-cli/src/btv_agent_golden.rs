@@ -26,7 +26,15 @@ fn app_produto(
     store: Arc<Mutex<BtvStore>>,
     ledger: Arc<Mutex<LedgerStore>>,
 ) -> Router {
-    crate::btv_agent::router(default_hub(), default_squad_pool(dir), ledger, store)
+    // Modo local explícito (sem env): os goldens ficam determinísticos e
+    // byte-idênticos independentemente da env de modo no ambiente (E1s.4).
+    crate::btv_agent::router(
+        default_hub(),
+        default_squad_pool(dir),
+        ledger,
+        store,
+        crate::tenant_extractor::TenantResolucao::local(),
+    )
 }
 
 /// Dispara a requisição in-process e captura o contrato observável
@@ -473,6 +481,7 @@ async fn golden_squad_activation() {
         default_squad_pool(dir.path()),
         ledger.clone(),
         store.clone(),
+        crate::tenant_extractor::TenantResolucao::local(),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());

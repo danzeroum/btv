@@ -22,11 +22,14 @@ mod sidecar;
 mod skills;
 mod squad;
 mod squad_agent;
-// E1s.2 constrói o extractor e o prova por testes unitários; a E1s.3 o
-// A E1s.3 wirou a borda: o extractor `Tenant` entra nos seis consumidores e o
-// `guarda_tenant` vira o layer de cobertura universal do `merged_router` — o
-// módulo está todo em uso, o `#[allow(dead_code)]` do scaffolding saiu. Se
-// algum item ficar sem uso, o lint reacende (era essa a promessa do allow).
+// A borda de tenant: o extractor `Tenant` produz o contexto dos seis
+// consumidores e o `guarda_tenant` é o layer de cobertura universal do
+// `merged_router` (E1s.3); o `Mode` é resolvido UMA vez na construção e
+// injetado, não lido da env por-request (E1s.4). Módulo todo em uso — sem
+// `#[allow(dead_code)]`. A varredura adversarial da borda (E1s.4) prova, no
+// router real, que o layer gateia a superfície inteira no saas.
+#[cfg(test)]
+mod tenant_border_sweep;
 mod tenant_extractor;
 #[cfg(test)]
 mod test_support;
@@ -404,11 +407,19 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
             ledger: ledger.clone(),
             btv: btv_store.clone(),
         });
+        // Resolve o modo (via `from_env`) UMA vez, no arranque — o modo é
+        // propriedade do processo, não da requisição (E1s.4). O mesmo
+        // `TenantResolucao` (clonado) alimenta os dois pontos da borda: o
+        // `BtvAgentState` (o extractor produz o contexto dos seis) e o layer
+        // universal do `merged_router` (gateia toda rota). Sem resolver hoje
+        // (local); a onda saas injeta `Some(Arc::new(PgStore))` aqui.
+        let tenant_resolver = tenant_extractor::TenantResolucao::from_env(None);
         let btv_router = btv_agent::router(
             squad_hub.clone(),
             squad_pool.clone(),
             ledger.clone(),
             btv_store,
+            tenant_resolver.clone(),
         );
         let squad_router = squad_agent::router(squad_hub, squad_pool);
         let sidecar_service = prompt_render::default_sidecar_service(&root);
@@ -435,12 +446,9 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
             web_dir,
             hub,
             extra_router,
-            // Modo local (o dashboard): sem resolver — a borda universal é
-            // no-op e o extractor devolve TenantContext::local. A onda saas
-            // injeta aqui `Some(Arc::new(PgStore))`, a MESMA fonte do resolver
-            // do BtvAgentState (a borda gateia toda rota, o extractor produz o
-            // contexto dos seis) — troca a fonte sem tocar a borda.
-            tenant_extractor::TenantResolucao::default(),
+            // Mesmo `TenantResolucao` do `BtvAgentState` (uma leitura da env
+            // de modo no arranque) — este alimenta o layer universal.
+            tenant_resolver,
         )
         .await?;
     } else {
