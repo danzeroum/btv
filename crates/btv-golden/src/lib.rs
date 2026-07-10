@@ -30,6 +30,11 @@ use std::path::PathBuf;
 pub enum Kind {
     Str,
     Num,
+    /// String volátil que PODE ser vazia — para campos onde o vazio é
+    /// estado legítimo do domínio (ex.: `prev_hash` da PRIMEIRA entrada de
+    /// uma cadeia de ledger). O vazio é preservado como está (é informação:
+    /// "início de cadeia"), o não-vazio vira `<volatil>`.
+    StrOuVazia,
 }
 
 /// Campo volátil do corpo de resposta: caminho estilo pointer com curinga
@@ -54,6 +59,13 @@ pub fn vnum(path: &'static str) -> Volatile {
     Volatile {
         path,
         kind: Kind::Num,
+    }
+}
+
+pub fn vstr_ou_vazia(path: &'static str) -> Volatile {
+    Volatile {
+        path,
+        kind: Kind::StrOuVazia,
     }
 }
 
@@ -257,6 +269,14 @@ fn check_and_replace(leaf: &mut Value, v: &Volatile) -> Result<(), String> {
             Value::String(_) => Err(format!("`{}`: string vazia", v.path)),
             other => Err(format!("`{}`: esperava string, encontrou {other}", v.path)),
         },
+        Kind::StrOuVazia => match leaf {
+            Value::String(s) if s.is_empty() => Ok(()),
+            Value::String(_) => {
+                *leaf = Value::String("<volatil>".into());
+                Ok(())
+            }
+            other => Err(format!("`{}`: esperava string, encontrou {other}", v.path)),
+        },
         Kind::Num => match leaf {
             Value::Number(_) => {
                 *leaf = Value::Number((-1).into());
@@ -359,5 +379,22 @@ mod tests {
             Some("/lista/0/k".into())
         );
         assert_eq!(first_diff(&a, &a.clone(), String::new()), None);
+    }
+
+    #[test]
+    fn vstr_ou_vazia_preserva_vazio_e_mascara_nao_vazio() {
+        let mut v = serde_json::json!([
+            {"prev_hash": ""},
+            {"prev_hash": "abc123"}
+        ]);
+        apply_volatile(&mut v, &vstr_ou_vazia("/*/prev_hash")).unwrap();
+        assert_eq!(
+            v[0]["prev_hash"], "",
+            "vazio é estado legítimo (início de cadeia) — preservado"
+        );
+        assert_eq!(v[1]["prev_hash"], "<volatil>");
+        // Tipo errado continua sendo erro — volátil não é campo opcional.
+        let mut errado = serde_json::json!([{"prev_hash": 7}]);
+        assert!(apply_volatile(&mut errado, &vstr_ou_vazia("/*/prev_hash")).is_err());
     }
 }

@@ -594,5 +594,42 @@ async fn golden_squad_activation() {
         assert!(guard.get_run_by_task("sq2").unwrap().is_some());
     }
 
+    // Golden dos CORPOS DO LEDGER (PR do harness, revisão do C3.1): pina
+    // kind/actor/payload/tenant EXATOS de cada entrada produzida pelo fluxo
+    // real acima — o corpo é wire de auditoria (sai em GET /api/ledger e no
+    // export do ADR 0027) e as asserções pontuais provam só os campos que
+    // lembramos de afirmar; a fixture congela o corpo inteiro. O body é
+    // `Vec<LedgerEntry>` serializado — o MESMO `Json(entries)` que
+    // `btv-server::handlers::ledger::list_ledger` responde (montar o
+    // btv-server inteiro aqui custaria telemetry/prompt_library/web_dir sem
+    // ganhar um byte de cobertura de corpo; a serialização é idêntica por
+    // construção). Voláteis: ts e hashes (dependem do relógio); seq é
+    // determinístico no fluxo roteirizado e fica EXATO. Este golden pina o
+    // ESTADO MISTO da migração — gate estrangulado COM tenant, ativação/
+    // ajuste legados SEM — e regravará LEGITIMAMENTE a cada endpoint
+    // estrangulado (rito: commit próprio, diff da fixture, ADR 0027).
+    {
+        let guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
+        let entradas = guard.recent(50, None).unwrap();
+        drop(guard);
+        let corpo = serde_json::to_value(&entradas).unwrap();
+        let passo_ledger = btv_golden::step(
+            "corpos das entradas do ledger após o fluxo (serialização de GET /api/ledger)",
+            "GET",
+            "/api/ledger?limit=50",
+            None,
+            200,
+            Some("application/json".into()),
+            None,
+            corpo,
+            &[
+                btv_golden::vstr("/*/ts"),
+                btv_golden::vstr_ou_vazia("/*/prev_hash"),
+                btv_golden::vstr("/*/entry_hash"),
+            ],
+        );
+        btv_golden::check("ledger_bodies", vec![passo_ledger]);
+    }
+
     std::env::set_current_dir(orig_cwd).unwrap();
 }

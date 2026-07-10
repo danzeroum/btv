@@ -1,0 +1,118 @@
+{
+  "flow": "ledger_bodies",
+  "steps": [
+    {
+      "name": "corpos das entradas do ledger após o fluxo (serialização de GET /api/ledger)",
+      "request": {
+        "method": "GET",
+        "path": "/api/ledger?limit=50"
+      },
+      "response": {
+        "body": [
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
+            "kind": "btv.adjust_requested",
+            "payload": {
+              "etapa": "Aprovar o rascunho antes da revisão",
+              "gate_liberado": true,
+              "instrucao": "use tom mais formal na abertura",
+              "task_id": "sq2"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 4,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
+            "kind": "btv.squad_activated",
+            "payload": {
+              "nome": "Newsletter de julho",
+              "papeis": [
+                "Pauteiro",
+                "Redator",
+                "Revisor de estilo"
+              ],
+              "personas_proprias": [],
+              "prompt_hashes": [
+                {
+                  "papel": "Pauteiro",
+                  "prompt_sha256": "38061eba33ea58110471148368e5eb1e8860171d2a6ce48d16586813a32c522a"
+                },
+                {
+                  "papel": "Redator",
+                  "prompt_sha256": "bffa8b738bdca5524557a0c03a26980e669d2184f89b1d0e7b3aedef17af2b78"
+                },
+                {
+                  "papel": "Revisor de estilo",
+                  "prompt_sha256": "c019319618c47240cfb8eb2f1de9174269fde2b48ca429c70ca512ceb48ca818"
+                }
+              ],
+              "refs": [],
+              "run_id": 2,
+              "task_id": "sq2",
+              "template_id": "editorial",
+              "template_versao": "v1.4"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 3,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
+            "kind": "btv.gate_approved",
+            "payload": {
+              "etapa": "Aprovar o rascunho antes da revisão",
+              "gates_aprovados": 1,
+              "task_id": "sq1"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 2,
+            "tenant": "00000000-0000-0000-0000-000000000001",
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
+            "kind": "btv.squad_activated",
+            "payload": {
+              "nome": "Newsletter de julho",
+              "papeis": [
+                "Pauteiro",
+                "Redator",
+                "Revisor de estilo"
+              ],
+              "personas_proprias": [],
+              "prompt_hashes": [
+                {
+                  "papel": "Pauteiro",
+                  "prompt_sha256": "38061eba33ea58110471148368e5eb1e8860171d2a6ce48d16586813a32c522a"
+                },
+                {
+                  "papel": "Redator",
+                  "prompt_sha256": "bffa8b738bdca5524557a0c03a26980e669d2184f89b1d0e7b3aedef17af2b78"
+                },
+                {
+                  "papel": "Revisor de estilo",
+                  "prompt_sha256": "c019319618c47240cfb8eb2f1de9174269fde2b48ca429c70ca512ceb48ca818"
+                }
+              ],
+              "refs": [],
+              "run_id": 1,
+              "task_id": "sq1",
+              "template_id": "editorial",
+              "template_versao": "v1.4"
+            },
+            "prev_hash": "",
+            "seq": 1,
+            "ts": "<volatil>"
+          }
+        ],
+        "content_type": "application/json",
+        "status": 200
+      }
+    }
+  ]
+}
