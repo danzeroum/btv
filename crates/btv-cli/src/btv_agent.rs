@@ -1720,4 +1720,76 @@ mod tests {
         assert!(d.contains("Curador de fontes (persona própria)"));
         assert!(d.contains("VOZ DA PERSONA PRÓPRIA"));
     }
+
+    /// Pino dedicado do corpo de `btv.export_generated` (C3.4b).
+    ///
+    /// **Divisão de guarda declarada:** este corpo NÃO vive no golden
+    /// `ledger_bodies` — o fluxo scriptado (`BTV_SCRIPTED=1`) nunca chama a
+    /// ferramenta `edit`, então `arquivos_escritos` volta vazio e o export
+    /// jamais é alcançado por lá. O caminho é exercitado aqui pelo seam
+    /// `SquadHub::note_tool_run` (injeta um `edit` exit 0), e o corpo é pinado
+    /// por IGUALDADE DO JSON COMPLETO (não campo a campo): campos derivados/
+    /// voláteis (`seq`/`prev_hash`/`entry_hash`/`ts`) viram sentinela, o resto
+    /// é exato. O `ledger_bodies` (harness dos goldens) aponta para cá.
+    ///
+    /// Ato 1: corpo LEGADO, SEM `tenant` (emissor ainda pelo `append_ledger`).
+    /// Ato 2 estrangula (este pino fica vermelho de propósito); ato 3 regrava a
+    /// linha `tenant` no literal esperado.
+    #[test]
+    fn export_generated_pina_o_corpo_pela_conclusao() {
+        let store = BtvStore::open_in_memory().unwrap();
+        let ledger = Arc::new(Mutex::new(LedgerStore::open_in_memory().unwrap()));
+        let hub = crate::squad_agent::default_hub();
+        let now = "2026-01-01T00:00:00Z";
+
+        // Registra a task pelo MESMO seam da ativação real; `new_task` devolve
+        // `sq1` (primeiro id do contador). Run real do tenant LOCAL + um arquivo
+        // escrito por `edit` (o seam `note_tool_run`).
+        let task_id = hub.new_task();
+        store
+            .insert_run(
+                &task_id,
+                "editorial",
+                "v1",
+                "Meu Run",
+                "{}",
+                r#"["Redator","Editor"]"#,
+                now,
+            )
+            .unwrap();
+        hub.note_tool_run(&task_id, "edit", "/work/relatorio.md", 0);
+
+        let ctx = btv_domain::TenantContext::local(btv_domain::ActorId::new("web:btv").unwrap());
+        registrar_entregas(&ctx, &store, &ledger, &hub, &task_id, now);
+
+        let entradas = ledger.lock().unwrap().recent(10, None).unwrap();
+        let export = entradas
+            .iter()
+            .find(|e| e.kind == "btv.export_generated")
+            .expect("entrada de export existe");
+
+        let mut obtido = serde_json::to_value(export).unwrap();
+        for k in ["seq", "prev_hash", "entry_hash", "ts"] {
+            obtido[k] = serde_json::json!("<volatil>");
+        }
+        let esperado = serde_json::json!({
+            "seq": "<volatil>",
+            "prev_hash": "<volatil>",
+            "entry_hash": "<volatil>",
+            "kind": "btv.export_generated",
+            "actor": "web:btv",
+            "payload": {
+                "task_id": "sq1",
+                "deliverable_id": 1,
+                "nome": "relatorio.md",
+                "formato": "MD",
+                "trilha": "Redator → Editor · 0 gate(s) aprovado(s) por você"
+            },
+            "ts": "<volatil>"
+        });
+        assert_eq!(
+            obtido, esperado,
+            "corpo legado de btv.export_generated (ato 1, SEM tenant)"
+        );
+    }
 }
