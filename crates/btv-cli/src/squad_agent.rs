@@ -139,7 +139,10 @@ impl SquadHub {
     }
 
     /// Gera um `task_id` novo e garante o estado vazio correspondente.
-    fn new_task(&self) -> String {
+    // Seam de registro de tarefa no hub (mesma família de `note_tool_run`/
+    // `tool_runs`): usado pela ativação real e pelo teste dedicado do export,
+    // que precisa registrar a task antes de anotar o `edit` (C3.4b).
+    pub(crate) fn new_task(&self) -> String {
         let task_id = format!("sq{:x}", self.next_task_seq.fetch_add(1, Ordering::Relaxed));
         let mut tasks = self.tasks.lock().expect("squad hub mutex poisoned");
         tasks.insert(task_id.clone(), SquadTaskState::new());

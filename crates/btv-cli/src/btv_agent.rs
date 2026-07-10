@@ -157,32 +157,6 @@ fn montar_descricao(
     out
 }
 
-fn append_ledger(
-    ledger: &Arc<Mutex<LedgerStore>>,
-    kind: &str,
-    payload: serde_json::Value,
-) -> Result<u64, String> {
-    let entry = btv_schemas::ledger::LedgerEntry {
-        seq: 0,
-        prev_hash: String::new(),
-        entry_hash: String::new(),
-        kind: kind.into(),
-        actor: "web:btv".into(),
-        payload,
-        r#override: None,
-        fake_marker: None,
-        ts: crate::session::now_rfc3339(),
-        // Emissor legado dos kinds `btv.*` (sem contexto): cadeia LOCAL,
-        // corpo idêntico — C3 troca isto pela porta `LedgerRepository`.
-        tenant: None,
-    };
-    let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
-    guard
-        .append(entry)
-        .map(|e| e.seq)
-        .map_err(|e| e.to_string())
-}
-
 /// `POST /api/btv/squads` — ativa uma squad de verdade a partir do wizard.
 async fn ativar_squad_handler(
     State(state): State<BtvAgentState>,
@@ -417,7 +391,10 @@ async fn ativar_squad_handler(
 
     // Watcher: quando o stream da tarefa terminar, transiciona o status do
     // run (concluida/erro/encerrada) — U6 mostra estado real, não congelado.
-    spawn_status_watcher(state.clone(), task_id.clone());
+    // O `ctx` da requisição é CAPTURADO aqui e viaja com a task: o registro de
+    // entregas em background pertence ao tenant e ao actor de quem ativou a
+    // squad (ver `registrar_entregas`).
+    spawn_status_watcher(state.clone(), task_id.clone(), ctx.clone());
 
     (
         StatusCode::ACCEPTED,
@@ -427,7 +404,8 @@ async fn ativar_squad_handler(
 }
 
 /// Acompanha a tarefa até o fim do stream e grava o status final no store.
-fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
+/// `ctx` é o contexto CAPTURADO da requisição de ativação (ver o call site).
+fn spawn_status_watcher(state: BtvAgentState, task_id: String, ctx: btv_domain::TenantContext) {
     tokio::spawn(async move {
         let (_snapshot, rx) = state.squad.hub.subscribe(&task_id);
         if let Some(mut rx) = rx {
@@ -463,65 +441,125 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
             let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
             let _ = store.set_status(&task_id, status, &now);
         }
-        // Entregas (U4): arquivos REAIS gravados pelas ferramentas da tarefa
-        // (trilha `tool_runs` do hub) viram itens da Biblioteca, com trilha
-        // de procedência (papéis do run + gates aprovados) e registro no
-        // ledger. Só em conclusão limpa — run com erro/encerrado não
-        // "entrega".
+        // Entregas (U4): só em conclusão limpa — run com erro/encerrado não
+        // "entrega". A escrituração vive em `registrar_entregas`, extraída para
+        // ser pinada por teste dedicado (o corpo do `btv.export_generated` não
+        // é alcançável pelo fluxo scriptado, que nunca chama `edit`).
         if status == btv_domain::ports::RunStatus::Concluida {
-            let escritas = arquivos_escritos(&state.squad.hub.tool_runs(&task_id));
-            if !escritas.is_empty() {
-                let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-                if let Ok(Some(run)) = store.get_run_by_task(&task_id) {
-                    let papeis: Vec<String> =
-                        serde_json::from_str(&run.papeis_json).unwrap_or_default();
-                    let trilha = format!(
-                        "{} · {} gate(s) aprovado(s) por você",
-                        papeis.join(" → "),
-                        run.gates_aprovados
-                    );
-                    for path in escritas {
-                        let nome = std::path::Path::new(&path)
-                            .file_name()
-                            .map(|f| f.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.clone());
-                        let formato = std::path::Path::new(&path)
-                            .extension()
-                            .map(|e| e.to_string_lossy().to_uppercase())
-                            .unwrap_or_else(|| "TXT".into());
-                        match store.insert_deliverable(
-                            run.id,
-                            &task_id,
-                            &run.template_id,
-                            &nome,
-                            &path,
-                            &formato,
-                            "v1",
-                            &trilha,
-                            &now,
-                        ) {
-                            Ok(deliverable_id) => {
-                                if let Err(e) = append_ledger(
-                                    &state.ledger,
-                                    "btv.export_generated",
-                                    serde_json::json!({
-                                        "task_id": task_id,
-                                        "deliverable_id": deliverable_id,
-                                        "nome": nome,
-                                        "formato": formato,
-                                        "trilha": trilha,
-                                    }),
-                                ) {
-                                    eprintln!("btv: falha ao registrar entrega no ledger: {e}");
-                                }
-                            }
-                            Err(e) => eprintln!("btv: falha ao registrar entrega: {e}"),
-                        }
-                    }
-                }
-            }
+            let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+            registrar_entregas(
+                &ctx,
+                &store,
+                &state.ledger,
+                &state.squad.hub,
+                &task_id,
+                &now,
+            );
         }
     });
+}
+
+/// Registra as entregas de uma conclusão de squad na Biblioteca (U4) e o fato
+/// `btv.export_generated` no ledger. Arquivos REAIS gravados pelas ferramentas
+/// (trilha `tool_runs` do hub) viram itens com procedência (papéis do run +
+/// gates aprovados).
+///
+/// **Precedente da campanha (primeira operação com `TenantContext` FORA do
+/// escopo de uma requisição):** o `ctx` é CAPTURADO no spawn da task de
+/// conclusão — o clone do contexto da requisição que ativou a squad (a borda
+/// E1s.3) —, NUNCA fabricado a partir do `run.tenant` carregado depois
+/// (fabricar violaria a regra de que contexto nasce na borda e teria de
+/// inventar um actor). Proveniência: a entrega registrada em background
+/// pertence ao tenant E ao actor de quem ativou a squad; quando o saas tiver
+/// actors reais (`user:{id}`), "a entrega desta squad foi consequência da
+/// ativação daquele usuário" continua sendo exatamente o que a trilha de
+/// auditoria diz. Futuras tasks de background citam este precedente.
+///
+/// O run é lido pela PORTA (`RunRepository::get(ctx, …)`), não por método cru:
+/// um divórcio entre o tenant capturado e o do run é estruturalmente impossível
+/// de passar — run de outro tenant é indistinguível de inexistente e a função
+/// falha fail-closed em vez de registrar entrega com dono errado (isolamento-
+/// na-leitura do B2, de graça na task assíncrona).
+fn registrar_entregas(
+    ctx: &btv_domain::TenantContext,
+    store: &BtvStore,
+    ledger: &Arc<Mutex<LedgerStore>>,
+    hub: &SquadHub,
+    task_id: &str,
+    now: &str,
+) {
+    use btv_domain::ports::{LedgerRepository, RunRepository};
+    let escritas = arquivos_escritos(&hub.tool_runs(task_id));
+    if escritas.is_empty() {
+        return;
+    }
+    let run = match RunRepository::get(store, ctx, task_id) {
+        Ok(Some(run)) => run,
+        // Run de outro tenant ou inexistente: fail-closed, sem entrega órfã.
+        Ok(None) => return,
+        Err(e) => {
+            eprintln!("btv: falha ao carregar run para registrar entregas: {e}");
+            return;
+        }
+    };
+    let papeis: Vec<String> = serde_json::from_str(&run.papeis_json).unwrap_or_default();
+    let trilha = format!(
+        "{} · {} gate(s) aprovado(s) por você",
+        papeis.join(" → "),
+        run.gates_aprovados
+    );
+    for path in escritas {
+        let nome = std::path::Path::new(&path)
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.clone());
+        let formato = std::path::Path::new(&path)
+            .extension()
+            .map(|e| e.to_string_lossy().to_uppercase())
+            .unwrap_or_else(|| "TXT".into());
+        match store.insert_deliverable(
+            run.id,
+            task_id,
+            &run.template_id,
+            &nome,
+            &path,
+            &formato,
+            "v1",
+            &trilha,
+            now,
+        ) {
+            Ok(deliverable_id) => {
+                // C3.4b: o fato `btv.export_generated` pela porta — corpo ganha
+                // `tenant` (ADR 0027); payload byte-idêntico (B3). Actor da
+                // conclusão = actor da ativação (capturado no `ctx`). Este é o
+                // ÚLTIMO emissor legado — o `append_ledger` morre com ele.
+                let task = match btv_domain::TaskId::parse(task_id) {
+                    Ok(t) => t,
+                    Err(_) => {
+                        eprintln!("btv: task_id inválido, entrega não registrada: {task_id}");
+                        continue;
+                    }
+                };
+                let evento = btv_domain::ports::DomainEvent {
+                    tenant: ctx.tenant,
+                    actor: ctx.actor.clone(),
+                    ts: now.to_string(),
+                    kind: btv_domain::ports::DomainEventKind::DeliverableProduced {
+                        task_id: task,
+                        deliverable_id,
+                        name: nome,
+                        format: formato,
+                        trail: trilha.clone(),
+                    },
+                };
+                let mut ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = LedgerRepository::append(&mut *ledger, ctx, &evento) {
+                    eprintln!("btv: falha ao registrar entrega no ledger: {e}");
+                }
+            }
+            Err(e) => eprintln!("btv: falha ao registrar entrega: {e}"),
+        }
+    }
 }
 
 /// Caminhos de arquivo ESCRITOS pela tarefa — só ferramentas que gravam
@@ -1669,5 +1707,80 @@ mod tests {
         );
         assert!(d.contains("Curador de fontes (persona própria)"));
         assert!(d.contains("VOZ DA PERSONA PRÓPRIA"));
+    }
+
+    /// Pino dedicado do corpo de `btv.export_generated` (C3.4b).
+    ///
+    /// **Divisão de guarda declarada:** este corpo NÃO vive no golden
+    /// `ledger_bodies` — o fluxo scriptado (`BTV_SCRIPTED=1`) nunca chama a
+    /// ferramenta `edit`, então `arquivos_escritos` volta vazio e o export
+    /// jamais é alcançado por lá. O caminho é exercitado aqui pelo seam
+    /// `SquadHub::note_tool_run` (injeta um `edit` exit 0), e o corpo é pinado
+    /// por IGUALDADE DO JSON COMPLETO (não campo a campo): campos derivados/
+    /// voláteis (`seq`/`prev_hash`/`entry_hash`/`ts`) viram sentinela, o resto
+    /// é exato. O `ledger_bodies` (harness dos goldens) aponta para cá.
+    ///
+    /// Ato 1: corpo LEGADO, SEM `tenant` (emissor ainda pelo `append_ledger`).
+    /// Ato 2 estrangula (este pino fica vermelho de propósito); ato 3 regrava a
+    /// linha `tenant` no literal esperado.
+    #[test]
+    fn export_generated_pina_o_corpo_pela_conclusao() {
+        let store = BtvStore::open_in_memory().unwrap();
+        let ledger = Arc::new(Mutex::new(LedgerStore::open_in_memory().unwrap()));
+        let hub = crate::squad_agent::default_hub();
+        let now = "2026-01-01T00:00:00Z";
+
+        // Registra a task pelo MESMO seam da ativação real; `new_task` devolve
+        // `sq1` (primeiro id do contador). Run real do tenant LOCAL + um arquivo
+        // escrito por `edit` (o seam `note_tool_run`).
+        let task_id = hub.new_task();
+        store
+            .insert_run(
+                &task_id,
+                "editorial",
+                "v1",
+                "Meu Run",
+                "{}",
+                r#"["Redator","Editor"]"#,
+                now,
+            )
+            .unwrap();
+        hub.note_tool_run(&task_id, "edit", "/work/relatorio.md", 0);
+
+        let ctx = btv_domain::TenantContext::local(btv_domain::ActorId::new("web:btv").unwrap());
+        registrar_entregas(&ctx, &store, &ledger, &hub, &task_id, now);
+
+        let entradas = ledger.lock().unwrap().recent(10, None).unwrap();
+        let export = entradas
+            .iter()
+            .find(|e| e.kind == "btv.export_generated")
+            .expect("entrada de export existe");
+
+        let mut obtido = serde_json::to_value(export).unwrap();
+        for k in ["seq", "prev_hash", "entry_hash", "ts"] {
+            obtido[k] = serde_json::json!("<volatil>");
+        }
+        let esperado = serde_json::json!({
+            "seq": "<volatil>",
+            "prev_hash": "<volatil>",
+            "entry_hash": "<volatil>",
+            "kind": "btv.export_generated",
+            "actor": "web:btv",
+            "payload": {
+                "task_id": "sq1",
+                "deliverable_id": 1,
+                "nome": "relatorio.md",
+                "formato": "MD",
+                "trilha": "Redator → Editor · 0 gate(s) aprovado(s) por você"
+            },
+            "ts": "<volatil>",
+            // Ato 3: a única linha que o estrangulamento acrescenta — o corpo
+            // carrega o tenant LOCAL (ADR 0027); payload e actor imóveis.
+            "tenant": "00000000-0000-0000-0000-000000000001"
+        });
+        assert_eq!(
+            obtido, esperado,
+            "corpo de btv.export_generated pela porta (ato 3, COM tenant)"
+        );
     }
 }
