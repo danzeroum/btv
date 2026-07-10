@@ -12,6 +12,7 @@
 //! wire está congelado pelos goldens T1 e property tests T3.
 
 pub mod persona;
+pub mod ports;
 pub mod run;
 pub mod tenant;
 pub mod user;

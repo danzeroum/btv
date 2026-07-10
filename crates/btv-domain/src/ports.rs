@@ -1,0 +1,495 @@
+//! G1 — ASSINATURAS para revisão humana (B1 + esqueleto do agregado A4).
+//!
+//! **Nada aqui tem implementação** (`todo!` onde o Rust exige corpo): errar
+//! assinatura multiplica retrabalho por todas as trilhas, então este arquivo
+//! para no portão G1 e espera o aceite antes de qualquer adapter (Trilha B)
+//! ou serviço de aplicação (C3). Cada decisão carrega o porquê no rustdoc —
+//! citável pelo ADR que fechar o G1.
+//!
+//! Os quatro critérios de julgamento (revisão do G0) e onde cada um mora:
+//! 1. **Tenant fail-closed sem exceção** — todo método de toda trait recebe
+//!    `&TenantContext` (tenant + actor: o actor alimenta o ledger e não se
+//!    perde na assinatura). Não há método de conveniência sem contexto.
+//! 2. **Assinaturas limpas de infraestrutura** — nenhum `rusqlite::Error`/
+//!    `serde_json::Value`/tipo de wire; erros são enums de domínio
+//!    (`RepositoryError`/`RunError`), tipos de entrada/saída são deste crate
+//!    (o que ainda é do adapter fica em associated type, decisão visível).
+//! 3. **O agregado é a única porta** — `Run::approve_gate` valida a
+//!    transição, incrementa o contador e RETORNA o `DomainEvent`; as traits
+//!    NÃO têm `update_status`/`increment_gates` — mutação por fora do
+//!    agregado não existe na API.
+//! 4. **Atomicidade no tipo** — `RunRepository::save_with_deliverables` é a
+//!    unidade transacional run+entregas; não há como usar a API
+//!    corretamente e quebrar essa consistência.
+
+use crate::run::{Deliverable, Run};
+use crate::tenant::{ActorId, TenantContext, TenantId};
+
+// ── status do run (A3, aqui só a FORMA — a máquina de transições) ──────────
+
+/// Os 4 estados reais do banco (`wire-strings.v1.json`, provado por T3).
+/// `as_str`/`parse` devem reproduzir exatamente `ativa`/`concluida`/
+/// `encerrada`/`erro` — byte-a-byte, é contrato de banco.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunStatus {
+    Ativa,
+    Concluida,
+    Encerrada,
+    Erro,
+}
+
+#[allow(unused_variables)] // corpos todo!() até o aceite do G1
+impl RunStatus {
+    /// A string EXATA persistida hoje (contrato T3).
+    pub fn as_str(self) -> &'static str {
+        todo!("A3, após aceite do G1")
+    }
+
+    /// Parse fail-closed: string fora do vocabulário é `RunError::InvalidStatus`.
+    pub fn parse(s: &str) -> Result<Self, RunError> {
+        todo!("A3, após aceite do G1")
+    }
+
+    /// Máquina de transições (A3): `Concluida → Ativa` retorna `false` — e
+    /// `Run::transition_to` a transforma em `RunError::InvalidTransition` em
+    /// vez de UPDATE silencioso. Transições válidas hoje: `Ativa` → qualquer
+    /// terminal; terminal → nada (a reconciliação de zumbis é `Ativa →
+    /// Encerrada`, coberta).
+    pub fn can_transition_to(self, target: RunStatus) -> bool {
+        todo!("A3, após aceite do G1")
+    }
+}
+
+// ── eventos de domínio (A5) ─────────────────────────────────────────────────
+
+/// Evento de domínio: `tenant` e `actor` são obrigatórios ESTRUTURALMENTE —
+/// ficam no envelope, não em cada variante, então não existe evento sem
+/// autoria nem dono (critério A5; billing/metering da Trilha E consome isto
+/// sem tocar no fluxo). O ledger passa a consumir `DomainEvent`, não string:
+/// cada variante mapeia 1:1 para um kind já existente no wire
+/// (`btv.squad_activated`, `btv.gate_approved`, … — inventário em
+/// `wire-strings.v1.json`), então a serialização NÃO muda.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DomainEvent {
+    pub tenant: TenantId,
+    pub actor: ActorId,
+    /// RFC3339 — vem do chamador (o domínio não lê relógio: determinismo).
+    pub ts: String,
+    pub kind: DomainEventKind,
+}
+
+/// Variantes E CAMPOS em inglês (ADR 0024, decisão 2; confirmado na revisão
+/// do G1) mapeando os nomes do plano A5: `SquadAtivada`→`SquadActivated`,
+/// `GateAprovado`→`GateApproved`, `AjusteSolicitado`→`AdjustRequested`,
+/// `EntregaProduzida`→`DeliverableProduced`, `PersonaAtualizada`→
+/// `PersonaUpdated`, `TemplatePublicado`→`TemplatePublished`.
+///
+/// O rename dos campos é grátis no código: `DomainEvent` NÃO deriva
+/// `Serialize` — as chaves pt do payload atual do ledger (`etapa`,
+/// `instrucao`, `papel`, …) viram responsabilidade EXCLUSIVA do DTO de
+/// serialização do adapter (Trilha B), com os goldens T1 de guarda de que
+/// nada se move no banco. Um lugar só para o mapeamento, em vez de o domínio
+/// carregar nomes de wire para sempre.
+///
+/// Cobertura do vocabulário: `wire_kind()` liga cada variante ao kind
+/// `btv.*` do inventário (`wire-strings.v1.json`) e o teste deste módulo
+/// prova que os DOIS conjuntos são idênticos — variante órfã ou kind sem
+/// variante quebram o build (pedido da revisão do G1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DomainEventKind {
+    /// `btv.squad_activated`
+    SquadActivated {
+        task_id: String,
+        run_id: i64,
+        template_id: String,
+    },
+    /// `btv.gate_approved` — carrega o contador APÓS o incremento: o evento
+    /// é o fato consumado que o ledger registra.
+    GateApproved {
+        task_id: String,
+        stage: Option<String>,
+        gates_approved: i64,
+    },
+    /// `btv.adjust_requested`
+    AdjustRequested {
+        task_id: String,
+        stage: Option<String>,
+        instruction: String,
+        gate_released: bool,
+    },
+    /// `btv.export_generated`
+    DeliverableProduced {
+        task_id: String,
+        deliverable_id: i64,
+        name: String,
+        format: String,
+    },
+    /// `btv.persona_updated` — hash, nunca o prompt em claro (procedência).
+    PersonaUpdated {
+        template_id: String,
+        role: String,
+        prompt_sha256: String,
+    },
+    /// `btv.template_published`
+    TemplatePublished {
+        template_id: String,
+        published: bool,
+    },
+    /// `btv.flow_saved` — fluxo do Squad Designer salvo como modelo
+    /// ("salvo e auditado" — a aplicação ao orquestrador real segue sendo
+    /// trabalho futuro, mesma honestidade do handler atual). Estava AUSENTE
+    /// no rascunho do G1 (7 variantes para 8 kinds `btv.*`) — lacuna 2 da
+    /// revisão; o teste de cobertura abaixo impede a reincidência.
+    FlowSaved {
+        name: String,
+        blocks: u64,
+        diagram_sha256: String,
+        semantic_version: Option<String>,
+        snapshot_hash: Option<String>,
+        audit_head: Option<String>,
+        audit_len: Option<u64>,
+    },
+    /// `btv.user_removed`
+    UserRemoved { user_id: i64 },
+}
+
+impl DomainEventKind {
+    /// O kind EXATO do wire para cada variante — mapeamento declarativo
+    /// (dado, não comportamento), a única exceção consciente ao "sem
+    /// implementação" deste arquivo: é o que o teste de cobertura
+    /// variantes↔fixture exige para não ser fake. Apontado para re-auditoria
+    /// do G1.
+    pub fn wire_kind(&self) -> &'static str {
+        match self {
+            Self::SquadActivated { .. } => "btv.squad_activated",
+            Self::GateApproved { .. } => "btv.gate_approved",
+            Self::AdjustRequested { .. } => "btv.adjust_requested",
+            Self::DeliverableProduced { .. } => "btv.export_generated",
+            Self::PersonaUpdated { .. } => "btv.persona_updated",
+            Self::TemplatePublished { .. } => "btv.template_published",
+            Self::FlowSaved { .. } => "btv.flow_saved",
+            Self::UserRemoved { .. } => "btv.user_removed",
+        }
+    }
+}
+
+// ── erros de domínio (critério 2: semânticos, zero infraestrutura) ──────────
+
+/// Regras do agregado violadas — erro de NEGÓCIO, não de storage.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum RunError {
+    #[error("transição de status inválida: {from:?} → {to:?}")]
+    InvalidTransition { from: RunStatus, to: RunStatus },
+    #[error("status fora do vocabulário do banco: {0}")]
+    InvalidStatus(String),
+}
+
+/// Semântica de persistência SEM tipo de driver: o adapter (SQLite/Postgres,
+/// ADR 0026) traduz o erro dele para ISTO — `rusqlite::Error`/`sqlx::Error`
+/// nunca atravessam a fronteira. `Storage(String)` carrega a mensagem para
+/// diagnóstico sem acoplar o chamador ao driver.
+#[derive(Debug, thiserror::Error)]
+pub enum RepositoryError {
+    #[error("registro não encontrado")]
+    NotFound,
+    /// Corrida perdida no read-modify-write (ex.: append otimista do
+    /// EventStore; candidato de B4 para o ledger PG — ADR 0027 item 1).
+    #[error("conflito de concorrência: esperava head {expected}, encontrou {found}")]
+    ConcurrencyConflict { expected: i64, found: i64 },
+    #[error("erro de storage: {0}")]
+    Storage(String),
+}
+
+// ── agregado Run (A4, esqueleto) ────────────────────────────────────────────
+
+#[allow(unused_variables)] // corpos todo!() até o aceite do G1
+impl Run {
+    /// Aprovar o gate HITL pendente — ÚNICA porta para incrementar
+    /// `gates_aprovados` (critério 3). Valida que o run está `Ativa` (a
+    /// máquina de `RunStatus` decide), incrementa o contador E retorna o
+    /// `DomainEvent::GateApproved` com tenant/actor do contexto — o chamador
+    /// (serviço de aplicação, C3) persiste via `RunRepository::save` e
+    /// registra via `LedgerRepository::append`, mas NÃO decide: o contador
+    /// deixa de ser um i64 solto mutado por UPDATE.
+    pub fn approve_gate(&mut self, ctx: &TenantContext) -> Result<DomainEvent, RunError> {
+        todo!("A4, após aceite do G1")
+    }
+
+    /// Transição de status pela máquina de `RunStatus` — substitui o
+    /// `set_status(task_id, "qualquer_string")` atual. `Concluida → Ativa`
+    /// não compila no chamador tipado e retorna `InvalidTransition` no
+    /// caminho dinâmico.
+    pub fn transition_to(
+        &mut self,
+        ctx: &TenantContext,
+        target: RunStatus,
+    ) -> Result<DomainEvent, RunError> {
+        todo!("A4, após aceite do G1")
+    }
+}
+
+// ── traits de repositório (B1) — TODO método com `&TenantContext` ───────────
+
+/// Repositório do agregado Run (+ entregas, que só existem sob um run).
+///
+/// Deliberadamente AUSENTES (critério 3): `update_status`,
+/// `increment_gates`, qualquer setter de campo — mutação entra pelo
+/// agregado e sai por `save`/`save_with_deliverables`. `task_id` fica
+/// `&str` até o `TaskId` de A3 (valida `sq{hex}`, propriedade T3).
+pub trait RunRepository {
+    /// Carrega o agregado do tenant do contexto. `Ok(None)` = não existe
+    /// NESTE tenant — um run de outro tenant é indistinguível de inexistente
+    /// (isolamento fail-closed também na leitura).
+    fn get(&self, ctx: &TenantContext, task_id: &str) -> Result<Option<Run>, RepositoryError>;
+
+    /// Runs do tenant, mais recente primeiro (ordem atual de `list_runs`).
+    fn list(&self, ctx: &TenantContext) -> Result<Vec<Run>, RepositoryError>;
+
+    /// Persiste o estado do agregado (upsert por `task_id` dentro do tenant).
+    fn save(&mut self, ctx: &TenantContext, run: &Run) -> Result<(), RepositoryError>;
+
+    /// Persiste run + entregas novas NUMA transação (critério 4): a ausência
+    /// de transação run+deliverable apontada no levantamento §4.1 morre AQUI,
+    /// na forma da API — não há caminho para gravar entrega órfã de run.
+    /// (A atomicidade com o LEDGER continua fora — restrição declarada no
+    /// ADR 0026, item 5: outbox/idempotência é decisão da Trilha B.)
+    fn save_with_deliverables(
+        &mut self,
+        ctx: &TenantContext,
+        run: &Run,
+        novas: &[Deliverable],
+    ) -> Result<(), RepositoryError>;
+
+    /// Entregas do tenant, mais recente primeiro (Biblioteca U4).
+    fn list_deliverables(&self, ctx: &TenantContext) -> Result<Vec<Deliverable>, RepositoryError>;
+
+    fn get_deliverable(
+        &self,
+        ctx: &TenantContext,
+        id: i64,
+    ) -> Result<Option<Deliverable>, RepositoryError>;
+
+    /// Maior seq de `task_id` já persistido no tenant (semeia o contador do
+    /// hub no arranque — comportamento atual de `max_run_task_seq`).
+    fn max_task_seq(&self, ctx: &TenantContext) -> Result<u64, RepositoryError>;
+}
+
+/// Personas (U7) — área "só tipagem" (ADR 0024): a trait espelha as
+/// operações atuais do store, com tenant, sem semântica nova.
+pub trait PersonaRepository {
+    fn list_overrides(
+        &self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<Vec<crate::PersonaOverride>, RepositoryError>;
+
+    fn set_override(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        papel: &str,
+        prompt: &str,
+    ) -> Result<(), RepositoryError>;
+
+    fn delete_override(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        papel: &str,
+    ) -> Result<(), RepositoryError>;
+
+    fn clear_overrides(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<(), RepositoryError>;
+
+    fn list_custom(
+        &self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<Vec<crate::CustomPersona>, RepositoryError>;
+
+    fn insert_custom(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        nome: &str,
+        prompt: &str,
+    ) -> Result<i64, RepositoryError>;
+
+    fn update_custom(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        nome: &str,
+        prompt: &str,
+    ) -> Result<(), RepositoryError>;
+
+    fn delete_custom(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError>;
+}
+
+/// Trilha auditável POR TENANT (ADR 0027): append consome `DomainEvent`
+/// (não string — A5), a cadeia encadeia dentro do tenant e o export é
+/// verificável isoladamente.
+///
+/// **Escopo DECLARADO deste port (lacuna 1 da revisão do G1):** ele registra
+/// FATOS DE DOMÍNIO — os kinds `btv.*` que `DomainEventKind` enumera. As
+/// entradas OPERACIONAIS da mesma cadeia (13 dos 21 kinds do inventário:
+/// `session.*`, `tool.*`, `llm.turn`, `user.turn`, `squad.*`,
+/// `permission_rule.*`, `designer.workflow_saved`, `skill.vetting`) são
+/// instrumentação, não fato de negócio, e continuam entrando pela API
+/// existente (`LedgerStore::append`/`Session::note`) — que a **B3 também
+/// tenantiza**: as DUAS portas alimentam a MESMA cadeia por tenant, com o
+/// mesmo hash-chain. Este port portanto NÃO substitui o `LedgerStore` — ele
+/// é a porta tipada dos fatos de domínio sobre a mesma trilha. Unificar as
+/// duas portas (ou mantê-las como categorias distintas em definitivo) é
+/// decisão diferida, registrada em `pendencias.md` (§ migração DDD, G1).
+///
+/// `type Entry` — decisão exposta, ACEITA na revisão do G1 com gatilho
+/// registrado: no dia em que o domínio precisar INTERPRETAR entradas
+/// (export verificável da Trilha E, billing lendo a trilha), nasce o
+/// `AuditEntry` próprio do domínio e o associated type morre. Até lá, evita
+/// dois donos para o contrato que hoje é de `btv_schemas::ledger::LedgerEntry`.
+pub trait LedgerRepository {
+    type Entry;
+
+    /// Registra o evento na cadeia DO TENANT do contexto; devolve o `seq`
+    /// dentro dela. O `ts`/`actor` do evento são a verdade — o adapter não
+    /// os reescreve.
+    fn append(&mut self, ctx: &TenantContext, event: &DomainEvent) -> Result<u64, RepositoryError>;
+
+    /// Entradas recentes da cadeia do tenant (contrato atual de `recent`,
+    /// com o filtro de actor resolvido no adapter).
+    fn recent(
+        &self,
+        ctx: &TenantContext,
+        limit: u32,
+        actor: Option<&ActorId>,
+    ) -> Result<Vec<Self::Entry>, RepositoryError>;
+
+    /// Verifica UMA cadeia — a do tenant do contexto (ADR 0027 item 3).
+    fn verify_chain(&self, ctx: &TenantContext) -> Result<u64, RepositoryError>;
+
+    /// A cadeia completa do tenant, verificável isoladamente (export/
+    /// auditoria portátil — ADR 0027 item 4).
+    fn export(&self, ctx: &TenantContext) -> Result<Vec<Self::Entry>, RepositoryError>;
+}
+
+/// Event store de sessão com concorrência otimista (o `EventStore` atual de
+/// `btv-store::events`, atrás de port). Associated types pela mesma razão
+/// documentada em `LedgerRepository::Entry`.
+pub trait EventStorePort {
+    type NewEvent;
+    type StoredEvent;
+
+    /// Append otimista: `expected_head` errado ⇒
+    /// `RepositoryError::ConcurrencyConflict` (a semântica atual de
+    /// `EventError::Conflict`, sem o tipo do driver).
+    fn append(
+        &mut self,
+        ctx: &TenantContext,
+        aggregate_id: &str,
+        expected_head: i64,
+        events: Vec<Self::NewEvent>,
+    ) -> Result<i64, RepositoryError>;
+
+    fn read(
+        &self,
+        ctx: &TenantContext,
+        aggregate_id: &str,
+        from_seq: i64,
+    ) -> Result<Vec<Self::StoredEvent>, RepositoryError>;
+
+    fn head_seq(&self, ctx: &TenantContext, aggregate_id: &str) -> Result<i64, RepositoryError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Uma instância de CADA variante (valores dummy — o teste é sobre o
+    /// VOCABULÁRIO, não sobre payload). Variante nova sem entrada aqui não
+    /// compila o `match` de `wire_kind`; kind novo na fixture sem variante
+    /// quebra a igualdade de conjuntos abaixo.
+    fn uma_de_cada_variante() -> Vec<DomainEventKind> {
+        vec![
+            DomainEventKind::SquadActivated {
+                task_id: "sq1".into(),
+                run_id: 1,
+                template_id: "editorial".into(),
+            },
+            DomainEventKind::GateApproved {
+                task_id: "sq1".into(),
+                stage: None,
+                gates_approved: 1,
+            },
+            DomainEventKind::AdjustRequested {
+                task_id: "sq1".into(),
+                stage: None,
+                instruction: "tom formal".into(),
+                gate_released: true,
+            },
+            DomainEventKind::DeliverableProduced {
+                task_id: "sq1".into(),
+                deliverable_id: 1,
+                name: "artigo.md".into(),
+                format: "MD".into(),
+            },
+            DomainEventKind::PersonaUpdated {
+                template_id: "editorial".into(),
+                role: "Redator".into(),
+                prompt_sha256: "abc".into(),
+            },
+            DomainEventKind::TemplatePublished {
+                template_id: "editorial".into(),
+                published: true,
+            },
+            DomainEventKind::FlowSaved {
+                name: "fluxo".into(),
+                blocks: 3,
+                diagram_sha256: "abc".into(),
+                semantic_version: None,
+                snapshot_hash: None,
+                audit_head: None,
+                audit_len: None,
+            },
+            DomainEventKind::UserRemoved { user_id: 1 },
+        ]
+    }
+
+    /// Pedido da revisão do G1 (lacuna 2): o vocabulário `btv.*` da fixture
+    /// canônica (T3) e as variantes de `DomainEventKind` são o MESMO
+    /// conjunto — a ausência de `btv.flow_saved` no rascunho teria quebrado
+    /// aqui. Kind órfão por omissão deixa de ser possível.
+    #[test]
+    fn variantes_cobrem_exatamente_os_kinds_btv_da_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../schemas/fixtures/wire-strings.v1.json"),
+            )
+            .expect("fixture wire-strings.v1"),
+        )
+        .expect("fixture é JSON");
+        let da_fixture: BTreeSet<String> = fixture["ledger_kinds"]
+            .as_array()
+            .expect("lista ledger_kinds")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .filter(|k| k.starts_with("btv."))
+            .map(str::to_string)
+            .collect();
+
+        let das_variantes: BTreeSet<String> = uma_de_cada_variante()
+            .iter()
+            .map(|k| k.wire_kind().to_string())
+            .collect();
+
+        assert_eq!(
+            das_variantes, da_fixture,
+            "vocabulário de DomainEventKind divergiu do inventário btv.* da fixture"
+        );
+    }
+}

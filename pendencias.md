@@ -1763,3 +1763,29 @@ verdadeiramente dinâmico (N agentes instanciados do roster, cada um votando no
 consenso) seria uma reescrita do orquestrador — fora do escopo destas três
 fases, que fecharam o pedido central: "as personas criadas no frontend são as
 que trabalham, com o prompt delas".
+
+## Migração DDD multitenant — portão G1 (assinaturas)
+
+**[dúvida/defer]** As DUAS portas do ledger — decisão diferida na revisão do
+G1 (lacuna 1). `btv-domain::ports::LedgerRepository::append` consome
+`DomainEvent` e cobre SÓ os fatos de domínio (os 8 kinds `btv.*`); os 13
+kinds operacionais do inventário (`session.*`, `tool.*`, `llm.turn`,
+`user.turn`, `squad.*`, `permission_rule.*`, `designer.workflow_saved`,
+`skill.vetting`) continuam entrando pela API de instrumentação existente
+(`LedgerStore::append`/`Session::note`), que a B3 também tenantiza — as duas
+portas alimentam a MESMA cadeia por tenant. Fica em aberto, para decidir com
+o adapter PG na mesa (B3/B4): unificar as portas (um `OperationalEvent`
+tipado ao lado do `DomainEvent`? um enum guarda-chuva?) ou consagrar as duas
+categorias em definitivo. O escopo está DECLARADO no rustdoc do trait — a
+lacuna era a assinatura decidir isso em silêncio, não a distinção em si.
+
+**[decisão]** Nomenclatura fechada na revisão do G1: `approve_gate`/
+`transition_to` e campos de variante em inglês (`stage`, `instruction`,
+`gate_released`, …) — ADR 0024 operante; os nomes pt do plano eram atalho
+informal do revisor. As chaves pt do payload do ledger viram responsabilidade
+exclusiva do DTO de serialização do adapter (Trilha B), goldens T1 de guarda.
+
+**[nota]** `type Entry` do `LedgerRepository` aceito com gatilho: quando o
+domínio precisar interpretar entradas (export da Trilha E, billing), nasce o
+`AuditEntry` próprio e o associated type morre. `ts: String` idem — newtype é
+candidato de A3.
