@@ -2178,3 +2178,27 @@ cobre e o `btv verify` default não (arch-lint, clippy da feature `pg`), um gate
 por linha, `just` abortando na primeira falha. A classe inteira de mascaramento
 some porque não há pipe entre o gate e a decisão. Regra geral: **lição que
 morde duas vezes vira script** — nenhum gate crítico fica na memória do operador.
+
+**[residual — decomposição dos 3 grandes, projeto pós-campanha]** O C4 fechou
+consolidando os consoles-folha em `btv-server` e CONGELANDO a superfície axum da
+`btv-cli` na allowlist do motor (T4-E, ADR 0031). O que NÃO se fez, por decisão
+declarada: decompor `squad_agent`/`btv_agent`/`web_agent` (extrair o motor —
+agent-loop, SquadHub/start_squad_task, borda — para crate(s) abaixo que
+`btv-server` possa depender, depois routers finos em cima). É redesenho de
+lógica, não movimento de endereço; fazê-lo no último quilômetro da campanha
+inverteria a relação risco/portão. **Gatilho:** quando o motor precisar de um
+SEGUNDO consumidor (ex.: modo saas rodando num processo separado do CLI, ou um
+worker headless), a extração paga a si mesma — até lá é custo sem comprador. Se
+o dono quiser, é campanha própria, com seu G0/esboço/portões.
+
+**[padrão de encerramento — "Nada Fake" vale para METAS, não só para dados]** O
+T4 literal ("btv-cli não importa axum") mediria a métrica traindo o objetivo:
+cumpri-lo arrastaria o motor do produto para dentro do crate de dashboard. O
+recon provou que a fronteira de julho (axum vs CLI) media a doença errada — a
+real é console vs motor. Redefinir o critério à luz do terreno, com ADR (0031) e
+guarda mecânico ATIVO (T4-E), é o oposto de rebaixar a régua. Fixa a cláusula que
+faltava à regra "quando o critério morde, conserta-se o código": **salvo quando a
+investigação prova que o critério media a doença errada — aí conserta-se o
+critério, por escrito, com aceite do dono.** É o espelho do que abriu a campanha
+(os goldens como juízes contra fabricação): a mesma régua anti-fake, agora
+apontada para as próprias METAS da migração.

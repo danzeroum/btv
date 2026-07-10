@@ -15,9 +15,11 @@
 #      não a palavra "sqlite" (que aparece legitimamente em comentários e
 #      nomes de teste).
 #
-# Checagem futura já prevista no plano (NÃO ativa — seria falso-positivo
-# hoje): `btv-cli` sem axum, só depois de C4 (os 9 módulos-roteadores migram
-# para btv-server).
+#   E) A superfície axum da `btv-cli` está CONGELADA na allowlist do motor
+#      (C4, fecho da campanha; ADR 0031). O guarda "btv-cli sem axum" armado
+#      desde a semana 1 ativa aqui — mas com a fronteira VERDADEIRA que o C4
+#      revelou: não é "axum vs CLI", é "console/dashboard vs motor". Um módulo
+#      axum NOVO fora da allowlist → vermelho.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -91,6 +93,41 @@ if [ -n "$fora_do_extrator" ]; then
     falhas=1
 else
     echo "OK(T4-D): BTV_MODE só no extractor de tenant (resolução por modo é peça única)."
+fi
+
+# ── E: superfície axum da btv-cli CONGELADA na allowlist do motor (C4, fecho) ─
+# O guarda armado desde a semana 1 ("btv-cli não importa axum") ativa AQUI —
+# mas com a fronteira VERDADEIRA que o C4 revelou (ADR 0031): não é "axum vs
+# CLI" (o levantamento de julho mediu a doença errada), é "console/dashboard vs
+# MOTOR". Os consoles-folha (sandbox/doctor/lsp) consolidaram em btv-server; o
+# que resta com axum na btv-cli é o MOTOR do produto (agent-loop/squad/borda) e
+# os consoles que o SERVEM (permission-overlay do mcp, sidecars Python do
+# memory/prompt_render) — eles servem HTTP porque o produto local É um servidor:
+# o axum é a interface do motor, não vazamento de camada. A allowlist CONGELA
+# essa superfície: um módulo axum NOVO fora dela é o console que devia nascer em
+# btv-server nascendo no lar errado — o bug que a onda inteira combateu. Mesmo
+# mecanismo grep-por-fronteira do T4-B/D.
+allowlist_axum=(
+    btv_agent btv_agent_golden mcp_console memory_console prompt_render
+    squad_agent tenant_border_sweep tenant_extractor web_agent
+)
+fora_allowlist=""
+while IFS= read -r arquivo; do
+    base=$(basename "$arquivo" .rs)
+    permitido=0
+    for nome in "${allowlist_axum[@]}"; do
+        [ "$base" = "$nome" ] && { permitido=1; break; }
+    done
+    [ "$permitido" = 0 ] && fora_allowlist="$fora_allowlist$arquivo"$'\n'
+done < <(grep -rlE '^use axum|axum::' crates/btv-cli/src --include='*.rs' | sort)
+if [ -n "$fora_allowlist" ]; then
+    echo "ERRO(T4-E): módulo axum NOVO na btv-cli fora da allowlist do motor:"
+    printf '%s' "$fora_allowlist"
+    echo "            Console/dashboard novo nasce em btv-server (ADR 0031); a btv-cli só"
+    echo "            serve HTTP pelo MOTOR (agent-loop/squad/borda + consoles que o servem)."
+    falhas=1
+else
+    echo "OK(T4-E): superfície axum da btv-cli congelada na allowlist do motor (ADR 0031)."
 fi
 
 exit "$falhas"
