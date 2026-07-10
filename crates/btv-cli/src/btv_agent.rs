@@ -1361,6 +1361,7 @@ pub fn router(
     pool: Arc<btv_sidecar::SquadPool>,
     ledger: Arc<Mutex<LedgerStore>>,
     store: Arc<Mutex<BtvStore>>,
+    tenant_resolver: TenantResolucao,
 ) -> Router {
     use axum::routing::{get, put};
     Router::new()
@@ -1421,9 +1422,11 @@ pub fn router(
             squad: SquadAgentState { hub, pool },
             ledger,
             store,
-            // Modo local (o dashboard): sem resolver — o extractor devolve
-            // TenantContext::local. O modo saas injeta Some(PgStore) aqui.
-            tenant_resolver: TenantResolucao::default(),
+            // Injetado por quem monta o router (main: `from_env`; goldens:
+            // `local()`) — mesma fonte do resolver do layer da borda, um único
+            // `current_mode()` no arranque. O extractor produz o contexto dos
+            // seis a partir daqui; a onda saas injeta Some(PgStore).
+            tenant_resolver,
         })
 }
 

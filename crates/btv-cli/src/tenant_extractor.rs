@@ -29,7 +29,14 @@ use std::sync::Arc;
 /// gravam hoje (`web:btv`), para a troca da fonte na E1s.3 ser byte-idêntica.
 const ACTOR_LOCAL: &str = "web:btv";
 
-/// Modo de operação (ADR 0026 item 6). Resolvido de `BTV_MODE` uma vez.
+/// Modo de operação (ADR 0026 item 6). INVARIANTE: resolvido de `BTV_MODE`
+/// UMA vez no arranque (na construção do `TenantResolucao`) e injetado na
+/// borda — o modo é propriedade do PROCESSO, não da requisição. Ler o modo
+/// por-request (a forma da E1s.3) diria implicitamente que ele PODE alternar
+/// local↔saas no meio da vida do processo — e uma requisição escorregando
+/// durante a transição atravessaria sem sessão; um risco de segurança, não
+/// flexibilidade. A E1s.4 tornou a invariante expressa no tipo: o `Mode` mora
+/// no estado injetado, não numa env lida a cada chamada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Local,
@@ -38,6 +45,9 @@ pub enum Mode {
 
 /// Lê `BTV_MODE` — default `local` (o modo do produto local-first). Só
 /// `saas` (case-insensitive) liga o modo SaaS; qualquer outro valor é local.
+/// Chamado UMA vez, por quem monta o router (`TenantResolucao::from_env`);
+/// nunca no caminho por-request. É a única leitura de `BTV_MODE` do binário
+/// (o lint T4-D vigia essa fronteira).
 pub fn current_mode() -> Mode {
     match std::env::var("BTV_MODE") {
         Ok(v) if v.eq_ignore_ascii_case("saas") => Mode::Saas,
@@ -53,10 +63,45 @@ pub trait SessionResolver: Send + Sync {
     fn resolve(&self, token: &str) -> Option<(TenantId, String)>;
 }
 
-/// Estado que a borda injeta: o resolver de sessões (Some no saas, None no
-/// local). `FromRef` para o extractor puxá-lo de qualquer `AppState`.
-#[derive(Clone, Default)]
-pub struct TenantResolucao(pub Option<Arc<dyn SessionResolver>>);
+/// Estado que a borda injeta: o modo (resolvido UMA vez no arranque — o modo é
+/// propriedade do PROCESSO, não da requisição) + o resolver de sessões (Some
+/// no saas, None no local). `FromRef` para o extractor e o layer o puxarem de
+/// qualquer `AppState`. Construído por `from_env` em produção (uma leitura de
+/// `BTV_MODE`) e por `new`/`local` nos testes (modo explícito, sem env — o que
+/// deixa a varredura saas da E1s.4 determinística sem mutar a env do processo).
+#[derive(Clone)]
+pub struct TenantResolucao {
+    mode: Mode,
+    resolver: Option<Arc<dyn SessionResolver>>,
+}
+
+impl TenantResolucao {
+    /// Produção: resolve o modo da env UMA vez (quem monta o router chama
+    /// isto), e recebe o resolver (None hoje/local; `Some(Arc::new(PgStore))`
+    /// na onda saas). É o único ponto que chama `current_mode()` fora de teste.
+    pub fn from_env(resolver: Option<Arc<dyn SessionResolver>>) -> Self {
+        Self {
+            mode: current_mode(),
+            resolver,
+        }
+    }
+
+    /// Injeção explícita de modo (só testes/goldens: produção usa `from_env`):
+    /// sem tocar a env. A E1s.4 monta o router real em `Saas` por aqui; os
+    /// goldens montam em `Local` — a varredura fica determinística no mesmo
+    /// processo dos goldens, sem `set_var`.
+    #[cfg(test)]
+    pub(crate) fn new(mode: Mode, resolver: Option<Arc<dyn SessionResolver>>) -> Self {
+        Self { mode, resolver }
+    }
+
+    /// Atalho para o modo local sem resolver — o que os goldens usam.
+    /// Determinístico: não lê a env.
+    #[cfg(test)]
+    pub(crate) fn local() -> Self {
+        Self::new(Mode::Local, None)
+    }
+}
 
 /// Motivos de recusa da borda — cada um com o seu status HTTP.
 #[derive(Debug, PartialEq, Eq)]
@@ -164,17 +209,18 @@ pub(crate) fn autoriza_borda(
 /// não estranguladas) para que o modo saas não nasça com a maioria das rotas
 /// sem borda. Em modo local é no-op (passa direto) — a composição local fica
 /// byte-idêntica. Montado em `web_agent::merged_router` ao lado da guarda de
-/// `Origin`. Lê `current_mode()` (peça única — T4-D vale aqui também).
+/// `Origin`. O modo vem do estado INJETADO (resolvido no arranque), não de uma
+/// env por-request (E1s.4 — invariante de processo expressa no tipo).
 pub(crate) async fn guarda_tenant(
-    State(TenantResolucao(resolver)): State<TenantResolucao>,
+    State(tr): State<TenantResolucao>,
     req: Request,
     next: Next,
 ) -> Response {
     match autoriza_borda(
-        current_mode(),
+        tr.mode,
         req.uri().path(),
         req.headers(),
-        resolver.as_deref(),
+        tr.resolver.as_deref(),
     ) {
         Ok(()) => next.run(req).await,
         Err(recusa) => recusa.into_response(),
@@ -194,8 +240,10 @@ where
     type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let TenantResolucao(resolver) = TenantResolucao::from_ref(state);
-        resolver_contexto(current_mode(), &parts.headers, resolver.as_deref())
+        let tr = TenantResolucao::from_ref(state);
+        // Modo do estado injetado (resolvido no arranque), não da env por
+        // request — mesma invariante de processo do layer (E1s.4).
+        resolver_contexto(tr.mode, &parts.headers, tr.resolver.as_deref())
             .map(Tenant)
             .map_err(IntoResponse::into_response)
     }
