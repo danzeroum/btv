@@ -320,6 +320,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "btv-contract"
+version = "0.1.0"
+dependencies = [
+ "btv-domain",
+]
+
+[[package]]
 name = "btv-core"
 version = "0.1.0"
 dependencies = [
@@ -437,6 +444,7 @@ dependencies = [
 name = "btv-store"
 version = "0.1.0"
 dependencies = [
+ "btv-contract",
  "btv-domain",
  "btv-schemas",
  "rusqlite",

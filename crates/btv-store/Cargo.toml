@@ -15,3 +15,5 @@ serde.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# B2: a suíte de contrato genérica julga este adapter (e o PG em B4)
+btv-contract.workspace = true

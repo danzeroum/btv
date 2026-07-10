@@ -1809,3 +1809,46 @@ tipagem. O A4 preserva a semântica exata (comparação por representação
 textual em `get_run_by_task`); a decisão de normalizar (ou não) é tomada
 quando C3/B2 tocar a rota, um passo por PR. Registrado por instrução da
 revisão do A4.
+
+**[decisão]** A4 — transições de status seguem NÃO-AUDITADAS no ledger
+(comportamento de produção preservado; `transition_to` retorna `Result<(), _>`
+— fabricar `DomainEvent` sem kind no wire violaria o teste de cobertura
+variantes↔fixture). Consequência registrada por instrução da revisão: quando
+a Trilha E precisar de `RunCompleted`/`RunFailed` para metering, o kind novo
+nasce pelo caminho COMPLETO (fixture → `LedgerKind` → `DomainEventKind` →
+emissor real), nunca por atalho.
+
+**[dúvida/defer]** A4 — a história do OPERADOR do fail-closed: a leitura
+tipada de `runs`/`deliverables` derruba a lista inteira se uma linha tiver
+`task_id`/`status` fora do vocabulário (trade-off certo para corrupção —
+gritar, não filtrar em silêncio — mas hoje "grita" como UI vazia). Item de
+fila: check no `btv doctor` que varre as tabelas por valores fora do
+vocabulário e APONTA a linha — transforma "UI quebrada" em diagnóstico
+acionável. Pedido da revisão do A4; não entra no B2.
+
+**[decisão]** B2 — API legada do `BtvStore` = a porta do modo local, escopo
+FIXO no tenant LOCAL: todo SELECT/UPDATE/DELETE legado (sem `&TenantContext`)
+ganhou `WHERE tenant_id = LOCAL`, e as escritas legadas caem no LOCAL pelo
+DEFAULT da coluna. Sem isso, abrir um banco multi-tenant pela porta legada
+vazaria linhas de outros tenants — o isolamento fail-closed valeria só para
+quem usa as traits. Comportamento local inalterado (goldens T1/T3 verdes sem
+regravação; todo dado local É do tenant LOCAL).
+
+**[decisão]** B2 — `updated_ts` de personas no adapter das traits usa o
+relógio do BANCO (`strftime` RFC3339): as assinaturas aceitas no G1 não
+carregam `ts` (deliberado — é escrituração do adapter, não estado do
+domínio), e o adapter é infraestrutura, pode ler relógio. A API legada segue
+recebendo `now` do chamador. Se algum dia essa coluna virar estado de
+domínio (aparecer no wire), a assinatura evolui pelo caminho de sempre —
+diff destacado + porquê.
+
+**[nota]** B2 — a normalização do `TaskId` na borda segue em aberto (item do
+A4 acima): o `RunRepository::get(ctx, task_id: &str)` do adapter compara
+texto cru (`WHERE task_id = ?`), semântica idêntica ao legado. A decisão de
+normalizar continua agendada para quando C3 tocar a rota HTTP.
+
+**[nota]** B2 — perfis locais (`users`, A6) ficaram FORA das traits por
+desenho (o G1 não definiu `UserRepository` — perfis locais sem auth são área
+do modo local até a Trilha E definir identidade SaaS). A tabela ganhou
+`tenant_id` na migração como as demais, e `list_users` lê a coluna
+fail-closed — mas a porta segue legada, escopo LOCAL.
