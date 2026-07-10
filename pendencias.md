@@ -2051,3 +2051,33 @@ igualdade de hash, admin tenant-escopado; prova-que-morde da expiração
 (prazos no passado → None). Job `pg` do CI ganha `clippy -p btv-cli
 --features pg`. FALTA da E1s: E1s.2 (extractor + `actor=user:{id}` +
 lint T4-D) → E1s.3 (troca da fonte nos 6) → E1s.4 (adversarial da borda).
+
+**[registro]** E1s.2→E1s.4 ENTREGUES — a Trilha E1s FECHA (#40 extractor,
+#41 borda+cobertura, #42 varredura+invariante de modo; #39 foi o bootstrap).
+E1s.2: extractor peça-única `FromRequestParts` (`tenant_extractor.rs`),
+`BTV_MODE` SÓ nele (lint T4-D, prova-que-morde), saas resolve
+`actor=user:{id}`. E1s.3: a FONTE dos seis consumidores da C3.1 troca do
+`TenantContext::local` fixo pelo extractor `Tenant`; e a pergunta de
+COBERTURA respondida no PR — layer de enforcement UNIVERSAL (`guarda_tenant`
+no `merged_router`) exige sessão para TODA rota fora de `ROTAS_LIVRES`
+(vazia hoje → saas nasce fail-closed por inteiro), porque o extractor só
+guarda as rotas que o DECLARAM; o custo escondido temido (SSE do
+`squad_agent`) não existe — é GET+stream, não upgrade de conexão.
+`PgStore impls SessionResolver` (orphan rule, pg-gated). E1s.4: o `Mode`
+deixa de ser lido por-request e é resolvido UMA vez no arranque, injetado no
+`TenantResolucao` (invariante de PROCESSO expressa no tipo — uma requisição
+nunca escorrega local↔saas no meio da vida do processo); varredura
+adversarial no router REAL (sweep incl. rota inexistente = prova de
+pré-roteamento; prova-que-morde: rota não estrangulada VAZA sem o layer;
+forjado/expirado → 401). Goldens byte-idênticos em toda a Trilha — o modo
+local É o contrato.
+
+**[pendência]** `btv doctor` reportar o modo de operação (local/saas). Com o
+modo agora boot-resolvido e injetado (E1s.4), o doctor pode reportá-lo da
+MESMA fonte injetada (`TenantResolucao`/`current_mode` — fonte única, T4-D),
+sem uma segunda leitura de env órfã — uma linha de valor operacional real.
+Registro de rito: o "reporta o modo desde B5" do plano-mestre era PREVISÃO,
+NUNCA implementado (o B5 real ligou `BTV_MODE` na E1s.2, sem a parte do
+doctor; grep confirmou zero menção de modo em `doctor_console.rs`). Fica na
+FILA, não no escopo de nenhuma onda — o padrão "emissores são a verdade"
+corrigiu a memória do plano tanto quanto corrige o palpite.
