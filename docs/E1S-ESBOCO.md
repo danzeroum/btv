@@ -21,7 +21,12 @@ Extractor axum que resolve TODO request em `TenantContext` ANTES do
 handler — **peça ÚNICA** (um `FromRequestParts` num módulo próprio),
 reutilizada por todos os consumidores: nenhum handler ganha `if
 BTV_MODE` próprio; a resolução por modo vive SÓ no extractor. Seis ifs
-espalhados seriam a versão de borda do SQL-em-handler que o T4-B proíbe. `BTV_MODE=local` (default): LOCAL implícito, actor por canal —
+espalhados seriam a versão de borda do SQL-em-handler que o T4-B proíbe —
+e a cura é a mesma: peça única + juiz MECÂNICO. O lint **T4-D** nasce
+junto com este PR (viabilidade confirmada: o T4-B já é grep-por-fronteira;
+varrer `BTV_MODE` fora do módulo do extractor é o mesmo mecanismo), com
+prova-que-morde na criação: um `if BTV_MODE` plantado num handler →
+arch-lint reprova nomeando o arquivo. `BTV_MODE=local` (default): LOCAL implícito, actor por canal —
 goldens T1/T3 verdes SEM regravação (o critério de aceitação do ADR).
 `BTV_MODE=saas`: token opaco (cookie HttpOnly+SameSite=Strict ou Bearer)
 → hash → `resolve_session` → contexto; sem sessão = 401/403, NUNCA
