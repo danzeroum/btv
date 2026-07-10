@@ -663,17 +663,34 @@ async fn pedir_ajuste_handler(
     // 2. Libera o gate pendente, se houver (o ajuste também pode ser pedido
     // fora de um gate — aí é só orientação de cockpit).
     let havia_gate = state.squad.hub.resolve_hitl(&task_id, true).is_ok();
-    if let Err(e) = append_ledger(
-        &state.ledger,
-        "btv.adjust_requested",
-        serde_json::json!({
-            "task_id": task_id,
-            "etapa": body.etapa.unwrap_or_default(),
-            "instrucao": instrucao,
-            "gate_liberado": havia_gate,
-        }),
-    ) {
-        eprintln!("btv: falha ao registrar ajuste no ledger: {e}");
+    // C3.1 endpoint 3 (o último emissor de escrita da onda): o fato vai pela
+    // porta de domínio. O ajuste NÃO muta o Run (a liberação do gate é
+    // infraestrutura do hub; o estado segue Ativa) — por isso não há método
+    // de agregado aqui: o evento é fato da tarefa, construído no serviço e
+    // gravado pela porta. Contexto de fonte LOCAL fixa, como nos outros dois.
+    match btv_domain::TaskId::parse(&task_id) {
+        Ok(task) => {
+            use btv_domain::ports::LedgerRepository;
+            let ctx = btv_domain::TenantContext::local(
+                btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+            );
+            let evento = btv_domain::ports::DomainEvent {
+                tenant: ctx.tenant,
+                actor: ctx.actor.clone(),
+                ts: crate::session::now_rfc3339(),
+                kind: btv_domain::ports::DomainEventKind::AdjustRequested {
+                    task_id: task,
+                    stage: body.etapa,
+                    instruction: instrucao,
+                    gate_released: havia_gate,
+                },
+            };
+            let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+            if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+                eprintln!("btv: falha ao registrar ajuste no ledger: {e}");
+            }
+        }
+        Err(e) => eprintln!("btv: ajuste sem registro no ledger — task_id inválido: {e}"),
     }
     StatusCode::OK.into_response()
 }

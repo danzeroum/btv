@@ -587,13 +587,15 @@ async fn golden_squad_activation() {
             Some(btv_domain::TenantId::LOCAL),
             "ativação estrangulada (endpoint 2): tenant no corpo"
         );
-        // O ajuste é o legado remanescente da onda — a testemunha de que os
-        // dois regimes AINDA convivem (endpoint 3 o estrangula).
-        let ajuste = entradas
-            .iter()
-            .find(|e| e.kind == "btv.adjust_requested")
-            .expect("entrada de ajuste existe");
-        assert_eq!(ajuste.tenant, None, "emissor não estrangulado: sem tenant");
+        // Endpoint 3 fechou a escrita da onda: TODOS os emissores btv.*
+        // deste fluxo passam pela porta — o estado misto ACABOU, e cada
+        // entrada carrega o tenant no corpo hasheado (ADR 0027).
+        assert!(
+            entradas
+                .iter()
+                .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
+            "nenhum emissor legado restante no fluxo"
+        );
     }
     {
         let guard = store.lock().unwrap_or_else(|e| e.into_inner());
