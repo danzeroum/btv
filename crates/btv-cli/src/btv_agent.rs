@@ -157,32 +157,6 @@ fn montar_descricao(
     out
 }
 
-fn append_ledger(
-    ledger: &Arc<Mutex<LedgerStore>>,
-    kind: &str,
-    payload: serde_json::Value,
-) -> Result<u64, String> {
-    let entry = btv_schemas::ledger::LedgerEntry {
-        seq: 0,
-        prev_hash: String::new(),
-        entry_hash: String::new(),
-        kind: kind.into(),
-        actor: "web:btv".into(),
-        payload,
-        r#override: None,
-        fake_marker: None,
-        ts: crate::session::now_rfc3339(),
-        // Emissor legado dos kinds `btv.*` (sem contexto): cadeia LOCAL,
-        // corpo idêntico — C3 troca isto pela porta `LedgerRepository`.
-        tenant: None,
-    };
-    let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
-    guard
-        .append(entry)
-        .map(|e| e.seq)
-        .map_err(|e| e.to_string())
-}
-
 /// `POST /api/btv/squads` — ativa uma squad de verdade a partir do wizard.
 async fn ativar_squad_handler(
     State(state): State<BtvAgentState>,
@@ -514,7 +488,7 @@ fn registrar_entregas(
     task_id: &str,
     now: &str,
 ) {
-    use btv_domain::ports::RunRepository;
+    use btv_domain::ports::{LedgerRepository, RunRepository};
     let escritas = arquivos_escritos(&hub.tool_runs(task_id));
     if escritas.is_empty() {
         return;
@@ -555,17 +529,31 @@ fn registrar_entregas(
             now,
         ) {
             Ok(deliverable_id) => {
-                if let Err(e) = append_ledger(
-                    ledger,
-                    "btv.export_generated",
-                    serde_json::json!({
-                        "task_id": task_id,
-                        "deliverable_id": deliverable_id,
-                        "nome": nome,
-                        "formato": formato,
-                        "trilha": trilha,
-                    }),
-                ) {
+                // C3.4b: o fato `btv.export_generated` pela porta — corpo ganha
+                // `tenant` (ADR 0027); payload byte-idêntico (B3). Actor da
+                // conclusão = actor da ativação (capturado no `ctx`). Este é o
+                // ÚLTIMO emissor legado — o `append_ledger` morre com ele.
+                let task = match btv_domain::TaskId::parse(task_id) {
+                    Ok(t) => t,
+                    Err(_) => {
+                        eprintln!("btv: task_id inválido, entrega não registrada: {task_id}");
+                        continue;
+                    }
+                };
+                let evento = btv_domain::ports::DomainEvent {
+                    tenant: ctx.tenant,
+                    actor: ctx.actor.clone(),
+                    ts: now.to_string(),
+                    kind: btv_domain::ports::DomainEventKind::DeliverableProduced {
+                        task_id: task,
+                        deliverable_id,
+                        name: nome,
+                        format: formato,
+                        trail: trilha.clone(),
+                    },
+                };
+                let mut ledger = ledger.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = LedgerRepository::append(&mut *ledger, ctx, &evento) {
                     eprintln!("btv: falha ao registrar entrega no ledger: {e}");
                 }
             }
