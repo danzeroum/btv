@@ -1,0 +1,11 @@
+[package]
+name = "btv-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Suíte de contrato dual-adapter dos repositórios (Trilha B do plano DDD) — só dev-dependency; o MESMO conjunto de testes julga SQLite (B2) e Postgres (B4)"
+
+# Só o domínio: a suíte testa o CONTRATO das traits (comportamento
+# observável), nunca a implementação de um adapter específico.
+[dependencies]
+btv-domain = { workspace = true }

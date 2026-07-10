@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/btv-cli",
+    "crates/btv-contract",
     "crates/btv-core",
     "crates/btv-domain",
     "crates/btv-golden",
@@ -69,3 +70,4 @@ btv-proto = { path = "crates/btv-proto" }
 btv-sidecar = { path = "crates/btv-sidecar" }
 btv-server = { path = "crates/btv-server" }
 btv-golden = { path = "crates/btv-golden" }
+btv-contract = { path = "crates/btv-contract" }
