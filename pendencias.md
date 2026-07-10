@@ -1882,3 +1882,33 @@ entradas novas passam a carregar `"tenant"` no corpo (e portanto no JSON de
 `GET /api/ledger`): mudança de wire CONSCIENTE, com regravação de golden
 justificada no PR do C3 — não é drift, é o ADR 0027 item 2 chegando ao
 wire. O campo já é aditivo no contrato `ledger-entry.v1` desde o B3.
+
+**[decisão]** B4 — mecanismo de serialização do append por tenant no
+Postgres decidido: `UNIQUE (tenant_id, seq)` + retry otimista (ADR 0028,
+proposta — a decisão que o ADR 0027 item 1 diferiu). Razões na ordem que
+pesou: sobrevive a pooler em modo transação (locks de sessão ficariam
+presos à sessão do pooler); `pg_advisory_xact_lock` recebe `bigint` e
+hashear UUID→64 bits pode acoplar tenants distintos no mesmo lock por
+colisão (serialização cruzada espúria que nenhum teste pegaria); a
+correção mora na constraint declarada, sem protocolo implícito. Juiz:
+teste de appends concorrentes de pools separados — a prova-que-morde
+removeu o retry e ele reprovou com o 23505 cru.
+
+**[nota]** B4 — honestidades do adapter PG registradas: (a) `tenant_id` é
+TEXT (o UUID canônico do `TenantId`), não coluna `uuid` — espelha byte a
+byte o SQLite e o corpo hasheado; trocar o tipo é otimização futura que
+NÃO muda contrato. (b) `body` do ledger é TEXT, nunca JSONB — JSONB
+normaliza a representação e quebraria `verify_chain` silenciosamente.
+(c) O runtime tokio embutido (block_on por operação) é o custo do adapter
+async atrás de traits síncronas do G1 — se um dia o caminho quente migrar
+para async, a mudança é de assinatura e passa por revisão. (d) TLS da
+conexão PG não configurado no adapter (sqlx sem feature de TLS) — decisão
+de deployment da Trilha E/infra, não do contrato; registrar ao ligar o
+modo `BTV_MODE=saas` de verdade (B5).
+
+**[nota]** B4 — `PgStore` NÃO implementa a porta operacional legada
+(`LedgerStore::append`/`recent` sem contexto): aquela porta é a porta do
+modo LOCAL (decisão do B2), e o modo local é SQLite. No PG só existem as
+portas com `TenantContext`. Se a Trilha E um dia quiser eventos
+operacionais no SaaS, isso passa pela unificação de portas já registrada
+(OperationalEvent, pendência do G1).
