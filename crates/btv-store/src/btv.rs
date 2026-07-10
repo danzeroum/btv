@@ -1316,3 +1316,116 @@ mod tests {
         ));
     }
 }
+
+/// Uma linha cujo valor está FORA do vocabulário fechado do domínio (A3) —
+/// resultado da varredura do `btv doctor` (pendência da revisão do A4:
+/// transformar o fail-closed que "grita como UI vazia" em diagnóstico que
+/// aponta a linha).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VocabViolation {
+    pub tabela: &'static str,
+    /// `id` físico da linha ofensora (ou `seq` no ledger).
+    pub linha: i64,
+    pub coluna: &'static str,
+    pub valor: String,
+    pub erro: String,
+}
+
+impl BtvStore {
+    /// Varre `runs` e `deliverables` validando cada valor com os MESMOS
+    /// parses fail-closed do domínio (`TaskId::parse`/`RunStatus::parse`) —
+    /// a régua é uma só; o doctor só a aplica em lote e aponta a linha.
+    pub fn linhas_fora_do_vocabulario(&self) -> Result<Vec<VocabViolation>, BtvStoreError> {
+        let mut fora = Vec::new();
+        let mut stmt = self.conn.prepare("SELECT id, task_id, status FROM runs")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, task_id, status) = row?;
+            if let Err(e) = TaskId::parse(&task_id) {
+                fora.push(VocabViolation {
+                    tabela: "runs",
+                    linha: id,
+                    coluna: "task_id",
+                    valor: task_id.clone(),
+                    erro: e.to_string(),
+                });
+            }
+            if let Err(e) = RunStatus::parse(&status) {
+                fora.push(VocabViolation {
+                    tabela: "runs",
+                    linha: id,
+                    coluna: "status",
+                    valor: status,
+                    erro: e.to_string(),
+                });
+            }
+        }
+        let mut stmt = self.conn.prepare("SELECT id, task_id FROM deliverables")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        for row in rows {
+            let (id, task_id) = row?;
+            if let Err(e) = TaskId::parse(&task_id) {
+                fora.push(VocabViolation {
+                    tabela: "deliverables",
+                    linha: id,
+                    coluna: "task_id",
+                    valor: task_id,
+                    erro: e.to_string(),
+                });
+            }
+        }
+        Ok(fora)
+    }
+}
+
+#[cfg(test)]
+mod vocab_tests {
+    use super::*;
+
+    /// A varredura do doctor (pendência da revisão do A4) aponta A LINHA:
+    /// linhas corrompidas por fora do vocabulário (typo de status, task_id
+    /// malformado) viram diagnóstico com tabela+linha+coluna+valor — o
+    /// mesmo parse fail-closed do domínio, aplicado em lote.
+    #[test]
+    fn scan_aponta_a_linha_fora_do_vocabulario() {
+        let store = BtvStore::open_in_memory().unwrap();
+        store
+            .insert_run("sq1", "editorial", "v1.4", "Ok", "[]", "[]", "t")
+            .unwrap();
+        assert!(store.linhas_fora_do_vocabulario().unwrap().is_empty());
+
+        // Corrompe por fora da API (o que um UPDATE manual/bug faria).
+        store
+            .conn
+            .execute(
+                "UPDATE runs SET status = 'ativva' WHERE task_id = 'sq1'",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO deliverables (run_id, task_id, template_id, nome, path, formato,
+                                           versao, trilha, created_ts)
+                 VALUES (1, 'xx-9', 'editorial', 'e', '/tmp/e', 'MD', 'v1', 't', 't')",
+                [],
+            )
+            .unwrap();
+
+        let fora = store.linhas_fora_do_vocabulario().unwrap();
+        assert_eq!(fora.len(), 2);
+        let status = fora.iter().find(|v| v.coluna == "status").unwrap();
+        assert_eq!(status.tabela, "runs");
+        assert_eq!(status.valor, "ativva");
+        assert!(status.linha >= 1, "aponta a linha física");
+        let task = fora.iter().find(|v| v.tabela == "deliverables").unwrap();
+        assert_eq!(task.coluna, "task_id");
+        assert_eq!(task.valor, "xx-9");
+    }
+}

@@ -327,6 +327,10 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
                 _ => {}
             }
         }
+        let doctor_router = doctor_console::router(doctor_console::DoctorStores {
+            ledger: ledger.clone(),
+            btv: btv_store.clone(),
+        });
         let btv_router = btv_agent::router(
             squad_hub.clone(),
             squad_pool.clone(),
@@ -341,7 +345,6 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
         let memory_router = memory_console::router(memory_service);
         let sandbox_router = sandbox_console::router();
         let lsp_router = lsp_console::router(root.clone());
-        let doctor_router = doctor_console::router();
         let extra_router = squad_router
             .merge(btv_router)
             .merge(prompt_router)
