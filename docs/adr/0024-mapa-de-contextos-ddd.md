@@ -1,6 +1,6 @@
 # ADR 0024 — mapa de contextos DDD e classificação Core/Supporting/Generic
 
-- Status: proposta (aguardando revisão humana — portão G0 do plano DDD multitenant)
+- Status: aceito (portão G0 fechado por comentário humano no PR #15; re-ratificado no G2 — comentário 'aprovado' do dono no PR #25 sobre o checklist)
 - Data: 2026-07-09
 
 ## Contexto

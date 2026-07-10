@@ -1,6 +1,6 @@
 # ADR 0027 — hash-chain do ledger POR tenant, com tenant dentro do hash
 
-- Status: proposta (aguardando revisão humana — portão G0 do plano DDD multitenant)
+- Status: aceito (portão G0 fechado por comentário humano no PR #15, JÁ COM a emenda da revisão — o item 2, tenant no corpo hasheado, nasceu dela; implementado em B3/B4 e re-ratificado no G2, PR #25)
 - Data: 2026-07-09
 
 ## Contexto

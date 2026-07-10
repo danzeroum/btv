@@ -1912,3 +1912,12 @@ modo LOCAL (decisão do B2), e o modo local é SQLite. No PG só existem as
 portas com `TenantContext`. Se a Trilha E um dia quiser eventos
 operacionais no SaaS, isso passa pela unificação de portas já registrada
 (OperationalEvent, pendência do G1).
+
+**[registro]** G2 FECHADO — comentário "aprovado" do dono no PR #25 sobre
+o checklist do go/no-go (2026-07-10). As três assinaturas do item C:
+ADR 0028 aceito; Trilha E aberta (E1s — identidade/auth → TenantContext
+na borda — é o próximo elo); a escalação de payload do B3 está NA FILA DO
+DONO mas ainda SEM decisão (enriquecer variantes vs. regravação
+consciente) — C3 segue bloqueado até ela sair. Statuses dos ADRs
+0024–0028 atualizados para aceito com as citações dos portões (os
+arquivos estavam atrás dos fatos desde o G0/PR #15).
