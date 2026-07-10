@@ -22,6 +22,13 @@ mod sidecar;
 mod skills;
 mod squad;
 mod squad_agent;
+// E1s.2 constrói o extractor e o prova por testes unitários; a E1s.3 o
+// PLUGA nos seis consumidores (onde os itens passam a ser usados). Até lá
+// são dead_code LEGÍTIMO — scaffolding da borda, não código morto. A E1s.3
+// remove este allow ao wirar tudo: se sobrar item sem uso lá, o allow
+// removido reacende o lint e denuncia a wiring incompleta.
+#[allow(dead_code)]
+mod tenant_extractor;
 #[cfg(test)]
 mod test_support;
 mod tui_app;

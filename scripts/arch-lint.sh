@@ -75,4 +75,22 @@ else
     echo "OK(T4-B): handlers HTTP sem SQL cru e sem rusqlite."
 fi
 
+# ── D: BTV_MODE só no extractor (E1s.2) ─────────────────────────────────────
+# A resolução por modo (local×saas) é PEÇA ÚNICA: vive SÓ no extractor de
+# tenant. "Seis ifs de BTV_MODE espalhados são o SQL-em-handler da
+# autenticação" — a mesma doença (regra transversal por cópia), a mesma cura
+# (peça única + juiz mecânico). Qualquer leitura de `BTV_MODE` em código Rust
+# fora do módulo do extractor é a regra vazando de camada. Mesmo mecanismo
+# grep-por-fronteira do T4-B.
+extrator='crates/btv-cli/src/tenant_extractor.rs'
+fora_do_extrator=$(grep -rln 'BTV_MODE' crates --include='*.rs' | grep -vx "$extrator" || true)
+if [ -n "$fora_do_extrator" ]; then
+    echo "ERRO(T4-D): BTV_MODE lido fora do extractor de tenant ($extrator):"
+    echo "$fora_do_extrator"
+    echo "            A resolução por modo é peça única (E1s.2) — nenhum handler decide modo."
+    falhas=1
+else
+    echo "OK(T4-D): BTV_MODE só no extractor de tenant (resolução por modo é peça única)."
+fi
+
 exit "$falhas"
