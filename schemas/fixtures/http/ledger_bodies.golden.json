@@ -12,6 +12,19 @@
           {
             "actor": "web:btv",
             "entry_hash": "<volatil>",
+            "kind": "btv.persona_updated",
+            "payload": {
+              "papel": "Redator",
+              "prompt_sha256": "1bd47bf68d9ee07d063a14171d9c9d63962486c3e9b980a84d081c1607af0405",
+              "template_id": "editorial"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 5,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
             "kind": "btv.adjust_requested",
             "payload": {
               "etapa": "Aprovar o rascunho antes da revisão",
