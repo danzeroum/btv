@@ -8,6 +8,10 @@ description = "API local e dashboard de métricas da plataforma BuildToValue (ax
 [dependencies]
 btv-store.workspace = true
 btv-verify.workspace = true
+# C4: os consoles-roteadores axum migram de btv-cli para cá (T4 — btv-cli deixa
+# de importar axum). O console de sandbox (Fase 7 Onda 10, A6) usa
+# `btv_tools::sandbox::Sandbox`.
+btv-tools.workspace = true
 # btv-llm é usado só pelo bin `loadgen` (o alvo do load-test do k6, que embrulha
 # o ScriptedGenerator sem key real) — não pela lib do dashboard.
 btv-llm.workspace = true

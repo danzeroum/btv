@@ -16,7 +16,6 @@ mod mcp_console;
 mod memory_console;
 mod prompt_render;
 mod rate_limit_gen;
-mod sandbox_console;
 mod session;
 mod sidecar;
 mod skills;
@@ -427,7 +426,7 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
         let mcp_router = mcp_console::router(root.clone());
         let memory_service = memory_console::default_memory_service(&root);
         let memory_router = memory_console::router(memory_service);
-        let sandbox_router = sandbox_console::router();
+        let sandbox_router = btv_server::sandbox_console::router();
         let lsp_router = lsp_console::router(root.clone());
         let extra_router = squad_router
             .merge(btv_router)
