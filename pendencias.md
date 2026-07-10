@@ -1789,3 +1789,14 @@ exclusiva do DTO de serialização do adapter (Trilha B), goldens T1 de guarda.
 domínio precisar interpretar entradas (export da Trilha E, billing), nasce o
 `AuditEntry` próprio e o associated type morre. `ts: String` idem — newtype é
 candidato de A3.
+
+**[dúvida/defer]** A3 — `PapelUsuario` e `Severity` deferidos com razão, não
+por silêncio. `PapelUsuario`: o vocabulário de `papel` é ABERTO por design
+hoje (`create_user_handler` aceita string livre com default `"usuario"`; a UI
+só distingue `'admin'` — auditado em `Usuarios.tsx`); um enum rejeitaria
+papéis livres existentes = mudança de comportamento com 422 novo, não
+tipagem — precisa de decisão de produto (fechar o vocabulário?) antes do
+tipo. `Severity`: já existe como string em `btv-schemas::{review,verification}`
+(wire de `verification-evidence.v1`/`review`) — tipá-la é mudança no crate de
+CONTRATOS com fixtures de schema como juiz, PR próprio fora do btv-domain.
+Ambos ficam na fila da Trilha A, não esquecidos.

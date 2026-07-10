@@ -11,13 +11,15 @@
 //! JÁ são português (`nome`, `papeis`, `formato`, `trilha`…) permanecem — o
 //! wire está congelado pelos goldens T1 e property tests T3.
 
+pub mod ledger_kind;
 pub mod persona;
 pub mod ports;
 pub mod run;
 pub mod tenant;
 pub mod user;
 
+pub use ledger_kind::{LedgerKind, UnknownKind};
 pub use persona::{CustomPersona, PersonaOverride};
-pub use run::{Deliverable, Run};
+pub use run::{BriefingResposta, Deliverable, InvalidTaskId, Run, TaskId};
 pub use tenant::{ActorId, TenantContext, TenantError, TenantId};
 pub use user::User;
