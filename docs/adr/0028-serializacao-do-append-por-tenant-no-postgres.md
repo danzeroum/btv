@@ -1,7 +1,7 @@
 # ADR 0028 — serialização do append por tenant no Postgres: UNIQUE + retry otimista
 
-- Status: proposta (decisão diferida PELO ADR 0027 item 1 para a Trilha B4;
-  aguardando o aceite do dono junto com o PR do B4)
+- Status: aceito (portão G2 — comentário "aprovado" do dono no PR #25
+  sobre o checklist do go/no-go, cujo item C.1 é exatamente esta assinatura)
 - Data: 2026-07-10
 
 ## Contexto
