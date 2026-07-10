@@ -1809,3 +1809,19 @@ tipagem. O A4 preserva a semântica exata (comparação por representação
 textual em `get_run_by_task`); a decisão de normalizar (ou não) é tomada
 quando C3/B2 tocar a rota, um passo por PR. Registrado por instrução da
 revisão do A4.
+
+**[decisão]** A4 — transições de status seguem NÃO-AUDITADAS no ledger
+(comportamento de produção preservado; `transition_to` retorna `Result<(), _>`
+— fabricar `DomainEvent` sem kind no wire violaria o teste de cobertura
+variantes↔fixture). Consequência registrada por instrução da revisão: quando
+a Trilha E precisar de `RunCompleted`/`RunFailed` para metering, o kind novo
+nasce pelo caminho COMPLETO (fixture → `LedgerKind` → `DomainEventKind` →
+emissor real), nunca por atalho.
+
+**[dúvida/defer]** A4 — a história do OPERADOR do fail-closed: a leitura
+tipada de `runs`/`deliverables` derruba a lista inteira se uma linha tiver
+`task_id`/`status` fora do vocabulário (trade-off certo para corrupção —
+gritar, não filtrar em silêncio — mas hoje "grita" como UI vazia). Item de
+fila: check no `btv doctor` que varre as tabelas por valores fora do
+vocabulário e APONTA a linha — transforma "UI quebrada" em diagnóstico
+acionável. Pedido da revisão do A4; não entra no B2.
