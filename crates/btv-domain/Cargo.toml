@@ -5,15 +5,19 @@ edition.workspace = true
 license.workspace = true
 description = "Domínio BuildToValue (Trilha A do plano DDD multitenant): tenant, tipos de produto — SEM infraestrutura (vigiado por scripts/arch-lint.sh)"
 
-# Regra de dependência (ADR 0024/0025, lint T4-A do CI): SÓ serde, thiserror e
-# uuid. rusqlite/axum/tonic/reqwest aqui — direta ou transitivamente — é
+# Regra de dependência (ADR 0024/0025, lint T4-A do CI): SÓ serde,
+# serde_json, thiserror e uuid — todos puros, zero I/O. serde_json entrou
+# no D1t (emenda declarada da regra do A1): args de ferramenta e payloads
+# de conversa sempre FORAM `Value` no wire; os tipos que os carregam
+# (`chat`/`tool`/`event`) moram aqui desde a violação 4 fechar.
+# rusqlite/axum/tonic/reqwest aqui — direta ou transitivamente — é
 # build vermelho.
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
 # A3: propriedade gerador<->parser do TaskId (mesmo par provado por T3 via SQLite)
 proptest = "1"
