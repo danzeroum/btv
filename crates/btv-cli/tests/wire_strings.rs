@@ -63,26 +63,35 @@ fn run_status_dos_caminhos_de_producao_reproduz_exatamente_a_fixture() {
             .insert_run(&format!("sq{i:x}"), "editorial", "v1", "t", "[]", "[]", TS)
             .unwrap();
     }
-    store.set_status("sq1", "concluida", TS).unwrap();
-    store.set_status("sq2", "erro", TS).unwrap();
-    store.set_status("sq3", "encerrada", TS).unwrap();
+    store
+        .set_status("sq1", btv_domain::ports::RunStatus::Concluida, TS)
+        .unwrap();
+    store
+        .set_status("sq2", btv_domain::ports::RunStatus::Erro, TS)
+        .unwrap();
+    store
+        .set_status("sq3", btv_domain::ports::RunStatus::Encerrada, TS)
+        .unwrap();
     // O zumbi (sq4) e o sq0 continuam "ativa"; a reconciliação de startup
     // transiciona TODOS os ativos — então preservamos um "ativa" observado
     // ANTES de reconciliar.
     let antes = store.get_run_by_task("sq0").unwrap().unwrap();
     assert_eq!(
-        antes.status, "ativa",
+        antes.status.as_str(),
+        "ativa",
         "status inicial do caminho de produção"
     );
     store.reconcile_stale_runs(TS).unwrap();
 
+    // A4: o status agora é RunStatus — o conjunto observado vem de as_str(),
+    // que é EXATAMENTE o byte gravado no banco (é o que este teste prova).
     let mut observados: BTreeSet<String> = store
         .list_runs()
         .unwrap()
         .iter()
-        .map(|r| r.status.clone())
+        .map(|r| r.status.as_str().to_string())
         .collect();
-    observados.insert(antes.status.clone());
+    observados.insert(antes.status.as_str().to_string());
 
     assert_eq!(
         observados,
@@ -93,7 +102,7 @@ fn run_status_dos_caminhos_de_producao_reproduz_exatamente_a_fixture() {
     // Wire HTTP: serde repete a string do banco byte-a-byte.
     for run in store.list_runs().unwrap() {
         let json = serde_json::to_value(&run).unwrap();
-        assert_eq!(json["status"].as_str().unwrap(), run.status);
+        assert_eq!(json["status"].as_str().unwrap(), run.status.as_str());
     }
 }
 

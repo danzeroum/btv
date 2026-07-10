@@ -113,7 +113,11 @@ async fn golden_deliverables() {
         .increment_gates("sq1", "2026-07-08T10:05:00Z")
         .unwrap();
     store
-        .set_status("sq1", "concluida", "2026-07-08T10:10:00Z")
+        .set_status(
+            "sq1",
+            btv_domain::ports::RunStatus::Concluida,
+            "2026-07-08T10:10:00Z",
+        )
         .unwrap();
     store
         .insert_deliverable(

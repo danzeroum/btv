@@ -1,10 +1,9 @@
-//! G1 — ASSINATURAS para revisão humana (B1 + esqueleto do agregado A4).
-//!
-//! **Nada aqui tem implementação** (`todo!` onde o Rust exige corpo): errar
-//! assinatura multiplica retrabalho por todas as trilhas, então este arquivo
-//! para no portão G1 e espera o aceite antes de qualquer adapter (Trilha B)
-//! ou serviço de aplicação (C3). Cada decisão carrega o porquê no rustdoc —
-//! citável pelo ADR que fechar o G1.
+//! Ports e agregado do domínio — assinaturas aceitas no portão G1 e, desde
+//! A3/A4, implementadas: `RunStatus` (máquina de transições), o agregado
+//! `Run` (`approve_gate`/`transition_to`) e o `DomainEvent`. As TRAITS de
+//! repositório seguem sem implementação até B2 (adapter SQLite sob a suíte
+//! de contrato). Evoluções de assinatura vs. o G1 aceito estão declaradas
+//! no rustdoc do método correspondente (forma exigida pela revisão).
 //!
 //! Os quatro critérios de julgamento (revisão do G0) e onde cada um mora:
 //! 1. **Tenant fail-closed sem exceção** — todo método de toda trait recebe
@@ -22,7 +21,7 @@
 //!    unidade transacional run+entregas; não há como usar a API
 //!    corretamente e quebrar essa consistência.
 
-use crate::run::{Deliverable, Run};
+use crate::run::{Deliverable, Run, TaskId};
 use crate::tenant::{ActorId, TenantContext, TenantId};
 
 // ── status do run (A3 — implementado após o aceite do G1) ──────────────────
@@ -87,6 +86,22 @@ impl RunStatus {
     }
 }
 
+/// O wire (JSON das rotas e coluna do banco) usa exatamente `as_str` — a
+/// troca `String`→`RunStatus` no `Run` não move um byte (goldens T1 e T3
+/// como juízes, sem regravação).
+impl serde::Serialize for RunStatus {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for RunStatus {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        RunStatus::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 // ── eventos de domínio (A5) ─────────────────────────────────────────────────
 
 /// Evento de domínio: `tenant` e `actor` são obrigatórios ESTRUTURALMENTE —
@@ -126,27 +141,27 @@ pub struct DomainEvent {
 pub enum DomainEventKind {
     /// `btv.squad_activated`
     SquadActivated {
-        task_id: String,
+        task_id: TaskId,
         run_id: i64,
         template_id: String,
     },
     /// `btv.gate_approved` — carrega o contador APÓS o incremento: o evento
     /// é o fato consumado que o ledger registra.
     GateApproved {
-        task_id: String,
+        task_id: TaskId,
         stage: Option<String>,
         gates_approved: i64,
     },
     /// `btv.adjust_requested`
     AdjustRequested {
-        task_id: String,
+        task_id: TaskId,
         stage: Option<String>,
         instruction: String,
         gate_released: bool,
     },
     /// `btv.export_generated`
     DeliverableProduced {
-        task_id: String,
+        task_id: TaskId,
         deliverable_id: i64,
         name: String,
         format: String,
@@ -229,7 +244,6 @@ pub enum RepositoryError {
 
 // ── agregado Run (A4, esqueleto) ────────────────────────────────────────────
 
-#[allow(unused_variables)] // corpos todo!() até o aceite do G1
 impl Run {
     /// Aprovar o gate HITL pendente — ÚNICA porta para incrementar
     /// `gates_aprovados` (critério 3). Valida que o run está `Ativa` (a
@@ -238,20 +252,67 @@ impl Run {
     /// (serviço de aplicação, C3) persiste via `RunRepository::save` e
     /// registra via `LedgerRepository::append`, mas NÃO decide: o contador
     /// deixa de ser um i64 solto mutado por UPDATE.
-    pub fn approve_gate(&mut self, ctx: &TenantContext) -> Result<DomainEvent, RunError> {
-        todo!("A4, após aceite do G1")
+    ///
+    /// Evolução de assinatura vs. G1 (pré-aprovada na revisão, na forma
+    /// exigida — o porquê de cada insumo): `stage` é o nome do gate exibido
+    /// (vai no evento, como o payload atual do ledger carrega); `ts` é o
+    /// relógio do CHAMADOR (o domínio não lê relógio — determinismo). O
+    /// agregado segue decidindo; o chamador só fornece insumos.
+    pub fn approve_gate(
+        &mut self,
+        ctx: &TenantContext,
+        stage: Option<String>,
+        ts: String,
+    ) -> Result<DomainEvent, RunError> {
+        if self.status != RunStatus::Ativa {
+            // Aprovar gate é operação de run Ativa: num terminal, o erro
+            // nomeia a transição implícita que seria necessária (voltar a
+            // Ativa) — que a máquina proíbe. Estado NÃO muda.
+            return Err(RunError::InvalidTransition {
+                from: self.status,
+                to: RunStatus::Ativa,
+            });
+        }
+        self.gates_aprovados += 1;
+        self.updated_ts = ts.clone();
+        Ok(DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts,
+            kind: DomainEventKind::GateApproved {
+                task_id: self.task_id,
+                stage,
+                gates_approved: self.gates_aprovados,
+            },
+        })
     }
 
     /// Transição de status pela máquina de `RunStatus` — substitui o
     /// `set_status(task_id, "qualquer_string")` atual. `Concluida → Ativa`
     /// não compila no chamador tipado e retorna `InvalidTransition` no
-    /// caminho dinâmico.
+    /// caminho dinâmico; em erro, o estado NÃO muda.
+    ///
+    /// Evolução de assinatura vs. G1 (declarada): retorna `Result<(), _>`,
+    /// não `DomainEvent` — transição de status NUNCA foi fato auditado no
+    /// wire (nenhum kind de ledger existe para ela; o teste de cobertura
+    /// variantes↔fixture proíbe variante sem kind real). Retornar um evento
+    /// aqui fabricaria auditoria que o produto não tem — Nada Fake vence a
+    /// simetria da assinatura. `ts` idem `approve_gate`.
     pub fn transition_to(
         &mut self,
-        ctx: &TenantContext,
+        _ctx: &TenantContext,
         target: RunStatus,
-    ) -> Result<DomainEvent, RunError> {
-        todo!("A4, após aceite do G1")
+        ts: String,
+    ) -> Result<(), RunError> {
+        if !self.status.can_transition_to(target) {
+            return Err(RunError::InvalidTransition {
+                from: self.status,
+                to: target,
+            });
+        }
+        self.status = target;
+        self.updated_ts = ts;
+        Ok(())
     }
 }
 
@@ -443,23 +504,23 @@ mod tests {
     fn uma_de_cada_variante() -> Vec<DomainEventKind> {
         vec![
             DomainEventKind::SquadActivated {
-                task_id: "sq1".into(),
+                task_id: TaskId::new(1),
                 run_id: 1,
                 template_id: "editorial".into(),
             },
             DomainEventKind::GateApproved {
-                task_id: "sq1".into(),
+                task_id: TaskId::new(1),
                 stage: None,
                 gates_approved: 1,
             },
             DomainEventKind::AdjustRequested {
-                task_id: "sq1".into(),
+                task_id: TaskId::new(1),
                 stage: None,
                 instruction: "tom formal".into(),
                 gate_released: true,
             },
             DomainEventKind::DeliverableProduced {
-                task_id: "sq1".into(),
+                task_id: TaskId::new(1),
                 deliverable_id: 1,
                 name: "artigo.md".into(),
                 format: "MD".into(),
@@ -532,6 +593,123 @@ mod tests {
             "auto-transição não é transição"
         );
         assert!(!Concluida.can_transition_to(Erro));
+    }
+
+    fn run_ativo() -> Run {
+        Run {
+            id: 1,
+            task_id: TaskId::new(1),
+            template_id: "editorial".into(),
+            template_versao: "v1.4".into(),
+            nome: "Newsletter".into(),
+            briefing_json: "[]".into(),
+            papeis_json: "[]".into(),
+            status: RunStatus::Ativa,
+            gates_aprovados: 0,
+            created_ts: "2026-07-08T10:00:00Z".into(),
+            updated_ts: "2026-07-08T10:00:00Z".into(),
+            tenant: TenantId::LOCAL,
+        }
+    }
+
+    fn ctx() -> TenantContext {
+        TenantContext::local(ActorId::new("web:btv").unwrap())
+    }
+
+    /// A4 (DoD: invariante testada SEM banco): aprovar o gate incrementa,
+    /// atualiza o relógio e retorna o evento COMPLETO — tenant/actor do
+    /// contexto, contador pós-incremento, kind certo.
+    #[test]
+    fn approve_gate_incrementa_e_retorna_o_evento() {
+        let mut run = run_ativo();
+        let evento = run
+            .approve_gate(
+                &ctx(),
+                Some("Aprovar o rascunho".into()),
+                "2026-07-08T10:05:00Z".into(),
+            )
+            .unwrap();
+        assert_eq!(run.gates_aprovados, 1);
+        assert_eq!(run.updated_ts, "2026-07-08T10:05:00Z");
+        assert_eq!(evento.tenant, TenantId::LOCAL);
+        assert_eq!(evento.actor.as_str(), "web:btv");
+        assert_eq!(evento.ts, "2026-07-08T10:05:00Z");
+        match evento.kind {
+            DomainEventKind::GateApproved {
+                task_id,
+                stage,
+                gates_approved,
+            } => {
+                assert_eq!(task_id, TaskId::new(1));
+                assert_eq!(stage.as_deref(), Some("Aprovar o rascunho"));
+                assert_eq!(
+                    gates_approved, 1,
+                    "o evento carrega o contador PÓS-incremento"
+                );
+            }
+            outro => panic!("kind errado: {outro:?}"),
+        }
+        // segundo gate: contador segue pelo agregado, não por UPDATE solto
+        let evento2 = run
+            .approve_gate(&ctx(), None, "2026-07-08T10:06:00Z".into())
+            .unwrap();
+        assert!(matches!(
+            evento2.kind,
+            DomainEventKind::GateApproved {
+                gates_approved: 2,
+                ..
+            }
+        ));
+    }
+
+    /// A4, teste NEGATIVO de negócio (pedido explícito da revisão): aprovar
+    /// gate em run terminal retorna `InvalidTransition` e o ESTADO NÃO MUDA
+    /// — asserção no estado, não só no erro. É o invariante que justifica o
+    /// agregado existir.
+    #[test]
+    fn approve_gate_em_run_terminal_falha_sem_mutar_o_estado() {
+        for terminal in [RunStatus::Concluida, RunStatus::Encerrada, RunStatus::Erro] {
+            let mut run = run_ativo();
+            run.status = terminal;
+            run.gates_aprovados = 3;
+            let antes = run.clone();
+            let err = run
+                .approve_gate(&ctx(), None, "2026-07-08T11:00:00Z".into())
+                .unwrap_err();
+            assert_eq!(
+                err,
+                RunError::InvalidTransition {
+                    from: terminal,
+                    to: RunStatus::Ativa
+                }
+            );
+            assert_eq!(run, antes, "estado intacto após a recusa ({terminal:?})");
+        }
+    }
+
+    /// A4: transição válida muda status+relógio e NÃO fabrica evento
+    /// (transição nunca foi fato auditado no wire — desvio declarado);
+    /// inválida falha com o estado intacto.
+    #[test]
+    fn transition_to_respeita_a_maquina_sem_fabricar_evento() {
+        let mut run = run_ativo();
+        run.transition_to(&ctx(), RunStatus::Concluida, "2026-07-08T12:00:00Z".into())
+            .unwrap();
+        assert_eq!(run.status, RunStatus::Concluida);
+        assert_eq!(run.updated_ts, "2026-07-08T12:00:00Z");
+
+        let antes = run.clone();
+        let err = run
+            .transition_to(&ctx(), RunStatus::Ativa, "2026-07-08T13:00:00Z".into())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            RunError::InvalidTransition {
+                from: RunStatus::Concluida,
+                to: RunStatus::Ativa
+            }
+        );
+        assert_eq!(run, antes, "estado intacto após transição inválida");
     }
 
     /// Pedido da revisão do G1 (lacuna 2): o vocabulário `btv.*` da fixture

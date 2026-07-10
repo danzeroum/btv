@@ -1800,3 +1800,12 @@ tipo. `Severity`: já existe como string em `btv-schemas::{review,verification}`
 (wire de `verification-evidence.v1`/`review`) — tipá-la é mudança no crate de
 CONTRATOS com fixtures de schema como juiz, PR próprio fora do btv-domain.
 Ambos ficam na fila da Trilha A, não esquecidos.
+
+**[dúvida/defer]** A4 — normalização do `TaskId` na borda HTTP: hoje um id
+com hex maiúsculo na URL (`sq1F`) dá 404 (igualdade textual com o id gerado
+minúsculo); com `TaskId` no agregado seria trivial normalizar no parse da
+borda e passar a ENCONTRAR — mudança de comportamento observável, não
+tipagem. O A4 preserva a semântica exata (comparação por representação
+textual em `get_run_by_task`); a decisão de normalizar (ou não) é tomada
+quando C3/B2 tocar a rota, um passo por PR. Registrado por instrução da
+revisão do A4.

@@ -28,7 +28,11 @@ fn main() {
         .increment_gates(&task_id, "2026-07-08T00:05:00Z")
         .expect("gate");
     store
-        .set_status(&task_id, "concluida", "2026-07-08T00:10:00Z")
+        .set_status(
+            &task_id,
+            btv_domain::ports::RunStatus::Concluida,
+            "2026-07-08T00:10:00Z",
+        )
         .expect("status");
     let nome = std::path::Path::new(arquivo)
         .file_name()

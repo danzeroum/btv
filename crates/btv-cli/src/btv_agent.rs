@@ -377,7 +377,7 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
         }
         // Estado final honesto: kill-switch > erro no log > concluída.
         let status = if state.squad.hub.is_stopped(&task_id) {
-            "encerrada"
+            btv_domain::ports::RunStatus::Encerrada
         } else {
             let (log, _) = state.squad.hub.subscribe(&task_id);
             let teve_erro = log.iter().any(|e| {
@@ -387,9 +387,9 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
                 )
             });
             if teve_erro {
-                "erro"
+                btv_domain::ports::RunStatus::Erro
             } else {
-                "concluida"
+                btv_domain::ports::RunStatus::Concluida
             }
         };
         let now = crate::session::now_rfc3339();
@@ -402,7 +402,7 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String) {
         // de procedência (papéis do run + gates aprovados) e registro no
         // ledger. Só em conclusão limpa — run com erro/encerrado não
         // "entrega".
-        if status == "concluida" {
+        if status == btv_domain::ports::RunStatus::Concluida {
             let escritas = arquivos_escritos(&state.squad.hub.tool_runs(&task_id));
             if !escritas.is_empty() {
                 let store = state.store.lock().unwrap_or_else(|e| e.into_inner());

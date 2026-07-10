@@ -9,7 +9,8 @@
 //! o `LedgerStore` — este store guarda estado consultável, não trilha
 //! imutável.
 
-use btv_domain::TenantId;
+use btv_domain::ports::RunStatus;
+use btv_domain::{TaskId, TenantId};
 use rusqlite::{params, Connection, OptionalExtension};
 
 // Tarefa A2 do plano DDD: os tipos do produto moram em `btv-domain` (com
@@ -176,11 +177,20 @@ impl BtvStore {
 
     /// Transição de status ao fim da execução (`concluida`/`erro`) ou no
     /// kill-switch (`encerrada`). Silencioso para task_id desconhecido — o
-    /// watcher pode sobreviver a um run apagado.
-    pub fn set_status(&self, task_id: &str, status: &str, now: &str) -> Result<(), BtvStoreError> {
+    /// watcher pode sobreviver a um run apagado. A4: recebe `RunStatus`
+    /// tipado — `status = "qualquer_string"` não compila mais; o SQL grava
+    /// exatamente `as_str()` (mesmos bytes de sempre, T3 como juiz). Este
+    /// método morre em B2, quando a mutação passa a fluir pelo agregado +
+    /// `RunRepository::save`.
+    pub fn set_status(
+        &self,
+        task_id: &str,
+        status: RunStatus,
+        now: &str,
+    ) -> Result<(), BtvStoreError> {
         self.conn.execute(
             "UPDATE runs SET status = ?2, updated_ts = ?3 WHERE task_id = ?1",
-            params![task_id, status, now],
+            params![task_id, status.as_str(), now],
         )?;
         Ok(())
     }
@@ -194,15 +204,32 @@ impl BtvStore {
              FROM runs ORDER BY id DESC",
         )?;
         let rows = stmt.query_map([], |row| {
+            let task_id_raw: String = row.get(1)?;
+            let status_raw: String = row.get(7)?;
             Ok(BtvRun {
                 id: row.get(0)?,
-                task_id: row.get(1)?,
+                // Fail-closed: linha com task_id/status fora do vocabulário é
+                // ERRO de leitura, não valor fabricado (todo dado real passa —
+                // os dois formatos são os que o próprio produto sempre gravou).
+                task_id: TaskId::parse(&task_id_raw).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        1,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?,
                 template_id: row.get(2)?,
                 template_versao: row.get(3)?,
                 nome: row.get(4)?,
                 briefing_json: row.get(5)?,
                 papeis_json: row.get(6)?,
-                status: row.get(7)?,
+                status: RunStatus::parse(&status_raw).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        7,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?,
                 gates_aprovados: row.get(8)?,
                 created_ts: row.get(9)?,
                 updated_ts: row.get(10)?,
@@ -222,7 +249,10 @@ impl BtvStore {
     }
 
     pub fn get_run_by_task(&self, task_id: &str) -> Result<Option<BtvRun>, BtvStoreError> {
-        Ok(self.list_runs()?.into_iter().find(|r| r.task_id == task_id))
+        Ok(self
+            .list_runs()?
+            .into_iter()
+            .find(|r| r.task_id.to_string() == task_id))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -252,10 +282,17 @@ impl BtvStore {
              FROM deliverables ORDER BY id DESC",
         )?;
         let rows = stmt.query_map([], |row| {
+            let task_id_raw: String = row.get(2)?;
             Ok(BtvDeliverable {
                 id: row.get(0)?,
                 run_id: row.get(1)?,
-                task_id: row.get(2)?,
+                task_id: TaskId::parse(&task_id_raw).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?,
                 template_id: row.get(3)?,
                 nome: row.get(4)?,
                 path: row.get(5)?,
@@ -568,14 +605,14 @@ mod tests {
         assert!(id > 0);
         let runs = store.list_runs().unwrap();
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].status, "ativa");
+        assert_eq!(runs[0].status, RunStatus::Ativa);
         assert_eq!(runs[0].template_id, "editorial");
 
         store
-            .set_status("sq1", "concluida", "2026-07-08T00:10:00Z")
+            .set_status("sq1", RunStatus::Concluida, "2026-07-08T00:10:00Z")
             .unwrap();
         let runs = store.list_runs().unwrap();
-        assert_eq!(runs[0].status, "concluida");
+        assert_eq!(runs[0].status, RunStatus::Concluida);
         assert_eq!(runs[0].updated_ts, "2026-07-08T00:10:00Z");
     }
 
@@ -728,14 +765,14 @@ mod tests {
         store
             .insert_run("sq2", "editorial", "v1", "R2", "[]", "[]", "t2")
             .unwrap();
-        store.set_status("sq2", "concluida", "t2").unwrap(); // concluída NÃO deve mudar
+        store.set_status("sq2", RunStatus::Concluida, "t2").unwrap(); // concluída NÃO deve mudar
         let n = store.reconcile_stale_runs("t3").unwrap();
         assert_eq!(n, 1, "só a 'ativa' órfã é reconciliada");
         let runs = store.list_runs().unwrap();
-        let sq1 = runs.iter().find(|r| r.task_id == "sq1").unwrap();
-        let sq2 = runs.iter().find(|r| r.task_id == "sq2").unwrap();
-        assert_eq!(sq1.status, "encerrada");
-        assert_eq!(sq2.status, "concluida", "concluída fica intacta");
+        let sq1 = runs.iter().find(|r| r.task_id == TaskId::new(1)).unwrap();
+        let sq2 = runs.iter().find(|r| r.task_id == TaskId::new(2)).unwrap();
+        assert_eq!(sq1.status, RunStatus::Encerrada);
+        assert_eq!(sq2.status, RunStatus::Concluida, "concluída fica intacta");
     }
 
     #[test]
