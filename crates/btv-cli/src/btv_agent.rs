@@ -705,8 +705,15 @@ async fn pedir_ajuste_handler(
 
 /// `GET /api/btv/deliverables` — Biblioteca de entregas (U4).
 async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Response {
+    // C3.1 endpoint 5: leitura pela porta (RunRepository::list_deliverables),
+    // ctx LOCAL fixo — mesmo tipo (Deliverable re-exportado desde A2), wire
+    // intacto. Nenhum evento: leitura não é fato auditável.
+    use btv_domain::ports::RunRepository;
+    let ctx = btv_domain::TenantContext::local(
+        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+    );
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.list_deliverables() {
+    match RunRepository::list_deliverables(&*store, &ctx) {
         Ok(list) => Json(list).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
