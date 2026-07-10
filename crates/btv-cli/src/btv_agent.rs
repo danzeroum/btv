@@ -910,16 +910,17 @@ struct PromptBody {
 async fn set_override_handler(
     State(state): State<BtvAgentState>,
     Path((template_id, papel)): Path<(String, String)>,
+    Tenant(ctx): Tenant,
     Json(body): Json<PromptBody>,
 ) -> Response {
+    // C3.2 endpoint 1 (o emissor da onda de personas): a escrita vai pela PORTA
+    // (`PersonaRepository::set_override`) com o contexto da borda — o
+    // `updated_ts` é escrituração do adapter (o port não carrega relógio,
+    // decisão do G1). Wire imóvel: o golden `personas` é o juiz.
     {
-        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        if let Err(e) = store.set_persona_override(
-            &template_id,
-            &papel,
-            &body.prompt,
-            &crate::session::now_rfc3339(),
-        ) {
+        use btv_domain::ports::PersonaRepository;
+        let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = store.set_override(&ctx, &template_id, &papel, &body.prompt) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody::new("store_error", e.to_string())),
@@ -927,16 +928,26 @@ async fn set_override_handler(
                 .into_response();
         }
     }
-    if let Err(e) = append_ledger(
-        &state.ledger,
-        "btv.persona_updated",
-        serde_json::json!({
-            "template_id": template_id,
-            "papel": papel,
-            "prompt_sha256": btv_schemas::sha256_hex(&body.prompt),
-        }),
-    ) {
-        eprintln!("btv: falha ao registrar persona no ledger: {e}");
+    // O fato `btv.persona_updated` vai pela porta do ledger — o corpo hasheado
+    // ganha `tenant` (ADR 0027; regravação justificada do golden no ato 3). O
+    // mapeamento `role → "papel"` já vive no adapter desde o B3 (`ledger.rs`);
+    // o `append_ledger` legado morre NESTE caminho.
+    {
+        use btv_domain::ports::LedgerRepository;
+        let evento = btv_domain::ports::DomainEvent {
+            tenant: ctx.tenant,
+            actor: ctx.actor.clone(),
+            ts: crate::session::now_rfc3339(),
+            kind: btv_domain::ports::DomainEventKind::PersonaUpdated {
+                template_id,
+                role: papel,
+                prompt_sha256: btv_schemas::sha256_hex(&body.prompt),
+            },
+        };
+        let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+            eprintln!("btv: falha ao registrar persona no ledger: {e}");
+        }
     }
     StatusCode::OK.into_response()
 }

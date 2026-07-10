@@ -421,6 +421,7 @@ async fn reqwest_step(
     let builder = match method {
         "POST" => client.post(&url),
         "GET" => client.get(&url),
+        "PUT" => client.put(&url),
         other => panic!("método inesperado: {other}"),
     };
     let builder = match &body {
@@ -555,6 +556,24 @@ async fn golden_squad_activation() {
         vec![passo_ativa_a, passo_gate, passo_ativa_b, passo_ajuste],
     );
 
+    // C3.2 (cobertura NOVA — ato 1, ANTES de estrangular `set_override`):
+    // dispara o emissor de persona LEGADO (`append_ledger` cru: `papel`, SEM
+    // tenant) para o golden `ledger_bodies` pinar o corpo `btv.persona_updated`
+    // ANTES da troca de porta. O juiz existe antes da mudança que ele julga
+    // (lição do C3.1, em miniatura). O passo NÃO entra no golden
+    // `squad_activation` (só no corpo do ledger); a resposta (200 vazio) já é
+    // coberta pelo golden `personas`.
+    let _ = reqwest_step(
+        &client,
+        &base,
+        "override de persona (emissor legado — pré-estrangulamento C3.2)",
+        "PUT",
+        "/api/btv/personas/editorial/Redator",
+        Some(serde_json::json!({"prompt": "escreva com clareza e brevidade"})),
+        &[],
+    )
+    .await;
+
     // Anti-fake, fora do golden: o fluxo EXECUTOU — auditoria no ledger e
     // contador de gates persistido, não só respostas HTTP bem formadas.
     {
@@ -564,6 +583,7 @@ async fn golden_squad_activation() {
         assert_eq!(conta("btv.squad_activated"), 2);
         assert_eq!(conta("btv.gate_approved"), 1);
         assert_eq!(conta("btv.adjust_requested"), 1);
+        assert_eq!(conta("btv.persona_updated"), 1, "C3.2 ato 1: 1 override");
         guard.verify_chain().unwrap();
 
         // C3.1 (primeiro estrangulado): a entrada de gate agora nasce da
@@ -596,14 +616,26 @@ async fn golden_squad_activation() {
             Some(btv_domain::TenantId::LOCAL),
             "ativação estrangulada (endpoint 2): tenant no corpo"
         );
-        // Endpoint 3 fechou a escrita da onda: TODOS os emissores btv.*
-        // deste fluxo passam pela porta — o estado misto ACABOU, e cada
-        // entrada carrega o tenant no corpo hasheado (ADR 0027).
+        // C3.2 ato 2: `set_override` ESTRANGULADO — o emissor de persona nasce
+        // da porta do ledger; o corpo carrega `tenant` (ADR 0027). O estado
+        // misto FECHOU de novo: todo emissor `btv.*` deste fluxo passa pela
+        // porta. (O `role → "papel"` do adapter mantém o payload byte-idêntico;
+        // o ganho é a linha `tenant`, regravada no golden no ato 3.)
+        let persona = entradas
+            .iter()
+            .find(|e| e.kind == "btv.persona_updated")
+            .expect("entrada de persona existe");
+        assert_eq!(persona.payload["template_id"], "editorial");
+        assert_eq!(
+            persona.payload["papel"], "Redator",
+            "adapter mapeia role→papel"
+        );
+        assert!(persona.payload["prompt_sha256"].is_string());
         assert!(
             entradas
                 .iter()
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "nenhum emissor legado restante no fluxo"
+            "nenhum emissor legado restante no fluxo (persona estrangulada)"
         );
     }
     {
