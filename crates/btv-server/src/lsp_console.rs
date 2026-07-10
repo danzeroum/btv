@@ -1,8 +1,7 @@
 //! Fase 7 Onda 10 (A7): enumera `.btv/lsp.toml` para exibição via
-//! `btv_tools::lsp::read_server_configs`. C4-3 extraiu esse leitor do
-//! `skills.rs` para `btv-tools` (dono do tipo), então o antigo motivo de morar
-//! na `btv-cli` (reusar `crate::skills`) caiu — este console está pronto para
-//! migrar a `btv-server` no C4-4.
+//! `btv_tools::lsp::read_server_configs`. C4-4: migrou para `btv-server` (a
+//! casa da borda axum) — o leitor de config já vivia em `btv-tools` desde o
+//! C4-3, então o movimento é puro.
 //!
 //! **Zero probe sob demanda**: esta rota NUNCA sobe o processo do language
 //! server para "ver se está rodando" — isso quebraria exatamente a
