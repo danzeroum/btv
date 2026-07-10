@@ -556,6 +556,36 @@ async fn golden_squad_activation() {
         assert_eq!(conta("btv.gate_approved"), 1);
         assert_eq!(conta("btv.adjust_requested"), 1);
         guard.verify_chain().unwrap();
+
+        // C3.1 (primeiro estrangulado): a entrada de gate agora nasce da
+        // PORTA de domínio — o payload carrega o contador pós-incremento e
+        // o corpo hasheado carrega o tenant (ADR 0027; a mudança de wire
+        // consciente anunciada desde o B3). As entradas dos emissores ainda
+        // não estrangulados (ativação/ajuste) seguem SEM tenant — os dois
+        // regimes convivem na mesma cadeia até as ondas seguintes.
+        let gate = entradas
+            .iter()
+            .find(|e| e.kind == "btv.gate_approved")
+            .expect("entrada de gate existe");
+        assert_eq!(gate.actor, "web:btv", "mesmo actor do emissor legado");
+        assert_eq!(gate.payload["etapa"], "Aprovar o rascunho antes da revisão");
+        assert_eq!(
+            gate.payload["gates_aprovados"], 1,
+            "o payload carrega o contador pós-incremento (variante do G1)"
+        );
+        assert_eq!(
+            gate.tenant,
+            Some(btv_domain::TenantId::LOCAL),
+            "entrada nova carrega o tenant no corpo hasheado"
+        );
+        let ativacao = entradas
+            .iter()
+            .find(|e| e.kind == "btv.squad_activated")
+            .expect("entrada de ativação existe");
+        assert_eq!(
+            ativacao.tenant, None,
+            "emissor não estrangulado: sem tenant"
+        );
     }
     {
         let guard = store.lock().unwrap_or_else(|e| e.into_inner());

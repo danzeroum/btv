@@ -2011,3 +2011,22 @@ fixture na descrição, justificativa citando o ADR. Ordem aprovada:
 C3.0 → C3.1 → E1s → (C3.2 ∥ C3.3) → C3.4; primeiro endpoint da C3.1 =
 POST /api/btv/squads/{task_id}/gate (menor com agregado no meio, vira o
 exemplo canônico) — UM ENDPOINT POR PR (D5 do plano-mestre).
+
+**[registro+achado]** C3.1 primeiro estrangulado (POST .../gate): o
+handler trocou `increment_gates` cru + JSON solto por `Run::approve_gate`
++ `RunRepository::save` + `LedgerRepository::append` (contexto de fonte
+LOCAL fixa — a E1s troca a FONTE, não o consumidor). Wire novo da entrada
+de gate: payload ganha `gates_aprovados` (contador pós-incremento, a
+variante do G1) e o corpo hasheado ganha `tenant` (ADR 0027). ACHADO do
+rito: **a "primeira regravação de golden" não se materializou** — o
+golden `squad_activation` pina os passos HTTP (o gate responde 200 vazio,
+inalterado) e o golden de ledger do T1 é SEEDADO por script, não flui dos
+emissores; nenhum fixture pinava o corpo da entrada de gate. A mudança de
+wire está pinada por asserções anti-fake novas no harness (payload
+`gates_aprovados`, `tenant` presente na entrada estrangulada E ausente
+nas dos emissores ainda legados — os dois regimes convivem na mesma
+cadeia). O rito da regravação fica armado para a primeira onda que tocar
+um golden que PINE corpo de ledger fluindo de emissor — se nenhuma tocar,
+o rito não dispara e isso é o resultado honesto, não uma omissão.
+`increment_gates` mantém os usos de seed/teste; o caminho de produção não
+o chama mais.
