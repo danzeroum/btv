@@ -12,6 +12,18 @@
           {
             "actor": "web:btv",
             "entry_hash": "<volatil>",
+            "kind": "btv.template_published",
+            "payload": {
+              "publicado": true,
+              "template_id": "editorial"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 6,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
             "kind": "btv.persona_updated",
             "payload": {
               "papel": "Redator",
