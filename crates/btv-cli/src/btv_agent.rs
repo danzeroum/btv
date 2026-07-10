@@ -734,8 +734,17 @@ async fn download_deliverable_handler(
     Path(id): Path<i64>,
 ) -> Response {
     let deliverable = {
+        // C3.1 endpoint 6 (fecha a onda): leitura pela porta, ctx LOCAL
+        // fixo — id de outro tenant é indistinguível de inexistente
+        // (isolamento na leitura, contrato da suíte desde o B2). A leitura
+        // do ARQUIVO em disco continua abaixo, fora da porta (é filesystem,
+        // não estado do agregado).
+        use btv_domain::ports::RunRepository;
+        let ctx = btv_domain::TenantContext::local(
+            btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+        );
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        match store.get_deliverable(id) {
+        match RunRepository::get_deliverable(&*store, &ctx, id) {
             Ok(Some(d)) => d,
             Ok(None) => {
                 return (
