@@ -1852,3 +1852,33 @@ desenho (o G1 não definiu `UserRepository` — perfis locais sem auth são áre
 do modo local até a Trilha E definir identidade SaaS). A tabela ganhou
 `tenant_id` na migração como as demais, e `list_users` lê a coluna
 fail-closed — mas a porta segue legada, escopo LOCAL.
+
+**[decisão]** B3 — porta operacional do ledger tenantizada REUSANDO a
+decisão registrada do B2 (porta legada = porta do modo local, acima):
+`LedgerStore::append`/`recent` sem contexto caem na cadeia LOCAL (coluna
+via default; leitura com escopo fixo). As entradas legadas e as da porta
+sem contexto seguem SEM `tenant` no corpo — corpo canônico byte-idêntico,
+hashes antigos válidos sem re-hash (teste congelado em `btv-schemas`, com
+valores computados no código pré-B3). As DUAS portas alimentam a MESMA
+cadeia por tenant, como o rustdoc do port declara desde o G1.
+
+**[dúvida/defer]** B3 — lacunas de payload entre `DomainEventKind` e os
+emissores atuais de `btv_agent.rs`, para decisão do dono quando C3 trocar
+os emissores pela porta `LedgerRepository`: (a) `btv.squad_activated` hoje
+grava também `template_versao`/`nome`/`papeis`/`personas_proprias`/
+`prompt_hashes`/`refs`, que a variante aceita no G1 não carrega (e
+`refs`/`prompt_hashes` exigiriam decisão de tipo — o domínio não pode
+carregar `serde_json::Value`, regra de deps do A1); (b)
+`btv.export_generated` grava `trilha`, ausente da variante; (c)
+`btv.gate_approved` pela porta nova ganha `gates_aprovados`
+(enriquecimento DELIBERADO da variante — o evento carrega o contador
+pós-incremento). Os caminhos possíveis em C3: enriquecer as variantes
+(evolução de assinatura na forma exigida) ou aceitar o payload mais magro
+com regravação consciente dos goldens. Nenhum emissor de produção foi
+trocado no B3 — wire intacto, goldens verdes sem regravação.
+
+**[nota]** B3 — quando C3 trocar os emissores para a porta de domínio, as
+entradas novas passam a carregar `"tenant"` no corpo (e portanto no JSON de
+`GET /api/ledger`): mudança de wire CONSCIENTE, com regravação de golden
+justificada no PR do C3 — não é drift, é o ADR 0027 item 2 chegando ao
+wire. O campo já é aditivo no contrato `ledger-entry.v1` desde o B3.
