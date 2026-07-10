@@ -920,9 +920,12 @@ pub fn merged_router(
         .merge(router(hub))
         .merge(extra)
         // Borda de tenant UNIVERSAL (E1s.3, ADR 0029): o extractor por-handler
-        // só guarda as rotas que o declaram (os seis consumidores da C3.1);
-        // este layer fecha o RESTO da superfície (personas/templates/users/…
-        // ainda não estranguladas) para que o modo saas não nasça sem borda.
+        // guarda cada rota que o declara (com a C3.4a, as 22 rotas de produto);
+        // este layer fecha o RESTO da superfície POR CONSTRUÇÃO — rotas
+        // inexistentes e o `.fallback()` do SPA, que não têm handler onde
+        // pendurar um extractor — para que o modo saas não vaze a shell a
+        // não-autenticados. É carga estrutural, não redundância (prova em
+        // `tenant_border_sweep::prova_que_morde_sem_o_layer_o_fallback_do_spa_vaza`).
         // Local = no-op (a composição local fica byte-idêntica). Fica ABAIXO da
         // guarda de `Origin` — esta, sendo a última `.layer()`, é a mais
         // externa e roda PRIMEIRO (rejeita cross-origin antes de tocar auth).

@@ -2106,3 +2106,28 @@ porta). Restam na lista de morte do `append_ledger`: `btv.flow_saved`
 (C3.3b) + `btv.export_generated` e `btv.user_removed` (C3.4, a onda de
 encerramento — agrupa por FORMA DE TRABALHO, não por costura, DESVIO declarado
 para que o commit final delete a função e cumpra a profecia do rustdoc).
+
+**[registro — C3.4a: a última rota sem extractor caiu, a mordida re-mirou]**
+Estrangular `list_users` (C3.4a) deu `Tenant` à ÚLTIMA das 22 rotas de
+produto — NENHUMA rota real vaza mais 200 sem o layer universal. Isso esvaziou
+a `prova-que-morde` da cobertura (E1s.4), que usava `GET /api/btv/users` como
+cobaia de rota-que-vaza. A cobaia foi CONSUMIDA pelo progresso; a mordida
+re-mirou no vazamento que resta POR CONSTRUÇÃO: o `.fallback()` do dashboard
+(a shell do SPA). Fallback não tem handler — nenhum extractor por-rota pode
+cobri-lo, então o layer universal é a ÚNICA proteção dele. O teste
+(`prova_que_morde_sem_o_layer_o_fallback_do_spa_vaza`) prova que o layer é
+carga ESTRUTURAL, não redundante com os extractors: sem ele, um path
+inexistente no saas cai no fallback e serve a shell (200) a não-autenticado.
+Padrão que se REPETIRÁ e fica registrado: **prova-que-morde envelhece junto
+com o progresso que vigia** — cobaia consumida não aposenta a prova, re-mira
+na superfície remanescente; a pergunta certa é sempre "qual é o vazamento que
+AINDA existe por construção?". Consertar o critério porque ele parou de morder
+seria inverter a regra "quando o critério morde, conserta-se o código" —
+aposentar a prova é o mesmo erro visto de trás.
+
+**[pendência — gatilho futuro da mordida do fallback]** Quando o login abrir
+as primeiras `ROTAS_LIVRES` (shell/assets do SPA servidos SEM sessão, por
+design), o alvo desta mordida re-avalia: se a shell virar rota livre, "vazar a
+shell" deixa de ser vazamento e a mordida re-mira no que PERMANECER gateado.
+Diferimento com gatilho escrito — não decidir agora o que só o desenho do
+login define.
