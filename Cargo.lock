@@ -426,6 +426,7 @@ dependencies = [
  "btv-llm",
  "btv-schemas",
  "btv-store",
+ "btv-tools",
  "btv-verify",
  "serde",
  "serde_json",

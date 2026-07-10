@@ -18,6 +18,9 @@
 pub mod btv;
 mod guard;
 mod handlers;
+// C4: consoles-roteadores axum migrados de btv-cli (um por PR) — a casa da
+// borda axum consolida aqui; btv-cli deixa de importar axum ao fim da onda.
+pub mod sandbox_console;
 
 pub use guard::{origin_allowed, trusted_origin_hosts};
 pub(crate) use handlers::{db_error, now_rfc3339, ErrorBody};
