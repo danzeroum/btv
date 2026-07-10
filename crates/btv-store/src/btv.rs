@@ -11,6 +11,7 @@
 
 use btv_domain::ports::{
     PersonaRepository, RepositoryError, RunRepository, RunStatus, TemplatePublicationRepository,
+    UserRepository,
 };
 use btv_domain::{TaskId, TenantContext, TenantId};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -23,7 +24,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 // provado pelos goldens T1.
 pub use btv_domain::run::{Deliverable as BtvDeliverable, Run as BtvRun};
 pub use btv_domain::user::User as BtvUser;
-pub use btv_domain::{CustomPersona, PersonaOverride};
+pub use btv_domain::{CustomPersona, PersonaOverride, PinCheck};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BtvStoreError {
@@ -1093,12 +1094,155 @@ impl TemplatePublicationRepository for BtvStore {
     }
 }
 
-/// Resultado de `verify_user_pin` — perfil aberto, PIN correto ou incorreto.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PinCheck {
-    NoPin,
-    Ok,
-    Wrong,
+impl UserRepository for BtvStore {
+    fn list(&self, ctx: &TenantContext) -> Result<Vec<BtvUser>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, nome, email, papel, ativo, pin_hash, tenant_id FROM users
+                 WHERE tenant_id = ?1 ORDER BY id",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string()], |row| {
+                Ok(BtvUser {
+                    id: row.get(0)?,
+                    nome: row.get(1)?,
+                    email: row.get(2)?,
+                    papel: row.get(3)?,
+                    ativo: row.get::<_, i64>(4)? != 0,
+                    has_pin: row.get::<_, Option<String>>(5)?.is_some(),
+                    tenant: parse_tenant_col(row, 6)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    fn create(
+        &mut self,
+        ctx: &TenantContext,
+        nome: &str,
+        email: &str,
+        papel: &str,
+        pin: Option<&str>,
+    ) -> Result<i64, RepositoryError> {
+        // O `created_ts` é o salt do `pin_hash` E a coluna — precisa do MESMO
+        // valor nos dois; leio o relógio do banco uma vez (como os outros
+        // adapters usam strftime, mas aqui o valor tem que existir em Rust).
+        let now: String = self
+            .conn
+            .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%SZ', 'now')", [], |r| {
+                r.get(0)
+            })
+            .map_err(storage)?;
+        let hash = pin
+            .filter(|p| !p.is_empty())
+            .map(|p| pin_hash(&now, email, nome, p));
+        self.conn
+            .execute(
+                "INSERT INTO users (tenant_id, nome, email, papel, ativo, created_ts, pin_hash)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)",
+                params![ctx.tenant.to_string(), nome, email, papel, now, hash],
+            )
+            .map_err(storage)?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    fn remove(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError> {
+        let n = self
+            .conn
+            .execute(
+                "DELETE FROM users WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id],
+            )
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn set_active(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        ativo: bool,
+    ) -> Result<(), RepositoryError> {
+        let n = self
+            .conn
+            .execute(
+                "UPDATE users SET ativo = ?3 WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id, ativo as i64],
+            )
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn set_pin(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        let row: Option<(String, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT created_ts, email, nome FROM users WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(storage)?;
+        let Some((created_ts, email, nome)) = row else {
+            return Err(RepositoryError::NotFound);
+        };
+        let hash = pin
+            .filter(|p| !p.is_empty())
+            .map(|p| pin_hash(&created_ts, &email, &nome, p));
+        self.conn
+            .execute(
+                "UPDATE users SET pin_hash = ?3 WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id, hash],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    fn verify_pin(
+        &self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: &str,
+    ) -> Result<PinCheck, RepositoryError> {
+        let row: Option<(String, String, String, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT created_ts, email, nome, pin_hash FROM users
+                 WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()
+            .map_err(storage)?;
+        let Some((created_ts, email, nome, stored)) = row else {
+            return Err(RepositoryError::NotFound);
+        };
+        match stored {
+            None => Ok(PinCheck::NoPin),
+            Some(stored) => {
+                let candidate = pin_hash(&created_ts, &email, &nome, pin);
+                if candidate == stored {
+                    Ok(PinCheck::Ok)
+                } else {
+                    Ok(PinCheck::Wrong)
+                }
+            }
+        }
+    }
 }
 
 /// Hash do PIN: `sha256(created_ts|email|nome|pin)`. O salt (created_ts+
@@ -1106,7 +1250,7 @@ pub enum PinCheck {
 /// não precisa de coluna própria. **Honesto:** é sha256 simples, não um KDF
 /// pesado — adequado para um PIN de perfil local num dashboard 127.0.0.1, não
 /// para um cofre de senhas exposto à rede.
-fn pin_hash(created_ts: &str, email: &str, nome: &str, pin: &str) -> String {
+pub(crate) fn pin_hash(created_ts: &str, email: &str, nome: &str, pin: &str) -> String {
     btv_schemas::sha256_hex(&format!("{created_ts}|{email}|{nome}|{pin}"))
 }
 

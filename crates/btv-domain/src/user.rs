@@ -7,6 +7,17 @@ use serde::Serialize;
 
 use crate::tenant::TenantId;
 
+/// Resultado de `verify_pin` — perfil aberto (sem PIN), PIN correto ou
+/// incorreto. Promovido de `btv-store` à porta (C3.4): a verificação é
+/// operação da PORTA (o hash nunca sai do adapter), então o veredito é tipo do
+/// domínio. `btv-store` re-exporta para não quebrar chamador.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinCheck {
+    NoPin,
+    Ok,
+    Wrong,
+}
+
 /// Perfil local: identidade nomeada para atribuição, com PIN OPCIONAL
 /// verificado pelo backend (o hash nunca é exposto — por isso `has_pin`, não
 /// o hash). O PIN gate o "assumir perfil" na UI; não é barreira de rede.
