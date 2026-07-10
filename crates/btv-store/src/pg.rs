@@ -23,9 +23,11 @@
 use crate::btv::{exige_mesmo_tenant, DELIVERABLE_COLS, RUN_COLS};
 use crate::ledger::{entry_de_dominio, verifica_cadeia_rows};
 use btv_domain::ports::{DomainEvent, LedgerRepository, PersonaRepository, RunRepository};
-use btv_domain::ports::{RepositoryError, RunStatus, TemplatePublicationRepository};
+use btv_domain::ports::{
+    RepositoryError, RunStatus, TemplatePublicationRepository, UserRepository,
+};
 use btv_domain::{ActorId, CustomPersona, Deliverable, PersonaOverride, Run, TaskId};
-use btv_domain::{TenantContext, TenantId};
+use btv_domain::{PinCheck, TenantContext, TenantId, User};
 use btv_schemas::ledger::LedgerEntry;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgRow};
 use sqlx::{PgPool, Postgres, Row, Transaction};
@@ -640,6 +642,213 @@ impl TemplatePublicationRepository for PgStore {
                 ))
             })
             .collect()
+    }
+}
+
+impl UserRepository for PgStore {
+    fn list(&self, ctx: &TenantContext) -> Result<Vec<User>, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let rows = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let rows = sqlx::query(
+                    "SELECT id, nome, email, papel, ativo, pin_hash, tenant_id FROM users
+                     WHERE tenant_id = $1 ORDER BY id",
+                )
+                .bind(&tenant)
+                .fetch_all(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(rows)
+            })
+            .map_err(storage)?;
+        rows.iter()
+            .map(|row| {
+                let tenant_raw: String = row.try_get(6).map_err(storage)?;
+                let stored: Option<String> = row.try_get(5).map_err(storage)?;
+                Ok(User {
+                    id: row.try_get(0).map_err(storage)?,
+                    nome: row.try_get(1).map_err(storage)?,
+                    email: row.try_get(2).map_err(storage)?,
+                    papel: row.try_get(3).map_err(storage)?,
+                    ativo: row.try_get(4).map_err(storage)?,
+                    has_pin: stored.is_some(),
+                    tenant: TenantId::parse(&tenant_raw).map_err(storage)?,
+                })
+            })
+            .collect()
+    }
+
+    fn create(
+        &mut self,
+        ctx: &TenantContext,
+        nome: &str,
+        email: &str,
+        papel: &str,
+        pin: Option<&str>,
+    ) -> Result<i64, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        self.rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                // O `created_ts` é o salt do pin_hash E a coluna — mesmo valor
+                // nos dois; leio o relógio do banco (mesma fonte dos demais).
+                let now: String = sqlx::query_scalar(&format!("SELECT {NOW_UTC_SQL}"))
+                    .fetch_one(&mut *tx)
+                    .await?;
+                let hash = pin
+                    .filter(|p| !p.is_empty())
+                    .map(|p| crate::btv::pin_hash(&now, email, nome, p));
+                let id: i64 = sqlx::query_scalar(
+                    "INSERT INTO users (tenant_id, nome, email, papel, ativo, created_ts, pin_hash)
+                     VALUES ($1, $2, $3, $4, true, $5, $6) RETURNING id",
+                )
+                .bind(&tenant)
+                .bind(nome)
+                .bind(email)
+                .bind(papel)
+                .bind(&now)
+                .bind(&hash)
+                .fetch_one(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(id)
+            })
+            .map_err(storage)
+    }
+
+    fn remove(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let n = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let r = sqlx::query("DELETE FROM users WHERE tenant_id = $1 AND id = $2")
+                    .bind(&tenant)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(r.rows_affected())
+            })
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn set_active(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        ativo: bool,
+    ) -> Result<(), RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let n = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let r = sqlx::query("UPDATE users SET ativo = $3 WHERE tenant_id = $1 AND id = $2")
+                    .bind(&tenant)
+                    .bind(id)
+                    .bind(ativo)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(r.rows_affected())
+            })
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn set_pin(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let achou = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let row: Option<(String, String, String)> = sqlx::query_as(
+                    "SELECT created_ts, email, nome FROM users WHERE tenant_id = $1 AND id = $2",
+                )
+                .bind(&tenant)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                let Some((created_ts, email, nome)) = row else {
+                    return Ok::<_, sqlx::Error>(false);
+                };
+                let hash = pin
+                    .filter(|p| !p.is_empty())
+                    .map(|p| crate::btv::pin_hash(&created_ts, &email, &nome, p));
+                sqlx::query("UPDATE users SET pin_hash = $3 WHERE tenant_id = $1 AND id = $2")
+                    .bind(&tenant)
+                    .bind(id)
+                    .bind(&hash)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                Ok(true)
+            })
+            .map_err(storage)?;
+        if !achou {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn verify_pin(
+        &self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: &str,
+    ) -> Result<PinCheck, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let row: Option<(String, String, String, Option<String>)> = self
+            .rt
+            .block_on(async {
+                let mut tx = self.pool.begin().await?;
+                fixa_tenant(&mut tx, &tenant).await?;
+                let row = sqlx::query_as(
+                    "SELECT created_ts, email, nome, pin_hash FROM users
+                     WHERE tenant_id = $1 AND id = $2",
+                )
+                .bind(&tenant)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>(row)
+            })
+            .map_err(storage)?;
+        let Some((created_ts, email, nome, stored)) = row else {
+            return Err(RepositoryError::NotFound);
+        };
+        match stored {
+            None => Ok(PinCheck::NoPin),
+            Some(stored) => {
+                let candidate = crate::btv::pin_hash(&created_ts, &email, &nome, pin);
+                if candidate == stored {
+                    Ok(PinCheck::Ok)
+                } else {
+                    Ok(PinCheck::Wrong)
+                }
+            }
+        }
     }
 }
 

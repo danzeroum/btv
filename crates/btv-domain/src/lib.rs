@@ -25,4 +25,4 @@ pub use ledger_kind::{LedgerKind, UnknownKind};
 pub use persona::{CustomPersona, PersonaOverride};
 pub use run::{BriefingResposta, Deliverable, InvalidTaskId, Run, TaskId};
 pub use tenant::{ActorId, TenantContext, TenantError, TenantId};
-pub use user::User;
+pub use user::{PinCheck, User};

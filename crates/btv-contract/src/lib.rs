@@ -12,10 +12,10 @@
 
 use btv_domain::ports::{
     DomainEvent, DomainEventKind, LedgerRepository, PersonaRepository, RunRepository, RunStatus,
-    TemplatePublicationRepository,
+    TemplatePublicationRepository, UserRepository,
 };
 use btv_domain::tenant::{ActorId, TenantContext, TenantId};
-use btv_domain::{Deliverable, Run, TaskId};
+use btv_domain::{Deliverable, PinCheck, Run, TaskId};
 
 /// Tenant A dos cenários multi-tenant (o LOCAL — o modo local é um tenant).
 pub fn ctx_a() -> TenantContext {
@@ -332,6 +332,63 @@ pub fn suite_template_publication_repository<T: TemplatePublicationRepository>(
             repo.list_published(&ctx_a()).unwrap(),
             vec![("editorial".to_string(), true)],
             "o override de B não altera o de A"
+        );
+    }
+}
+
+/// Contrato do `UserRepository` (C3.4): CRUD por tenant, PIN verificado DENTRO
+/// do adapter (o hash nunca sai), isolamento fail-closed.
+pub fn suite_user_repository<U: UserRepository>(mut make: impl FnMut() -> U) {
+    // CRUD + ciclo de PIN dentro do tenant.
+    {
+        let mut repo = make();
+        let ctx = ctx_a();
+        let id = repo
+            .create(&ctx, "Dani", "dani@x.com", "usuario", None)
+            .expect("create");
+        let lista = repo.list(&ctx).expect("list");
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].nome, "Dani");
+        assert!(!lista[0].has_pin, "criado sem PIN");
+        assert!(lista[0].ativo);
+
+        repo.set_active(&ctx, id, false).expect("set_active");
+        assert!(!repo.list(&ctx).unwrap()[0].ativo, "suspenso");
+
+        // PIN: sem → NoPin; set → Ok/Wrong; limpar → NoPin. O hash nunca sai:
+        // a porta só devolve o veredito.
+        assert_eq!(repo.verify_pin(&ctx, id, "1234").unwrap(), PinCheck::NoPin);
+        repo.set_pin(&ctx, id, Some("1234")).expect("set_pin");
+        assert!(repo.list(&ctx).unwrap()[0].has_pin);
+        assert_eq!(repo.verify_pin(&ctx, id, "1234").unwrap(), PinCheck::Ok);
+        assert_eq!(repo.verify_pin(&ctx, id, "9999").unwrap(), PinCheck::Wrong);
+        repo.set_pin(&ctx, id, None).expect("limpa PIN");
+        assert_eq!(repo.verify_pin(&ctx, id, "1234").unwrap(), PinCheck::NoPin);
+
+        repo.remove(&ctx, id).expect("remove");
+        assert!(repo.list(&ctx).unwrap().is_empty());
+    }
+
+    // ISOLAMENTO fail-closed: B não vê, verifica, muta nem remove user de A.
+    {
+        let mut repo = make();
+        let id_a = repo
+            .create(&ctx_a(), "A", "a@x.com", "u", Some("1111"))
+            .unwrap();
+        repo.create(&ctx_b(), "B", "b@x.com", "u", None).unwrap();
+        assert_eq!(repo.list(&ctx_a()).unwrap().len(), 1);
+        assert_eq!(repo.list(&ctx_b()).unwrap().len(), 1, "B vê só o seu");
+        assert!(
+            repo.verify_pin(&ctx_b(), id_a, "1111").is_err(),
+            "user de A é indistinguível de inexistente para B"
+        );
+        assert!(repo.remove(&ctx_b(), id_a).is_err());
+        assert!(repo.set_active(&ctx_b(), id_a, false).is_err());
+        assert!(repo.set_pin(&ctx_b(), id_a, Some("x")).is_err());
+        assert_eq!(
+            repo.verify_pin(&ctx_a(), id_a, "1111").unwrap(),
+            PinCheck::Ok,
+            "A intacto após as tentativas de B"
         );
     }
 }

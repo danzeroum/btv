@@ -575,6 +575,49 @@ pub trait TemplatePublicationRepository {
     fn list_published(&self, ctx: &TenantContext) -> Result<Vec<(String, bool)>, RepositoryError>;
 }
 
+/// Perfis locais (A6) — a porta do Contexto de Identidade local. Formaliza o
+/// que o store já praticava: `verify_pin` compara DENTRO do adapter (o
+/// `pin_hash` nunca sai; o veredito é o `PinCheck` do domínio), CRUD ao lado.
+/// Tudo com tenant, leitura fail-closed (perfil de outro tenant = inexistente).
+pub trait UserRepository {
+    fn list(&self, ctx: &TenantContext) -> Result<Vec<crate::User>, RepositoryError>;
+
+    /// Cria um perfil (PIN opcional). O `created_ts` é escrituração do adapter.
+    fn create(
+        &mut self,
+        ctx: &TenantContext,
+        nome: &str,
+        email: &str,
+        papel: &str,
+        pin: Option<&str>,
+    ) -> Result<i64, RepositoryError>;
+
+    fn remove(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError>;
+
+    fn set_active(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        ativo: bool,
+    ) -> Result<(), RepositoryError>;
+
+    fn set_pin(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: Option<&str>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Verifica o PIN CONTRA o hash guardado — a comparação vive no adapter, o
+    /// hash nunca atravessa a fronteira. Perfil sem PIN → `NoPin`.
+    fn verify_pin(
+        &self,
+        ctx: &TenantContext,
+        id: i64,
+        pin: &str,
+    ) -> Result<crate::PinCheck, RepositoryError>;
+}
+
 /// Trilha auditável POR TENANT (ADR 0027): append consome `DomainEvent`
 /// (não string — A5), a cadeia encadeia dentro do tenant e o export é
 /// verificável isoladamente.

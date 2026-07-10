@@ -8,9 +8,16 @@
 //! 2024.
 //!
 //! Duas mordidas (prova-que-morde):
-//!  - **cobertura**: uma rota NÃO estrangulada real (`GET /api/btv/users`,
-//!    sem extractor) vaza (200 sem sessão) quando o layer é removido — o layer
-//!    é a única coisa que fecha a superfície não estrangulada no saas.
+//!  - **cobertura**: com a C3.4a as 22 rotas de produção passaram a declarar o
+//!    `Tenant` — nenhuma rota REAL vaza mais sem o layer. A cobaia foi
+//!    consumida pelo progresso; a mordida re-mira no vazamento que resta POR
+//!    CONSTRUÇÃO: o `.fallback()` do dashboard (a shell do SPA). Fallback não
+//!    tem handler — nenhum extractor por-rota pode cobri-lo, então o layer
+//!    universal é a ÚNICA proteção dele. Sem o layer, um path inexistente no
+//!    saas cai no fallback e serve a shell (200) a um não-autenticado; com o
+//!    layer, 401 antes do roteamento. (Padrão que se repetirá: prova-que-morde
+//!    envelhece junto com o progresso que vigia — cobaia consumida não aposenta
+//!    a prova, re-mira na superfície remanescente.)
 //!  - **auth de verdade**: token forjado/expirado → 401 (o resolver devolve
 //!    None; a expiração no TEMPO é provada contra PG real no E1s.1
 //!    `sessao_expirada_nao_resolve`).
@@ -42,10 +49,10 @@ fn saas() -> TenantResolucao {
     TenantResolucao::new(Mode::Saas, Some(Arc::new(MockResolver)))
 }
 
-/// Monta o `btv_agent::router` REAL (os seis estrangulados + rotas NÃO
-/// estranguladas reais: `users`, `personas`, `templates/publicacao`) no modo
-/// dado. Stores em memória — nenhuma varredura ativa squad (o layer recusa
-/// antes de tocar o pool), então nada aqui precisa de uv/Python.
+/// Monta o `btv_agent::router` REAL (as 22 rotas, TODAS estranguladas desde a
+/// C3.4a — cada uma declara o `Tenant`) no modo dado. Stores em memória —
+/// nenhuma varredura ativa squad (o layer recusa antes de tocar o pool), então
+/// nada aqui precisa de uv/Python.
 fn btv_router(dir: &std::path::Path, tenant: TenantResolucao) -> Router {
     let store = Arc::new(Mutex::new(BtvStore::open_in_memory().unwrap()));
     let ledger = Arc::new(Mutex::new(LedgerStore::open_in_memory().unwrap()));
@@ -74,6 +81,17 @@ fn sem_sessao(method: &str, uri: &str) -> Request<Body> {
         .unwrap()
 }
 
+/// Dashboard de teste com o `.fallback()` que o dashboard de produção tem: um
+/// path inexistente serve a shell do SPA (200) em vez de 404. A `prova-que-morde`
+/// da cobertura depende dessa fidelidade — sem o fallback não haveria vazamento
+/// (rota inexistente daria 404, não a shell); com ele, a composição de teste
+/// fica mais próxima da real e o sweep melhora junto.
+fn dashboard_com_fallback() -> Router {
+    Router::new()
+        .route("/", axum::routing::get(|| async { "spa" }))
+        .fallback(|| async { "spa-shell" })
+}
+
 /// A varredura: no `merged_router` REAL (dashboard + web_agent + btv_agent, sob
 /// o layer universal e a guarda de Origin), TODA rota em modo saas SEM sessão
 /// devolve 401 — inclusive uma rota INEXISTENTE, porque o layer roda ANTES do
@@ -92,9 +110,9 @@ async fn saas_sem_sessao_recusa_a_superficie_inteira() {
         ("GET", "/api/btv/deliverables"),         // estrangulada
         ("POST", "/api/btv/squads"),              // estrangulada (mutação)
         ("POST", "/api/btv/squads/t1/gate"),      // estrangulada (mutação)
-        ("GET", "/api/btv/users"),                // NÃO estrangulada
-        ("GET", "/api/btv/personas/tpl"),         // NÃO estrangulada
-        ("GET", "/api/btv/templates/publicacao"), // NÃO estrangulada
+        ("GET", "/api/btv/users"),                // estrangulada (C3.4a)
+        ("GET", "/api/btv/personas/tpl"),         // estrangulada (C3.2)
+        ("GET", "/api/btv/templates/publicacao"), // estrangulada (C3.3a)
         ("GET", "/api/session/s1/events"),        // web_agent SSE (GET+stream)
         ("GET", "/rota/que/nao/existe"),          // INEXISTENTE → prova pré-roteamento
     ];
@@ -108,8 +126,11 @@ async fn saas_sem_sessao_recusa_a_superficie_inteira() {
     }
 }
 
-/// Sessão VÁLIDA atravessa a borda: a mesma rota não estrangulada que 401-a sem
-/// sessão devolve 200 com um Bearer válido — a borda RESOLVE, não faz 401 cego.
+/// Sessão VÁLIDA atravessa a borda: a mesma rota que 401-a sem sessão devolve
+/// 200 com um Bearer válido — a borda RESOLVE, não faz 401 cego. Com a rota
+/// estrangulada (C3.4a), o layer resolve a sessão e o extractor por-handler lê
+/// o mesmo `TenantContext` das extensões: a composição é defesa em profundidade,
+/// não conflito.
 #[tokio::test]
 async fn saas_com_sessao_valida_passa_a_borda() {
     let dir = tempfile::tempdir().unwrap();
@@ -137,33 +158,46 @@ async fn saas_com_sessao_valida_passa_a_borda() {
     );
 }
 
-/// Prova-que-morde da COBERTURA: a mesma rota NÃO estrangulada real
-/// (`GET /api/btv/users`, sem extractor) 401-a COM o layer e VAZA (200) sem
-/// ele — o layer universal é a única coisa que fecha a superfície não
-/// estrangulada no saas. Remove o layer e o buraco reabre.
+/// Prova-que-morde da COBERTURA (re-mirada na C3.4a): com as 22 rotas
+/// estranguladas, nenhuma rota REAL vaza mais sem o layer — a cobaia original
+/// (`GET /api/btv/users`) fechou. A mordida re-mira no vazamento que resta POR
+/// CONSTRUÇÃO: o `.fallback()` do SPA. Fallback não tem handler — NENHUM
+/// extractor por-rota pode cobri-lo; o layer universal é a única proteção dele.
+/// Este teste prova que o layer é carga ESTRUTURAL, não redundante com os
+/// extractors: removê-lo vaza a shell a não-autenticados no saas mesmo com toda
+/// rota estrangulada.
 #[tokio::test]
-async fn prova_que_morde_sem_o_layer_a_rota_nao_estrangulada_vaza() {
-    // COM o layer: 401.
+async fn prova_que_morde_sem_o_layer_o_fallback_do_spa_vaza() {
+    // COM o layer: um path inexistente 401-a ANTES do roteamento — o layer roda
+    // pré-router, nem chega ao fallback.
     let dir = tempfile::tempdir().unwrap();
-    let app_com = btv_router(dir.path(), saas())
-        .layer(axum::middleware::from_fn_with_state(saas(), guarda_tenant));
+    let app_com = crate::web_agent::merged_router(
+        crate::web_agent::default_hub(),
+        dashboard_com_fallback(),
+        btv_router(dir.path(), saas()),
+        saas(),
+    );
     let r_com = app_com
-        .oneshot(sem_sessao("GET", "/api/btv/users"))
+        .oneshot(sem_sessao("GET", "/rota/inexistente"))
         .await
         .unwrap();
     assert_eq!(r_com.status(), StatusCode::UNAUTHORIZED);
 
-    // SEM o layer (mesmo BtvAgentState saas): a rota não estrangulada VAZA.
+    // SEM o layer universal: a MESMA rota inexistente cai no fallback do SPA e
+    // serve a shell (200) a um não-autenticado no saas — a mordida. Compõe as
+    // MESMAS peças do `merged_router` menos o `guarda_tenant`; a shell vaza.
     let dir2 = tempfile::tempdir().unwrap();
-    let app_sem = btv_router(dir2.path(), saas());
+    let app_sem = dashboard_com_fallback()
+        .merge(crate::web_agent::router(crate::web_agent::default_hub()))
+        .merge(btv_router(dir2.path(), saas()));
     let r_sem = app_sem
-        .oneshot(sem_sessao("GET", "/api/btv/users"))
+        .oneshot(sem_sessao("GET", "/rota/inexistente"))
         .await
         .unwrap();
     assert_eq!(
         r_sem.status(),
         StatusCode::OK,
-        "sem o layer universal a rota não estrangulada vaza sem sessão — a mordida"
+        "sem o layer universal o fallback do SPA vaza a shell a não-autenticado no saas — a mordida"
     );
 }
 

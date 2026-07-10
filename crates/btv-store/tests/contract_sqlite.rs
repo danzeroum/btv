@@ -24,6 +24,11 @@ fn adapter_sqlite_passa_o_contrato_de_template_publication_repository() {
     });
 }
 
+#[test]
+fn adapter_sqlite_passa_o_contrato_de_user_repository() {
+    btv_contract::suite_user_repository(|| BtvStore::open_in_memory().expect("adapter fresco"));
+}
+
 /// B3: o mesmo arquivo julga o `LedgerRepository` — cadeias por tenant
 /// independentes, verify/export isolados (ADR 0027).
 #[test]
