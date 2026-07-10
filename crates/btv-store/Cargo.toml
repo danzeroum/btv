@@ -3,7 +3,14 @@ name = "btv-store"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Storage SQLite da plataforma BuildToValue: sessões, ledger append-only, telemetria"
+description = "Storage da plataforma BuildToValue: SQLite (modo local) e Postgres (modo SaaS, feature `pg`) atrás das mesmas traits"
+
+[features]
+# B4 (ADR 0026): o adapter Postgres do modo SaaS. Fora do build default —
+# `cargo test --workspace` de quem desenvolve local não compila nem exige
+# Postgres (coordenada 5 da revisão do B4); o job `pg` do CI liga a feature
+# e roda a suíte de contrato contra um Postgres real.
+pg = ["dep:sqlx", "dep:tokio"]
 
 [dependencies]
 btv-schemas.workspace = true
@@ -12,6 +19,8 @@ rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 serde.workspace = true
+sqlx = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true

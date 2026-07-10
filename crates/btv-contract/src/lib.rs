@@ -404,3 +404,60 @@ pub fn suite_ledger_repository<L: LedgerRepository>(mut make: impl FnMut() -> L)
         assert_eq!(repo.verify_chain(&ctx_b()).unwrap(), 0);
     }
 }
+
+/// Determinismo CROSS-ADAPTER do ledger (coordenada 4 da revisão do B4): os
+/// MESMOS appends pelos dois adapters produzem a MESMA sequência de
+/// `(seq, prev_hash, entry_hash)` — o corpo canônico é independente de
+/// driver/banco, então a paridade local↔SaaS é CRIPTOGRÁFICA, não só
+/// comportamental. `projeta` extrai a tripla do `Entry` do adapter: a suíte
+/// continua só-domínio (não conhece `btv-schemas`), e os dois adapters
+/// precisam compartilhar o MESMO tipo de entrada — se um dia divergirem, o
+/// tipo deixa de unificar e ESTE teste deixa de compilar, que é o aviso
+/// certo.
+pub fn suite_ledger_determinismo_cross_adapter<E, A, B>(
+    make_a: impl FnOnce() -> A,
+    make_b: impl FnOnce() -> B,
+    projeta: impl Fn(&E) -> (u64, String, String),
+) where
+    A: LedgerRepository<Entry = E>,
+    B: LedgerRepository<Entry = E>,
+{
+    let mut a = make_a();
+    let mut b = make_b();
+    // Appends fixos e INTERCALADOS entre dois tenants (ts determinístico —
+    // o hash depende do corpo inteiro, então qualquer relógio fabricado
+    // aqui quebraria a comparação).
+    let roteiro = [
+        (ctx_a(), "2026-07-10T00:00:01Z"),
+        (ctx_b(), "2026-07-10T00:00:02Z"),
+        (ctx_a(), "2026-07-10T00:00:03Z"),
+        (ctx_b(), "2026-07-10T00:00:04Z"),
+        (ctx_a(), "2026-07-10T00:00:05Z"),
+    ];
+    for (ctx, ts) in &roteiro {
+        let ev = evento_gate(ctx, ctx.actor.as_str(), ts);
+        a.append(ctx, &ev).expect("append no adapter A");
+        b.append(ctx, &ev).expect("append no adapter B");
+    }
+    for ctx in [ctx_a(), ctx_b()] {
+        let de_a: Vec<_> = a
+            .export(&ctx)
+            .expect("export A")
+            .iter()
+            .map(&projeta)
+            .collect();
+        let de_b: Vec<_> = b
+            .export(&ctx)
+            .expect("export B")
+            .iter()
+            .map(&projeta)
+            .collect();
+        assert!(!de_a.is_empty(), "o roteiro gravou nas duas cadeias");
+        assert_eq!(
+            de_a, de_b,
+            "os dois adapters divergiram na cadeia do tenant {} — o corpo \
+             canônico deixou de ser independente de driver",
+            ctx.tenant
+        );
+    }
+}
