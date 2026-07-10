@@ -40,6 +40,22 @@ else
     echo "             Ela arma automaticamente quando o crate nascer (Trilha A do plano DDD)."
 fi
 
+# ── C: btv-core só-portas (D1t) ─────────────────────────────────────────────
+# O runtime de agente depende SÓ do domínio: nenhum concreto de LLM/storage/
+# ferramentas (e portanto nem reqwest/rusqlite transitivos). Arestas
+# `normal`; dev-dependencies livres (o fio com concretos é provado nos
+# crates das implementações — btv-tools/btv-store — desde o D1t).
+proibidas_core=$(cargo tree -p btv-core -e normal --prefix none \
+    | awk '{print $1}' | sort -u \
+    | grep -x -E 'btv-llm|btv-store|btv-tools|reqwest|rusqlite' || true)
+if [ -n "$proibidas_core" ]; then
+    echo "ERRO(T4-C): btv-core depende de concreto proibido (D1t exige só portas):"
+    echo "$proibidas_core"
+    falhas=1
+else
+    echo "OK(T4-C): btv-core depende só do domínio (sem btv-llm/btv-store/btv-tools)."
+fi
+
 # ── B: SQL cru em handlers HTTP ─────────────────────────────────────────────
 # btv-server inteiro por glob (a C2 decompôs lib.rs em handlers/ — lista
 # fixa deixaria os arquivos novos fora da varredura, lacuna real pega na

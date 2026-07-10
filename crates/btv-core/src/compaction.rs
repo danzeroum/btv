@@ -10,9 +10,8 @@
 //! (o tokenizer BPE real foi marcado won't-do: ~60× mais lento no hot
 //! path para pouco ganho de precisão).
 
-use btv_llm::chat::{ChatMessage, ContentBlock, GenerateRequest, Role};
-use btv_llm::gateway::{GatewayError, Generator};
-use btv_llm::ModelTier;
+use btv_domain::chat::{ChatMessage, ContentBlock, GenerateRequest, ModelTier, Role};
+use btv_domain::ports::{LlmError, LlmPort};
 
 /// Estima tokens do histórico: total de caracteres / 4.
 pub fn estimate_tokens(messages: &[ChatMessage]) -> usize {
@@ -64,12 +63,12 @@ impl CompactionPolicy {
 
     /// Pede ao modelo (sem ferramentas) um resumo da conversa que preserve
     /// decisões, estado dos arquivos e pendências — a baseline da nova época.
-    pub async fn summarize<G: Generator>(
+    pub async fn summarize<G: LlmPort>(
         &self,
         generator: &G,
         model: &str,
         messages: &[ChatMessage],
-    ) -> Result<String, GatewayError> {
+    ) -> Result<String, LlmError> {
         let mut prompt_messages = messages.to_vec();
         prompt_messages.push(ChatMessage::user_text(
             "Resuma esta conversa para continuar o trabalho em uma nova sessão: \
@@ -96,8 +95,7 @@ Seja denso e factual; não invente nada.",
 #[cfg(test)]
 mod tests {
     use super::*;
-    use btv_llm::chat::{AssistantTurn, StopReason, Usage};
-    use btv_llm::tier_from_id;
+    use btv_domain::chat::{AssistantTurn, StopReason, Usage};
 
     fn text_msg(role: Role, text: &str) -> ChatMessage {
         ChatMessage {
@@ -114,8 +112,8 @@ mod tests {
 
     #[test]
     fn threshold_e_tier_gated() {
-        let small = CompactionPolicy::for_tier(tier_from_id("claude-haiku-4-5"), 1000);
-        let large = CompactionPolicy::for_tier(tier_from_id("claude-opus-4-8"), 1000);
+        let small = CompactionPolicy::for_tier(ModelTier::Small, 1000);
+        let large = CompactionPolicy::for_tier(ModelTier::Large, 1000);
         // 800 tokens: acima de 75% (small compacta), abaixo de 90% (large não).
         let messages = vec![text_msg(Role::User, &"a".repeat(3200))];
         assert!(small.needs_compaction(&messages));
@@ -145,12 +143,12 @@ mod tests {
     }
 
     struct SummaryGen;
-    impl Generator for SummaryGen {
+    impl LlmPort for SummaryGen {
         async fn generate(
             &self,
             req: GenerateRequest,
             _on_delta: &mut (dyn FnMut(&str) + Send),
-        ) -> Result<AssistantTurn, GatewayError> {
+        ) -> Result<AssistantTurn, LlmError> {
             assert!(req.tools.is_empty(), "resumo não usa ferramentas");
             Ok(AssistantTurn {
                 content: vec![ContentBlock::Text {
@@ -165,7 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn resumo_vem_do_gerador_sem_ferramentas() {
-        let policy = CompactionPolicy::for_tier(tier_from_id("m"), 1000);
+        let policy = CompactionPolicy::for_tier(ModelTier::Medium, 1000);
         let messages = vec![text_msg(Role::User, "tarefa")];
         let summary = policy.summarize(&SummaryGen, "m", &messages).await.unwrap();
         assert_eq!(summary, "resumo da conversa");

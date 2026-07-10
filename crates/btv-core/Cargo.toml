@@ -3,20 +3,20 @@ name = "btv-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Runtime de sessão da plataforma BuildToValue: contexto, agentes, permissões, loop de agente"
+description = "Runtime de sessão da plataforma BuildToValue: contexto, agentes, permissões, loop de agente — SÓ portas do domínio (D1t; vigiado por scripts/arch-lint.sh)"
 
+# D1t (violação 4 do levantamento): este crate depende SÓ do domínio —
+# nenhum concreto de LLM/storage/ferramentas (btv-llm/btv-store/btv-tools
+# aqui é build vermelho no arch-lint T4-C). O binário injeta as
+# implementações pelas portas (LlmPort/ToolsPort/EventStorePort).
 [dependencies]
-btv-schemas.workspace = true
-btv-llm.workspace = true
-btv-store.workspace = true
-btv-tools.workspace = true
+btv-domain.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-tempfile.workspace = true
 criterion.workspace = true
 
 [[bench]]

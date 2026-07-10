@@ -1,14 +1,17 @@
 //! Loop de agente da Fase 1: mensagens → gateway → tool_use → permissão →
 //! execução → tool_result → repete, até `end_turn` ou o limite de passos.
 //!
-//! O loop é genérico sobre `Generator` (gateway real ou roteirizado em
-//! teste) e emite `LoopEvent`s via callback — o CLI os transforma em
-//! streaming no terminal e entradas no ledger.
+//! O loop é genérico sobre `LlmPort` (gateway real ou roteirizado em
+//! teste) e executa ferramentas via `ToolsPort` — desde o D1t ele conhece
+//! SÓ as portas do domínio (a violação 4 do levantamento fecha aqui:
+//! nenhum concreto de btv-llm/btv-tools/btv-store entra neste crate).
+//! Emite `LoopEvent`s via callback — o CLI os transforma em streaming no
+//! terminal e entradas no ledger.
 
 use crate::permission::{Decision, PermissionEngine};
-use btv_llm::chat::{ChatMessage, ContentBlock, GenerateRequest, Role, StopReason, ToolSpec};
-use btv_llm::gateway::{GatewayError, Generator};
-use btv_tools::{DiffLine, ToolRegistry};
+use btv_domain::chat::{ChatMessage, ContentBlock, GenerateRequest, Role, StopReason};
+use btv_domain::ports::{LlmError, LlmPort, ToolsPort};
+use btv_domain::tool::DiffLine;
 use serde_json::Value;
 
 /// Eventos observáveis do loop (streaming, ledger, telemetria).
@@ -52,14 +55,14 @@ impl PermissionResolver for DenyAll {
 #[derive(Debug, thiserror::Error)]
 pub enum LoopError {
     #[error("gateway: {0}")]
-    Gateway(#[from] GatewayError),
+    Gateway(#[from] LlmError),
     #[error("limite de {0} passos atingido sem end_turn")]
     MaxSteps(usize),
 }
 
-pub struct AgentLoop<'a, G: Generator> {
+pub struct AgentLoop<'a, G: LlmPort> {
     pub generator: &'a G,
-    pub tools: &'a ToolRegistry,
+    pub tools: &'a dyn ToolsPort,
     pub permissions: PermissionEngine,
     pub model: String,
     pub system: String,
@@ -83,18 +86,7 @@ pub struct TurnSummary {
     pub steps: usize,
 }
 
-impl<'a, G: Generator> AgentLoop<'a, G> {
-    fn tool_specs(&self) -> Vec<ToolSpec> {
-        self.tools
-            .iter()
-            .map(|t| ToolSpec {
-                name: t.name().to_string(),
-                description: t.description().to_string(),
-                input_schema: t.input_schema(),
-            })
-            .collect()
-    }
-
+impl<'a, G: LlmPort> AgentLoop<'a, G> {
     /// Executa uma tarefa única até o modelo encerrar o turno.
     pub async fn run(
         &self,
@@ -120,7 +112,7 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
         resolver: &mut (dyn PermissionResolver + Send),
         on_event: &mut (dyn FnMut(LoopEvent) + Send),
     ) -> Result<TurnSummary, LoopError> {
-        let specs = self.tool_specs();
+        let specs = self.tools.specs();
 
         for step in 1..=self.max_steps {
             let req = GenerateRequest {
@@ -251,8 +243,16 @@ impl<'a, G: Generator> AgentLoop<'a, G> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit do loop com MOCKS PUROS (Definição de Pronto do D1t, critério da
+    //! Fase 2 do plano-mestre): nenhum SQLite, nenhum gRPC, nenhuma rede,
+    //! nenhum subprocesso — e o teste do fluxo completo AFIRMA <100ms.
+    //! O fio com ferramentas REAIS (edit/bash/skills) continua provado em
+    //! `btv-tools/tests/loop_com_ferramentas_reais.rs` (movido no D1t).
+
     use super::*;
-    use btv_llm::chat::{AssistantTurn, Usage};
+    use btv_domain::chat::{AssistantTurn, ToolSpec, Usage};
+    use btv_domain::tool::{Tool, ToolError, ToolOutput};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
 
     /// Gerador roteirizado: devolve turnos pré-definidos em sequência.
@@ -260,15 +260,81 @@ mod tests {
         turns: Mutex<Vec<AssistantTurn>>,
     }
 
-    impl Generator for Scripted {
+    impl LlmPort for Scripted {
         async fn generate(
             &self,
             _req: GenerateRequest,
             on_delta: &mut (dyn FnMut(&str) + Send),
-        ) -> Result<AssistantTurn, GatewayError> {
+        ) -> Result<AssistantTurn, LlmError> {
             let turn = self.turns.lock().unwrap().remove(0);
             on_delta(&turn.text());
             Ok(turn)
+        }
+    }
+
+    /// Ferramenta mock: devolve um output fixo e marca que rodou — o
+    /// suficiente para provar autorização, execução e retorno ao modelo.
+    struct MockTool {
+        name: &'static str,
+        output: ToolOutput,
+        ran: AtomicBool,
+    }
+
+    impl MockTool {
+        fn ok(name: &'static str, content: &str) -> Self {
+            Self {
+                name,
+                output: ToolOutput {
+                    content: content.into(),
+                    truncated: false,
+                    overflow_path: None,
+                    diff: None,
+                },
+                ran: AtomicBool::new(false),
+            }
+        }
+    }
+
+    impl Tool for MockTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn description(&self) -> &str {
+            "mock"
+        }
+        fn input_schema(&self) -> Value {
+            serde_json::json!({"type": "object"})
+        }
+        fn scope(&self, _args: &Value) -> String {
+            "mock-scope".into()
+        }
+        fn run(&self, _args: &Value) -> Result<ToolOutput, ToolError> {
+            self.ran.store(true, Ordering::SeqCst);
+            Ok(self.output.clone())
+        }
+    }
+
+    /// Porta de ferramentas mock — a implementação mínima de `ToolsPort`.
+    struct MockTools {
+        tools: Vec<MockTool>,
+    }
+
+    impl ToolsPort for MockTools {
+        fn specs(&self) -> Vec<ToolSpec> {
+            self.tools
+                .iter()
+                .map(|t| ToolSpec {
+                    name: t.name.into(),
+                    description: "mock".into(),
+                    input_schema: serde_json::json!({"type": "object"}),
+                })
+                .collect()
+        }
+        fn get(&self, name: &str) -> Option<&dyn Tool> {
+            self.tools
+                .iter()
+                .find(|t| t.name == name)
+                .map(|t| t as &dyn Tool)
         }
     }
 
@@ -284,6 +350,14 @@ mod tests {
         }
     }
 
+    fn tool_use(id: &str, name: &str) -> ContentBlock {
+        ContentBlock::ToolUse {
+            id: id.into(),
+            name: name.into(),
+            input: serde_json::json!({}),
+        }
+    }
+
     struct AllowAll;
     impl PermissionResolver for AllowAll {
         fn resolve(&mut self, _t: &str, _s: &str) -> bool {
@@ -291,7 +365,7 @@ mod tests {
         }
     }
 
-    fn agent_loop<'a>(gen: &'a Scripted, tools: &'a ToolRegistry) -> AgentLoop<'a, Scripted> {
+    fn agent_loop<'a>(gen: &'a Scripted, tools: &'a MockTools) -> AgentLoop<'a, Scripted> {
         AgentLoop {
             generator: gen,
             tools,
@@ -303,12 +377,16 @@ mod tests {
         }
     }
 
+    /// O critério LITERAL da DoD do D1t: o fluxo completo (tool_use →
+    /// permissão → execução → tool_result → end_turn) roda com mocks em
+    /// menos de 100ms — sem SQLite, sem gRPC, sem rede, sem subprocesso.
     #[tokio::test]
-    async fn fluxo_completo_com_edicao_de_arquivo() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("f.txt"), "valor = 1\n").unwrap();
-        let tools = ToolRegistry::default_set(dir.path());
+    async fn fluxo_completo_com_mocks_roda_em_menos_de_100ms() {
+        let inicio = std::time::Instant::now();
 
+        let tools = MockTools {
+            tools: vec![MockTool::ok("edit", "arquivo editado")],
+        };
         let gen = Scripted {
             turns: Mutex::new(vec![
                 turn(
@@ -316,11 +394,7 @@ mod tests {
                         ContentBlock::Text {
                             text: "Vou corrigir.".into(),
                         },
-                        ContentBlock::ToolUse {
-                            id: "tu1".into(),
-                            name: "edit".into(),
-                            input: serde_json::json!({"path": "f.txt", "old_string": "valor = 1", "new_string": "valor = 2"}),
-                        },
+                        tool_use("tu1", "edit"),
                     ],
                     StopReason::ToolUse,
                 ),
@@ -333,10 +407,10 @@ mod tests {
             ]),
         };
 
-        let al = agent_loop(&gen, &tools);
         let mut events = Vec::new();
+        let al = agent_loop(&gen, &tools);
         let outcome = al
-            .run("corrija f.txt", &mut AllowAll, &mut |e| {
+            .run("corrija", &mut AllowAll, &mut |e| {
                 events.push(format!("{e:?}"))
             })
             .await
@@ -344,85 +418,38 @@ mod tests {
 
         assert_eq!(outcome.final_text, "Pronto.");
         assert_eq!(outcome.steps, 2);
-        let content = std::fs::read_to_string(dir.path().join("f.txt")).unwrap();
-        assert_eq!(content, "valor = 2\n");
-        assert!(events.iter().any(|e| e.contains("ToolStarted")));
-    }
-
-    #[tokio::test]
-    async fn output_grande_vira_managed_tool_output_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let tools = ToolRegistry::default_set(dir.path());
-
-        let gen = Scripted {
-            turns: Mutex::new(vec![
-                turn(
-                    vec![ContentBlock::ToolUse {
-                        id: "tu1".into(),
-                        name: "bash".into(),
-                        // gera >32 KiB de saída para ultrapassar DEFAULT_OUTPUT_LIMIT
-                        input: serde_json::json!({"command": "yes MARCADOR_FINAL | head -c 40000"}),
-                    }],
-                    StopReason::ToolUse,
-                ),
-                turn(
-                    vec![ContentBlock::Text { text: "ok".into() }],
-                    StopReason::EndTurn,
-                ),
-            ]),
-        };
-
-        let al = agent_loop(&gen, &tools);
-        let outcome = al
-            .run("rode o comando", &mut AllowAll, &mut |_| {})
-            .await
-            .unwrap();
-
-        let tool_result = match &outcome.messages[2].content[0] {
-            ContentBlock::ToolResult {
-                content, is_error, ..
-            } => {
-                assert!(!is_error);
-                content.clone()
-            }
-            other => panic!("esperava ToolResult, achei {other:?}"),
-        };
-        assert!(tool_result.contains("output truncado"));
-        assert!(tool_result.contains(".btv/tool-outputs/"));
-
-        let marker = tool_result
-            .rsplit("completo em ")
-            .next()
-            .unwrap()
-            .split(" —")
-            .next()
-            .unwrap();
-        let persisted = std::fs::read_to_string(dir.path().join(marker)).unwrap();
         assert!(
-            persisted.len() >= 40_000 && persisted.contains("MARCADOR_FINAL"),
-            "arquivo gerenciado tem o conteúdo completo"
+            tools.tools[0].ran.load(Ordering::SeqCst),
+            "a ferramenta rodou"
+        );
+        // O tool_result do mock voltou ao "modelo" intacto.
+        assert!(matches!(
+            &outcome.messages[2].content[0],
+            ContentBlock::ToolResult { content, is_error: false, .. } if content == "arquivo editado"
+        ));
+        assert!(events.iter().any(|e| e.contains("ToolStarted")));
+        assert!(events.iter().any(|e| e.contains("TurnCompleted")));
+
+        let gasto = inicio.elapsed();
+        assert!(
+            gasto < std::time::Duration::from_millis(100),
+            "loop com mocks deveria fechar em <100ms, levou {gasto:?}"
         );
     }
 
+    /// Negação: `ToolDenied` é emitido, o tool_result volta como erro, a
+    /// ferramenta NÃO executa (o flag do mock prova) e o modelo continua.
     #[tokio::test]
-    async fn negacao_vira_tool_result_de_erro_e_o_modelo_continua() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("f.txt"), "x\n").unwrap();
-        let tools = ToolRegistry::default_set(dir.path());
-
+    async fn negacao_vira_tool_result_de_erro_e_a_ferramenta_nao_roda() {
+        let tools = MockTools {
+            tools: vec![MockTool::ok("bash", "não deveria aparecer")],
+        };
         let gen = Scripted {
             turns: Mutex::new(vec![
-                turn(
-                    vec![ContentBlock::ToolUse {
-                        id: "tu1".into(),
-                        name: "bash".into(),
-                        input: serde_json::json!({"command": "rm -rf /"}),
-                    }],
-                    StopReason::ToolUse,
-                ),
+                turn(vec![tool_use("tu1", "bash")], StopReason::ToolUse),
                 turn(
                     vec![ContentBlock::Text {
-                        text: "Entendido, não vou executar.".into(),
+                        text: "Entendido.".into(),
                     }],
                     StopReason::EndTurn,
                 ),
@@ -441,20 +468,64 @@ mod tests {
             .unwrap();
 
         assert!(denied);
-        assert_eq!(outcome.steps, 2);
-        // O tool_result de erro foi entregue ao "modelo" na 2ª chamada.
-        let last_user = outcome
-            .messages
-            .iter()
-            .rev()
-            .find(|m| matches!(m.role, Role::User))
-            .unwrap();
-        // mensagens: [user task, assistant tool_use, user tool_result(erro), assistant final]
+        assert!(
+            !tools.tools[0].ran.load(Ordering::SeqCst),
+            "negada não roda"
+        );
         assert!(matches!(
             outcome.messages[2].content[0],
             ContentBlock::ToolResult { is_error: true, .. }
         ));
-        let _ = last_user;
+    }
+
+    /// Ferramenta desconhecida: erro devolvido ao modelo, loop segue.
+    #[tokio::test]
+    async fn ferramenta_desconhecida_e_tool_result_de_erro() {
+        let tools = MockTools { tools: vec![] };
+        let gen = Scripted {
+            turns: Mutex::new(vec![
+                turn(vec![tool_use("tu1", "inexistente")], StopReason::ToolUse),
+                turn(
+                    vec![ContentBlock::Text { text: "ok".into() }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+        };
+        let al = agent_loop(&gen, &tools);
+        let outcome = al.run("t", &mut AllowAll, &mut |_| {}).await.unwrap();
+        assert!(matches!(
+            &outcome.messages[2].content[0],
+            ContentBlock::ToolResult { content, is_error: true, .. }
+                if content.contains("desconhecida")
+        ));
+    }
+
+    /// Output truncado com arquivo gerenciado: o loop anexa a nota com o
+    /// caminho ao devolver ao modelo (a persistência é da ferramenta; o
+    /// CONTRATO da nota é do loop — e é isso que o mock prova).
+    #[tokio::test]
+    async fn output_truncado_ganha_nota_com_o_caminho_gerenciado() {
+        let mut t = MockTool::ok("bash", "inicio do output");
+        t.output.truncated = true;
+        t.output.overflow_path = Some(".btv/tool-outputs/x.txt".into());
+        let tools = MockTools { tools: vec![t] };
+        let gen = Scripted {
+            turns: Mutex::new(vec![
+                turn(vec![tool_use("tu1", "bash")], StopReason::ToolUse),
+                turn(
+                    vec![ContentBlock::Text { text: "ok".into() }],
+                    StopReason::EndTurn,
+                ),
+            ]),
+        };
+        let al = agent_loop(&gen, &tools);
+        let outcome = al.run("t", &mut AllowAll, &mut |_| {}).await.unwrap();
+        assert!(matches!(
+            &outcome.messages[2].content[0],
+            ContentBlock::ToolResult { content, .. }
+                if content.contains("output truncado")
+                    && content.contains(".btv/tool-outputs/x.txt")
+        ));
     }
 
     /// Gerador que registra quantas mensagens recebeu em cada chamada.
@@ -463,12 +534,12 @@ mod tests {
         seen: Mutex<Vec<usize>>,
     }
 
-    impl Generator for Counting {
+    impl LlmPort for Counting {
         async fn generate(
             &self,
             req: GenerateRequest,
             _on_delta: &mut (dyn FnMut(&str) + Send),
-        ) -> Result<AssistantTurn, GatewayError> {
+        ) -> Result<AssistantTurn, LlmError> {
             self.seen.lock().unwrap().push(req.messages.len());
             Ok(self.turns.lock().unwrap().remove(0))
         }
@@ -476,8 +547,7 @@ mod tests {
 
     #[tokio::test]
     async fn continue_run_carrega_o_historico_entre_turnos() {
-        let dir = tempfile::tempdir().unwrap();
-        let tools = ToolRegistry::default_set(dir.path());
+        let tools = MockTools { tools: vec![] };
         let gen = Counting {
             turns: Mutex::new(vec![
                 turn(
@@ -525,18 +595,14 @@ mod tests {
 
     #[tokio::test]
     async fn limite_de_passos_e_um_erro() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("f.txt"), "x\n").unwrap();
-        let tools = ToolRegistry::default_set(dir.path());
+        let tools = MockTools {
+            tools: vec![MockTool::ok("read", "conteudo")],
+        };
         // Sempre pede ferramenta — nunca termina.
         let loops: Vec<AssistantTurn> = (0..6)
             .map(|i| {
                 turn(
-                    vec![ContentBlock::ToolUse {
-                        id: format!("tu{i}"),
-                        name: "read".into(),
-                        input: serde_json::json!({"path": "f.txt"}),
-                    }],
+                    vec![tool_use(&format!("tu{i}"), "read")],
                     StopReason::ToolUse,
                 )
             })
@@ -550,105 +616,5 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, LoopError::MaxSteps(5)));
-    }
-
-    /// Fronteira nº 1 da Onda 1 (Fase 6): o fio completo — registry → permissão
-    /// → run → output — com uma skill registrada que **executa de verdade** como
-    /// subprocesso e cujo stdout real volta ao loop. Não é unit do wrapper.
-    #[tokio::test]
-    async fn skill_registrada_e_invocada_de_verdade_pelo_loop() {
-        let dir = tempfile::tempdir().unwrap();
-        let skill_dir = dir.path().join("greet");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        let skill =
-            btv_tools::SkillTool::new("greet", "cumprimenta", r#"printf 'OLA:%s' "$1""#, skill_dir);
-        let mut tools = ToolRegistry::default_set(dir.path());
-        tools.register(Box::new(skill));
-
-        let gen = Scripted {
-            turns: Mutex::new(vec![
-                turn(
-                    vec![ContentBlock::ToolUse {
-                        id: "tu1".into(),
-                        name: "greet".into(),
-                        input: serde_json::json!({"input": "mundo"}),
-                    }],
-                    StopReason::ToolUse,
-                ),
-                turn(
-                    vec![ContentBlock::Text {
-                        text: "feito".into(),
-                    }],
-                    StopReason::EndTurn,
-                ),
-            ]),
-        };
-
-        let al = agent_loop(&gen, &tools);
-        let outcome = al
-            .run("use a skill", &mut AllowAll, &mut |_| {})
-            .await
-            .unwrap();
-
-        // A skill executou de verdade: seu stdout real voltou como tool_result.
-        let tool_result = match &outcome.messages[2].content[0] {
-            ContentBlock::ToolResult {
-                content, is_error, ..
-            } => {
-                assert!(!is_error);
-                content.clone()
-            }
-            other => panic!("esperava ToolResult, achei {other:?}"),
-        };
-        assert_eq!(tool_result, "OLA:mundo");
-    }
-
-    /// Fronteira nº 4 da Onda 1: a invocação da skill passa pelo permission-
-    /// engine; um resolver que nega emite `ToolDenied` e a skill **não** roda —
-    /// provado por um entrypoint que criaria um arquivo se tivesse executado.
-    #[tokio::test]
-    async fn skill_negada_pela_permissao_nao_executa() {
-        let dir = tempfile::tempdir().unwrap();
-        let skill_dir = dir.path().join("toca");
-        std::fs::create_dir_all(&skill_dir).unwrap();
-        let marca = dir.path().join("EXECUTOU");
-        let entry = format!(r#"touch "{}""#, marca.display());
-        let skill = btv_tools::SkillTool::new("toca", "cria arquivo", entry, skill_dir);
-        let mut tools = ToolRegistry::default_set(dir.path());
-        tools.register(Box::new(skill));
-
-        let gen = Scripted {
-            turns: Mutex::new(vec![
-                turn(
-                    vec![ContentBlock::ToolUse {
-                        id: "tu1".into(),
-                        name: "toca".into(),
-                        input: serde_json::json!({"input": ""}),
-                    }],
-                    StopReason::ToolUse,
-                ),
-                turn(
-                    vec![ContentBlock::Text { text: "ok".into() }],
-                    StopReason::EndTurn,
-                ),
-            ]),
-        };
-
-        let al = agent_loop(&gen, &tools);
-        let mut denied = false;
-        let _ = al
-            .run("tarefa", &mut DenyAll, &mut |e| {
-                if matches!(e, LoopEvent::ToolDenied { .. }) {
-                    denied = true;
-                }
-            })
-            .await
-            .unwrap();
-
-        assert!(denied, "a permissão deveria ter negado a skill");
-        assert!(
-            !marca.exists(),
-            "a skill negada não pode ter executado o entrypoint"
-        );
     }
 }

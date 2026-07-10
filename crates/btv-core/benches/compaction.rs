@@ -3,8 +3,7 @@
 //! conversa precisa ser compactada. Baseline comparável do hot path.
 
 use btv_core::{estimate_tokens, CompactionPolicy};
-use btv_llm::chat::ChatMessage;
-use btv_llm::tier_from_id;
+use btv_domain::chat::{ChatMessage, ModelTier};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn historico(n: usize) -> Vec<ChatMessage> {
@@ -25,7 +24,7 @@ fn bench_estimate_tokens(c: &mut Criterion) {
 }
 
 fn bench_needs_compaction(c: &mut Criterion) {
-    let policy = CompactionPolicy::for_tier(tier_from_id("claude-sonnet-5"), 200_000);
+    let policy = CompactionPolicy::for_tier(ModelTier::Large, 200_000);
     let msgs = historico(200);
     c.bench_function("needs_compaction_200", |b| {
         b.iter(|| policy.needs_compaction(black_box(&msgs)))

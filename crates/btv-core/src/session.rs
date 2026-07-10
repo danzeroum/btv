@@ -6,9 +6,22 @@
 //! detecta dois processos escrevendo na mesma sessão. Context Epochs e
 //! compaction em fronteiras seguras entram na sequência da Fase 2.
 
-use btv_llm::chat::ChatMessage;
-use btv_store::{EventError, EventInput, EventStore};
+use btv_domain::chat::ChatMessage;
+use btv_domain::event::EventInput;
+use btv_domain::ports::{EventStorePort, RepositoryError};
+use btv_domain::TenantContext;
 use serde_json::json;
+
+/// Atalho: a sessão precisa nomear os tipos de dado do port (constrói
+/// `EventInput`, replaya `StoredEvent` do domínio).
+pub trait SessionStore:
+    EventStorePort<NewEvent = EventInput, StoredEvent = btv_domain::event::StoredEvent>
+{
+}
+impl<S> SessionStore for S where
+    S: EventStorePort<NewEvent = EventInput, StoredEvent = btv_domain::event::StoredEvent>
+{
+}
 
 pub const SESSION_STARTED: &str = "session.started.1";
 pub const MESSAGE: &str = "message.1";
@@ -17,7 +30,7 @@ pub const EPOCH_STARTED: &str = "epoch.started.1";
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
     #[error("event store: {0}")]
-    Store(#[from] EventError),
+    Store(#[from] RepositoryError),
     #[error("evento malformado na sessão {session_id} (seq {seq}): {reason}")]
     Malformed {
         session_id: String,
@@ -28,8 +41,11 @@ pub enum SessionError {
 
 /// Sessão durável: histórico reconstruído por replay + head para
 /// concorrência otimista nos appends.
-pub struct DurableSession {
-    store: EventStore,
+pub struct DurableSession<S: SessionStore> {
+    store: S,
+    /// Dono da sessão — repassado ao port em toda operação (D1t: a sessão
+    /// declara em nome de quem opera; no CLI local é `TenantContext::local`).
+    ctx: TenantContext,
     pub session_id: String,
     /// Histórico corrente (replay + turnos desta execução).
     pub messages: Vec<ChatMessage>,
@@ -41,19 +57,21 @@ pub struct DurableSession {
     epoch: usize,
 }
 
-impl DurableSession {
+impl<S: SessionStore> DurableSession<S> {
     /// Abre (ou cria) a sessão `session_id`, reconstruindo o histórico.
     pub fn open(
-        store: EventStore,
+        store: S,
+        ctx: TenantContext,
         session_id: &str,
         task_hint: &str,
         model: &str,
     ) -> Result<Self, SessionError> {
-        let head = store.head_seq(session_id)?;
+        let head = store.head_seq(&ctx, session_id)?;
         let mut messages = Vec::new();
         if head == 0 {
             let mut store = store;
             let head = store.append(
+                &ctx,
                 session_id,
                 0,
                 vec![EventInput::new(
@@ -63,6 +81,7 @@ impl DurableSession {
             )?;
             return Ok(Self {
                 store,
+                ctx,
                 session_id: session_id.to_string(),
                 messages,
                 head,
@@ -71,7 +90,7 @@ impl DurableSession {
             });
         }
         let mut epoch = 0usize;
-        for event in store.read(session_id, 0)? {
+        for event in store.read(&ctx, session_id, 0)? {
             match event.kind.as_str() {
                 MESSAGE => {
                     let message: ChatMessage = serde_json::from_value(event.data).map_err(|e| {
@@ -95,6 +114,7 @@ impl DurableSession {
         let persisted = messages.len();
         Ok(Self {
             store,
+            ctx,
             session_id: session_id.to_string(),
             messages,
             head,
@@ -118,6 +138,7 @@ impl DurableSession {
                 reason: e.to_string(),
             })?;
         self.head = self.store.append(
+            &self.ctx,
             &self.session_id,
             self.head,
             vec![
@@ -152,7 +173,9 @@ impl DurableSession {
             return Ok(0);
         }
         let count = new.len();
-        self.head = self.store.append(&self.session_id, self.head, new)?;
+        self.head = self
+            .store
+            .append(&self.ctx, &self.session_id, self.head, new)?;
         self.persisted = self.messages.len();
         Ok(count)
     }
@@ -165,21 +188,99 @@ impl DurableSession {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use btv_llm::chat::{ContentBlock, Role};
+    //! Unit da sessão com um event store EM MEMÓRIA (mock puro do
+    //! `EventStorePort` — DoD do D1t: sem SQLite). A composição com o
+    //! driver real continua provada em
+    //! `btv-store/tests/sessao_durable_replay.rs` (movida no D1t).
 
-    fn store_at(path: &str) -> EventStore {
-        EventStore::open(path).unwrap()
+    use super::*;
+    use btv_domain::chat::{ContentBlock, Role};
+    use btv_domain::event::StoredEvent;
+    use btv_domain::{ActorId, TenantId};
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    /// Mock em memória do port — estado COMPARTILHÁVEL entre instâncias
+    /// (clones veem o mesmo mapa), para o teste de conflito reproduzir dois
+    /// escritores na mesma sessão como o SQLite real faria.
+    #[derive(Clone, Default)]
+    struct MemStore {
+        eventos: Arc<Mutex<HashMap<String, Vec<StoredEvent>>>>,
+    }
+
+    impl EventStorePort for MemStore {
+        type NewEvent = EventInput;
+        type StoredEvent = StoredEvent;
+
+        fn append(
+            &mut self,
+            _ctx: &TenantContext,
+            aggregate_id: &str,
+            expected_head: i64,
+            events: Vec<EventInput>,
+        ) -> Result<i64, RepositoryError> {
+            let mut mapa = self.eventos.lock().unwrap();
+            let fila = mapa.entry(aggregate_id.to_string()).or_default();
+            let found = fila.len() as i64;
+            if found != expected_head {
+                return Err(RepositoryError::ConcurrencyConflict {
+                    expected: expected_head,
+                    found,
+                });
+            }
+            for e in events {
+                let seq = fila.len() as i64 + 1;
+                fila.push(StoredEvent {
+                    id: format!("evt_{seq}"),
+                    aggregate_id: aggregate_id.to_string(),
+                    seq,
+                    kind: e.kind,
+                    data: e.data,
+                });
+            }
+            Ok(fila.len() as i64)
+        }
+
+        fn read(
+            &self,
+            _ctx: &TenantContext,
+            aggregate_id: &str,
+            from_seq: i64,
+        ) -> Result<Vec<StoredEvent>, RepositoryError> {
+            Ok(self
+                .eventos
+                .lock()
+                .unwrap()
+                .get(aggregate_id)
+                .map(|f| f.iter().filter(|e| e.seq > from_seq).cloned().collect())
+                .unwrap_or_default())
+        }
+
+        fn head_seq(
+            &self,
+            _ctx: &TenantContext,
+            aggregate_id: &str,
+        ) -> Result<i64, RepositoryError> {
+            Ok(self
+                .eventos
+                .lock()
+                .unwrap()
+                .get(aggregate_id)
+                .map(|f| f.len() as i64)
+                .unwrap_or(0))
+        }
+    }
+
+    fn ctx() -> TenantContext {
+        TenantContext::new(TenantId::LOCAL, ActorId::new("test:core").unwrap())
     }
 
     #[test]
     fn sessao_sobrevive_a_reabertura() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("s.db");
-        let path = path.to_str().unwrap();
+        let store = MemStore::default();
 
         {
-            let mut s = DurableSession::open(store_at(path), "ses_1", "tarefa", "m").unwrap();
+            let mut s = DurableSession::open(store.clone(), ctx(), "ses_1", "tarefa", "m").unwrap();
             assert_eq!(s.resumed_messages(), 0);
             s.messages.push(ChatMessage::user_text("primeira"));
             s.messages.push(ChatMessage {
@@ -192,25 +293,17 @@ mod tests {
             assert_eq!(s.persist_new().unwrap(), 0); // idempotente
         }
 
-        let s = DurableSession::open(store_at(path), "ses_1", "tarefa", "m").unwrap();
+        let s = DurableSession::open(store, ctx(), "ses_1", "tarefa", "m").unwrap();
         assert_eq!(s.resumed_messages(), 2);
         assert!(matches!(s.messages[0].role, Role::User));
         assert!(matches!(s.messages[1].role, Role::Assistant));
-        assert_eq!(
-            s.messages[1].content.len(),
-            1,
-            "blocos de conteúdo preservados no replay"
-        );
     }
 
     #[test]
     fn escritor_concorrente_gera_conflito() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("s.db");
-        let path = path.to_str().unwrap();
-
-        let mut a = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
-        let mut b = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
+        let store = MemStore::default();
+        let mut a = DurableSession::open(store.clone(), ctx(), "ses_1", "t", "m").unwrap();
+        let mut b = DurableSession::open(store, ctx(), "ses_1", "t", "m").unwrap();
 
         a.messages.push(ChatMessage::user_text("de A"));
         a.persist_new().unwrap();
@@ -219,18 +312,15 @@ mod tests {
         let err = b.persist_new().unwrap_err();
         assert!(matches!(
             err,
-            SessionError::Store(EventError::Conflict { .. })
+            SessionError::Store(RepositoryError::ConcurrencyConflict { .. })
         ));
     }
 
     #[test]
     fn compaction_inicia_nova_epoca_e_replay_parte_do_resumo() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("s.db");
-        let path = path.to_str().unwrap();
-
+        let store = MemStore::default();
         {
-            let mut s = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
+            let mut s = DurableSession::open(store.clone(), ctx(), "ses_1", "t", "m").unwrap();
             s.messages.push(ChatMessage::user_text("pergunta longa"));
             s.messages.push(ChatMessage {
                 role: Role::Assistant,
@@ -245,15 +335,12 @@ mod tests {
             assert_eq!(s.epoch(), 1);
             assert_eq!(s.messages.len(), 1, "histórico vira só a baseline");
 
-            // a conversa continua na nova época
             s.messages.push(ChatMessage::user_text("continua"));
             s.persist_new().unwrap();
         }
 
-        let s = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
+        let s = DurableSession::open(store, ctx(), "ses_1", "t", "m").unwrap();
         assert_eq!(s.epoch(), 1);
-        // replay: baseline resumida + mensagem pós-época (as antigas ficam
-        // só no event log, não no histórico ativo)
         assert_eq!(s.resumed_messages(), 2);
         assert!(matches!(
             &s.messages[0].content[0],
@@ -263,12 +350,9 @@ mod tests {
 
     #[test]
     fn tool_use_e_tool_result_sobrevivem_ao_replay() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("s.db");
-        let path = path.to_str().unwrap();
-
+        let store = MemStore::default();
         {
-            let mut s = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
+            let mut s = DurableSession::open(store.clone(), ctx(), "ses_1", "t", "m").unwrap();
             s.messages.push(ChatMessage {
                 role: Role::Assistant,
                 content: vec![ContentBlock::ToolUse {
@@ -288,7 +372,7 @@ mod tests {
             s.persist_new().unwrap();
         }
 
-        let s = DurableSession::open(store_at(path), "ses_1", "t", "m").unwrap();
+        let s = DurableSession::open(store, ctx(), "ses_1", "t", "m").unwrap();
         assert!(matches!(
             &s.messages[0].content[0],
             ContentBlock::ToolUse { name, .. } if name == "read"
