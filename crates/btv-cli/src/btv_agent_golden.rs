@@ -589,6 +589,28 @@ async fn golden_squad_activation() {
     )
     .await;
 
+    // C3.3b (cobertura NOVA — ato 1, ANTES de estrangular `salvar_fluxo`):
+    // dispara o emissor de flow_saved LEGADO (`append_ledger` cru: SEM tenant)
+    // para o golden pinar `btv.flow_saved` — o corpo MAIS RICO depois da
+    // ativação (7 campos), onde o ato 1 vale ainda mais pela superfície.
+    let _ = reqwest_step(
+        &client,
+        &base,
+        "salvar fluxo do designer (emissor legado — pré-estrangulamento C3.3b)",
+        "POST",
+        "/api/btv/designer/flows",
+        Some(serde_json::json!({
+            "nome": "Fluxo de aprovação editorial",
+            "diagram": {"nodes": {"n1": {"kind": "task"}, "n2": {"kind": "end"}}},
+            "versao_semantica": "1.0.0",
+            "snapshot_hash": "snap-abc",
+            "audit_head": "head-1",
+            "audit_len": 2,
+        })),
+        &[],
+    )
+    .await;
+
     // Anti-fake, fora do golden: o fluxo EXECUTOU — auditoria no ledger e
     // contador de gates persistido, não só respostas HTTP bem formadas.
     {
@@ -604,6 +626,7 @@ async fn golden_squad_activation() {
             1,
             "C3.3 ato 1: 1 publicação"
         );
+        assert_eq!(conta("btv.flow_saved"), 1, "C3.3b ato 1: 1 fluxo salvo");
         guard.verify_chain().unwrap();
 
         // C3.1 (primeiro estrangulado): a entrada de gate agora nasce da
@@ -663,11 +686,27 @@ async fn golden_squad_activation() {
             .expect("entrada de publicação existe");
         assert_eq!(publicacao.payload["template_id"], "editorial");
         assert_eq!(publicacao.payload["publicado"], true);
+
+        // C3.3b ato 1: `salvar_fluxo` ainda é LEGADO (`append_ledger` cru) —
+        // reintroduz DE PROPÓSITO o estado misto. O golden pina o corpo legado
+        // (7 campos, SEM tenant) antes do estrangulamento (ato 2); a regravação
+        // com tenant é o ato 3.
+        let fluxo = entradas
+            .iter()
+            .find(|e| e.kind == "btv.flow_saved")
+            .expect("entrada de flow_saved existe");
+        assert_eq!(fluxo.tenant, None, "flow_saved ainda LEGADO (ato 1)");
+        assert_eq!(fluxo.payload["nome"], "Fluxo de aprovação editorial");
+        assert_eq!(fluxo.payload["blocos"], 2);
+        assert_eq!(fluxo.payload["versao_semantica"], "1.0.0");
+        assert_eq!(fluxo.payload["audit_len"], 2);
+        assert!(fluxo.payload["diagram_sha256"].is_string());
         assert!(
             entradas
                 .iter()
+                .filter(|e| e.kind != "btv.flow_saved")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "nenhum emissor legado restante no fluxo (publicação estrangulada)"
+            "todos os JÁ estrangulados têm tenant; só flow_saved (legado) não"
         );
     }
     {

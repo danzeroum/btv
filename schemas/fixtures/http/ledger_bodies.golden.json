@@ -12,6 +12,23 @@
           {
             "actor": "web:btv",
             "entry_hash": "<volatil>",
+            "kind": "btv.flow_saved",
+            "payload": {
+              "audit_head": "head-1",
+              "audit_len": 2,
+              "blocos": 2,
+              "diagram_sha256": "3976d24a26db3de3b774ba49cd45b4657cacdb45b0d2afb9fb26735173981899",
+              "nome": "Fluxo de aprovação editorial",
+              "snapshot_hash": "snap-abc",
+              "versao_semantica": "1.0.0"
+            },
+            "prev_hash": "<volatil>",
+            "seq": 7,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
             "kind": "btv.template_published",
             "payload": {
               "publicado": true,
