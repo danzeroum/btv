@@ -460,10 +460,12 @@ dependencies = [
 name = "btv-store"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "btv-contract",
  "btv-core",
  "btv-domain",
  "btv-schemas",
+ "getrandom 0.2.17",
  "rusqlite",
  "serde",
  "serde_json",

@@ -742,6 +742,194 @@ impl LedgerRepository for PgStore {
     }
 }
 
+// ── E1s.1: sessões do modo SaaS (ADR 0029 aceito) ─────────────────────────
+//
+// SAAS-ONLY POR DESIGN (fronteira declarada no aceite do revisor): sessões
+// NÃO existem no modo local — `TenantId::LOCAL` implícito É a ausência delas.
+// Por isso não há `SessionsPort` dual-adapter e nenhum análogo em SQLite: a
+// regra da suíte de contrato do B2/B4 não se aplica aqui. Tudo vive sob a
+// feature `pg`, como o resto do modo saas.
+
+/// Uma sessão resolvida no caminho de auth — o par que o extractor (E1s.2)
+/// vira `TenantContext` (`actor = user:{user_id}`, item 6 do ADR).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessaoResolvida {
+    pub tenant: TenantId,
+    pub user_id: String,
+}
+
+/// Um token recém-emitido — o texto EM CLARO existe só aqui, uma vez. O
+/// operador o vê no `btv session issue`; o banco guarda só o `token_hash`.
+#[derive(Debug, Clone)]
+pub struct TokenEmitido {
+    pub token: String,
+    pub token_hash: String,
+}
+
+/// Uma sessão ativa, na visão ADMINISTRATIVA (pós-auth, tenant-escopada) —
+/// nunca carrega o token (que não existe no banco), só o hash e os prazos.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessaoAdmin {
+    pub token_hash: String,
+    pub user_id: String,
+    pub absolute_deadline: String,
+    pub idle_deadline: String,
+}
+
+/// Gera um token opaco: 256 bits do CSPRNG do SO → base64url sem padding,
+/// com prefixo `btvs_` (grepável em logs/vazamentos). O `token_hash` é o
+/// SHA-256 do token INTEIRO (com prefixo) — o mesmo `sha256_hex` do resto
+/// do sistema. Token forte de alta entropia não precisa de KDF caro: a
+/// honestidade do `pin_hash` (sha256 simples) com a razão INVERTIDA —
+/// KDF protege senha fraca, não segredo aleatório de 256 bits.
+fn gerar_token() -> Result<TokenEmitido, RepositoryError> {
+    use base64::Engine;
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes)
+        .map_err(|e| RepositoryError::Storage(format!("CSPRNG indisponível: {e}")))?;
+    let token = format!(
+        "btvs_{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+    );
+    let token_hash = btv_schemas::sha256_hex(&token);
+    Ok(TokenEmitido { token, token_hash })
+}
+
+impl PgStore {
+    /// Emite uma sessão (o mecanismo de EMISSÃO que o esboço não tinha — a
+    /// "chave da porta"): gera o token, grava SÓ o hash + os prazos do TTL
+    /// (decisão (a): absoluta 30d, ociosidade 24h), e devolve o token em
+    /// claro UMA vez. Sem `TenantContext`: emissão é ato de OPERADOR
+    /// (`btv session issue`), anterior a qualquer sessão — não há contexto a
+    /// exigir, o caller administrativo é confiável por construção (é quem
+    /// tem a URL do banco).
+    pub fn issue_session(
+        &self,
+        tenant: &TenantId,
+        user_id: &str,
+    ) -> Result<TokenEmitido, RepositoryError> {
+        let emitido = gerar_token()?;
+        let hash = emitido.token_hash.clone();
+        let tenant = tenant.to_string();
+        let user_id = user_id.to_string();
+        self.rt
+            .block_on(async {
+                sqlx::query(
+                    "INSERT INTO sessions
+                        (token_hash, tenant_id, user_id, absolute_deadline, idle_deadline)
+                     VALUES ($1, $2, $3, now() + interval '30 days',
+                             now() + interval '24 hours')",
+                )
+                .bind(&hash)
+                .bind(&tenant)
+                .bind(&user_id)
+                .execute(&self.pool)
+                .await
+            })
+            .map_err(storage)?;
+        Ok(emitido)
+    }
+
+    /// Resolve um token no caminho de AUTH — acesso SÓ por igualdade de
+    /// `token_hash` (a política do item 5, letra (a)). Numa ÚNICA query:
+    /// valida (não revogada, dentro da absoluta E da ociosidade) e RENOVA a
+    /// ociosidade (`LEAST(now()+24h, absoluta)` — a renovação nunca ultrapassa
+    /// o teto absoluto). Token inválido/expirado/revogado ⇒ zero linhas ⇒
+    /// `None` (fail-closed). SEM `fixa_tenant`: esta tabela é a exceção sem
+    /// RLS de tenant (o lookup é anterior ao `TenantContext`), e a segurança
+    /// vem do token ser inforjável, não de `app.tenant_id`.
+    pub fn resolve_session(&self, token: &str) -> Result<Option<SessaoResolvida>, RepositoryError> {
+        let hash = btv_schemas::sha256_hex(token);
+        let row: Option<(String, String)> = self
+            .rt
+            .block_on(async {
+                sqlx::query_as(
+                    "UPDATE sessions
+                        SET idle_deadline = LEAST(now() + interval '24 hours', absolute_deadline)
+                      WHERE token_hash = $1
+                        AND revoked_at IS NULL
+                        AND now() < absolute_deadline
+                        AND now() < idle_deadline
+                      RETURNING tenant_id, user_id",
+                )
+                .bind(&hash)
+                .fetch_optional(&self.pool)
+                .await
+            })
+            .map_err(storage)?;
+        row.map(|(tenant, user_id)| {
+            Ok(SessaoResolvida {
+                tenant: TenantId::parse(&tenant).map_err(storage)?,
+                user_id,
+            })
+        })
+        .transpose()
+    }
+
+    /// Revoga uma sessão (logout real, item 4) — operação ADMINISTRATIVA
+    /// pós-auth, tenant-escopada por WHERE explícito (item 5, letra (c)):
+    /// revogar o hash de OUTRO tenant não faz nada (indistinguível de
+    /// inexistente). Retorna `true` se uma sessão ativa foi revogada.
+    pub fn revoke_session(
+        &self,
+        ctx: &TenantContext,
+        token_hash: &str,
+    ) -> Result<bool, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let n = self
+            .rt
+            .block_on(async {
+                sqlx::query(
+                    "UPDATE sessions SET revoked_at = now()
+                     WHERE token_hash = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+                )
+                .bind(token_hash)
+                .bind(&tenant)
+                .execute(&self.pool)
+                .await
+            })
+            .map_err(storage)?
+            .rows_affected();
+        Ok(n > 0)
+    }
+
+    /// Lista as sessões ATIVAS do tenant do contexto — administrativa,
+    /// tenant-escopada por WHERE explícito. Nunca devolve o token (que não
+    /// existe no banco), só hash + prazos.
+    pub fn list_sessions(&self, ctx: &TenantContext) -> Result<Vec<SessaoAdmin>, RepositoryError> {
+        let tenant = ctx.tenant.to_string();
+        let rows: Vec<(String, String, String, String)> = self
+            .rt
+            .block_on(async {
+                sqlx::query_as(
+                    "SELECT token_hash, user_id,
+                            to_char(absolute_deadline at time zone 'utc',
+                                    'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),
+                            to_char(idle_deadline at time zone 'utc',
+                                    'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+                       FROM sessions
+                      WHERE tenant_id = $1 AND revoked_at IS NULL
+                      ORDER BY created_ts DESC",
+                )
+                .bind(&tenant)
+                .fetch_all(&self.pool)
+                .await
+            })
+            .map_err(storage)?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(token_hash, user_id, absolute_deadline, idle_deadline)| SessaoAdmin {
+                    token_hash,
+                    user_id,
+                    absolute_deadline,
+                    idle_deadline,
+                },
+            )
+            .collect())
+    }
+}
+
 /// Harness de TESTE do adapter (usado por `tests/contract_pg.rs` e pelos
 /// testes deste módulo; não há uso de produção — o análogo do
 /// `open_in_memory` do SQLite, que aqui precisa de schema isolado + role
@@ -1071,5 +1259,138 @@ mod tests {
         let reaberto = PgStore::connect_with(iso.opts_app.clone()).expect("reconexão");
         let lido = reaberto.get(&b, "sq1").unwrap().expect("run sobrevive");
         assert_eq!(lido.nome, "Do tenant B");
+    }
+
+    // ── E1s.1: sessões — o ciclo e o adversarial da tabela do bootstrap ──
+
+    /// O ciclo completo do mecanismo de EMISSÃO (a "chave da porta" que o
+    /// esboço não tinha): issue → resolve → revoke. Prova que uma sessão
+    /// legítima passa a existir e vira identidade, e que o logout a mata.
+    #[test]
+    fn sessao_ciclo_emite_resolve_e_revoga() {
+        let Some(iso) = abrir_isolado() else { return };
+        let store = iso.store;
+        let a = ctx_a();
+        let emitido = store.issue_session(&a.tenant, "u-42").unwrap();
+        assert!(emitido.token.starts_with("btvs_"), "prefixo grepável");
+        assert_eq!(emitido.token_hash, btv_schemas::sha256_hex(&emitido.token));
+
+        // Resolve: o token vira o par (tenant, user) que o extractor usa.
+        let resolvida = store.resolve_session(&emitido.token).unwrap().unwrap();
+        assert_eq!(resolvida.tenant, a.tenant);
+        assert_eq!(resolvida.user_id, "u-42");
+
+        // Revoga (logout real) → resolve falha fail-closed.
+        assert!(store.revoke_session(&a, &emitido.token_hash).unwrap());
+        assert!(store.resolve_session(&emitido.token).unwrap().is_none());
+    }
+
+    /// O ADVERSARIAL da tabela do bootstrap (item 5, a política que substitui
+    /// o RLS de tenant): (1) um DUMP não autentica — só hashes são gravados,
+    /// e apresentar o hash como token não resolve (SHA-256 é one-way);
+    /// (2) o caminho de auth é SÓ por igualdade de hash — token aleatório
+    /// não casa; (3) admin (listar/revogar) é tenant-escopado — a sessão de
+    /// um tenant é invisível e intocável pelo outro.
+    #[test]
+    fn sessao_bootstrap_adversarial() {
+        let Some(iso) = abrir_isolado() else { return };
+        let store = iso.store;
+        let (a, b) = (ctx_a(), ctx_b());
+        let sa = store.issue_session(&a.tenant, "u-a").unwrap();
+        let sb = store.issue_session(&b.tenant, "u-b").unwrap();
+
+        // (1) Dump não autentica: o token NUNCA está no banco (nenhuma coluna
+        // o guarda), e o hash apresentado como token não resolve. O bloco
+        // async lê o dump por conexão CRUA; as chamadas ao `store` (que tem
+        // runtime próprio) ficam FORA dele — block_on aninhado em
+        // current-thread entra em pânico.
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let dump_hashes: Vec<String> = rt.block_on(async {
+            use sqlx::ConnectOptions;
+            let mut conn = iso.opts_app.clone().connect().await.unwrap();
+            let colunas: Vec<String> = sqlx::query_scalar(
+                "SELECT column_name FROM information_schema.columns
+                 WHERE table_name = 'sessions'",
+            )
+            .fetch_all(&mut conn)
+            .await
+            .unwrap();
+            assert!(
+                colunas.iter().all(|c| c != "token" && c != "token_plain"),
+                "nenhuma coluna guarda o token em claro — só o hash"
+            );
+            sqlx::query_scalar("SELECT token_hash FROM sessions")
+                .fetch_all(&mut conn)
+                .await
+                .unwrap()
+        });
+        // Um dump entrega token_hash; usá-lo como token re-hasheia → valor
+        // diferente → não resolve. Preimagem de SHA-256 mata isto.
+        assert!(dump_hashes.contains(&sa.token_hash));
+        for h in &dump_hashes {
+            assert!(
+                store.resolve_session(h).unwrap().is_none(),
+                "o hash de um dump NÃO autentica"
+            );
+        }
+
+        // (2) Auth só por igualdade de hash: token forjado aleatório = None.
+        assert!(store
+            .resolve_session("btvs_TOKEN_FORJADO_QUE_NAO_EXISTE")
+            .unwrap()
+            .is_none());
+
+        // (3) Admin tenant-escopado: A lista só a sessão de A; revogar a de B
+        // pelo contexto de A não faz nada; B se revoga.
+        let lista_a = store.list_sessions(&a).unwrap();
+        assert_eq!(lista_a.len(), 1);
+        assert_eq!(lista_a[0].user_id, "u-a");
+        assert!(lista_a.iter().all(|s| s.token_hash != sb.token_hash));
+        assert!(
+            !store.revoke_session(&a, &sb.token_hash).unwrap(),
+            "A não revoga sessão de B (tenant-escopado)"
+        );
+        assert!(
+            store.resolve_session(&sb.token).unwrap().is_some(),
+            "B segue viva"
+        );
+        assert!(store.revoke_session(&b, &sb.token_hash).unwrap());
+        assert!(store.resolve_session(&sb.token).unwrap().is_none());
+    }
+
+    /// Prova-que-morde da EXPIRAÇÃO (fail-closed do TTL): uma sessão com os
+    /// prazos no passado (inserida crua, como o tempo faria) NÃO resolve —
+    /// a validade mora no WHERE do resolve, não em confiança.
+    #[test]
+    fn sessao_expirada_nao_resolve() {
+        let Some(iso) = abrir_isolado() else { return };
+        let store = iso.store;
+        let a = ctx_a();
+        let emitido = super::gerar_token().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            // Absoluta e ociosidade no passado: sessão morta pelo tempo.
+            sqlx::query(
+                "INSERT INTO sessions
+                    (token_hash, tenant_id, user_id, absolute_deadline, idle_deadline)
+                 VALUES ($1, $2, 'u-velho', now() - interval '1 day',
+                         now() - interval '1 hour')",
+            )
+            .bind(&emitido.token_hash)
+            .bind(a.tenant.to_string())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        });
+        assert!(
+            store.resolve_session(&emitido.token).unwrap().is_none(),
+            "sessão expirada é fail-closed"
+        );
     }
 }

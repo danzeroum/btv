@@ -155,6 +155,33 @@ enum Commands {
         #[arg(long, value_enum, default_value = "human")]
         format: VerifyFormat,
     },
+    /// (saas) Emite uma sessão para um usuário de um tenant e imprime o
+    /// token UMA vez. Ferramenta de OPERADOR — a "chave da porta" do modo
+    /// saas (ADR 0029, E1s.1): não é login de usuário, é o admin que cria a
+    /// sessão inicial. O banco guarda só o hash; o token não persiste.
+    #[cfg(feature = "pg")]
+    Session {
+        #[command(subcommand)]
+        cmd: SessionCmd,
+    },
+}
+
+/// Subcomandos de `btv session` (só sob a feature `pg`).
+#[cfg(feature = "pg")]
+#[derive(clap::Subcommand)]
+enum SessionCmd {
+    /// Emite uma sessão e imprime o token opaco UMA vez no stdout.
+    Issue {
+        /// UUID do tenant dono da sessão.
+        #[arg(long)]
+        tenant: String,
+        /// Id do usuário (vira `actor = user:<id>` na trilha de auditoria).
+        #[arg(long)]
+        user: String,
+        /// URL do Postgres (default: env `BTV_PG_URL`).
+        #[arg(long)]
+        db_url: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -195,6 +222,8 @@ async fn main() -> Result<()> {
             host,
             no_web_agent,
         } => run_dashboard(host, port, !no_web_agent).await,
+        #[cfg(feature = "pg")]
+        Commands::Session { cmd } => run_session(cmd).await,
         Commands::Experiment {
             experiment,
             db,
@@ -266,6 +295,44 @@ fn print_experiment_human(report: &ExperimentReport) {
 
 /// Sobe o dashboard de telemetria lendo `.btv/telemetry.db` do diretório
 /// atual (criado, se ausente, por `run`/`chat`).
+/// (saas) `btv session issue` — emite uma sessão e imprime o token UMA vez.
+/// A conexão PG e a gravação (só o hash) ficam no `PgStore::issue_session`;
+/// aqui é só a ergonomia de operador: valida o tenant, chama a porta,
+/// imprime o token com o aviso de que ele não será mostrado de novo.
+#[cfg(feature = "pg")]
+async fn run_session(cmd: SessionCmd) -> Result<()> {
+    match cmd {
+        SessionCmd::Issue {
+            tenant,
+            user,
+            db_url,
+        } => {
+            let tenant = btv_domain::TenantId::parse(&tenant)
+                .map_err(|e| anyhow::anyhow!("tenant inválido: {e}"))?;
+            let url = db_url
+                .or_else(|| std::env::var("BTV_PG_URL").ok())
+                .context("URL do Postgres ausente (--db-url ou env BTV_PG_URL)")?;
+            // block_on interno do PgStore não convive com o runtime tokio do
+            // main — a emissão é síncrona e curta, então roda em spawn_blocking.
+            let emitido = tokio::task::spawn_blocking(move || {
+                let store = btv_store::pg::PgStore::connect(&url)
+                    .map_err(|e| anyhow::anyhow!("conexão Postgres: {e}"))?;
+                store
+                    .issue_session(&tenant, &user)
+                    .map_err(|e| anyhow::anyhow!("emissão da sessão: {e}"))
+            })
+            .await
+            .context("task de emissão")??;
+            println!("{}", emitido.token);
+            eprintln!(
+                "sessão emitida — o token acima NÃO será mostrado de novo \
+                 (o banco guarda só o hash). Entregue-o pelo canal seguro."
+            );
+            Ok(())
+        }
+    }
+}
+
 async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Result<()> {
     let root = std::env::current_dir().context("diretório atual")?;
     let btv_dir = root.join(".btv");
