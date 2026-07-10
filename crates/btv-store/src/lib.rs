@@ -14,7 +14,7 @@ pub mod telemetry;
 
 pub use btv::{BtvRun, BtvStore, BtvStoreError, BtvUser, CustomPersona, PinCheck};
 pub use events::{EventError, EventInput, EventStore, StoredEvent};
-pub use ledger::LedgerStore;
+pub use ledger::{LedgerError, LedgerStore};
 pub use prompt_cache::PromptCache;
 pub use prompt_library::{PromptLibrary, SavedPrompt};
 pub use rule_store::{RuleDecision, RuleRecord, RuleStore, RuleStoreError};
