@@ -1,7 +1,9 @@
 # ADR 0031 — a fronteira real é console/dashboard vs motor (redefinição do T4, fecho do C4)
 
-- Status: proposta (aguardando o aceite do dono no PR de fecho do C4 — corrige
-  o plano-mestre aceito no G0, então é decisão de dono, não de executor)
+- Status: aceito (comentário do dono no PR #56, sem ressalva: "aceito" —
+  ratifica a redefinição da fronteira (console/dashboard vs motor) e a ativação
+  do guarda T4-E. Corrige o plano-mestre aceito no G0, então foi decisão de
+  dono, não de executor.)
 - Data: 2026-07-10
 
 ## Contexto
