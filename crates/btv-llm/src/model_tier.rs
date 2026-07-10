@@ -8,16 +8,12 @@
 //! Um override manual por configuração cobre erros de classificação.
 
 use regex::Regex;
-use serde::Serialize;
 use std::sync::OnceLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ModelTier {
-    Small,
-    Medium,
-    Large,
-}
+// O ENUM mora no domínio desde o D1t (a política de compaction do
+// btv-core o consome sem conhecer este crate); a CLASSIFICAÇÃO por regex
+// de model id — conhecimento de provider — continua aqui.
+pub use btv_domain::chat::ModelTier;
 
 struct TierRules {
     small: Vec<Regex>,
@@ -72,17 +68,6 @@ pub fn tier_from_id(model_id: &str) -> ModelTier {
         return ModelTier::Small;
     }
     ModelTier::Medium
-}
-
-impl ModelTier {
-    /// Fração da janela de contexto em que a compaction dispara: modelos
-    /// small compactam antecipadamente (~75%), demais no padrão (~90%).
-    pub fn compaction_threshold(self) -> f64 {
-        match self {
-            ModelTier::Small => 0.75,
-            _ => 0.90,
-        }
-    }
 }
 
 #[cfg(test)]

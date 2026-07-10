@@ -6,6 +6,7 @@ license.workspace = true
 description = "Ferramentas determinísticas da plataforma BuildToValue: read, grep, edit, bash"
 
 [dependencies]
+btv-domain.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -21,3 +22,5 @@ libc.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# D1t: o fio do loop com ferramentas reais mora aqui (o core virou só-portas)
+btv-core.workspace = true

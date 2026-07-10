@@ -70,3 +70,22 @@ mod tests {
         assert!(reg.get("bash").is_some());
     }
 }
+
+/// D1t: o registry é a implementação concreta da porta que o loop de
+/// agente consome — `specs()` é o anúncio ao modelo (mesma projeção que o
+/// loop sempre fez de `iter()`), `get()` a resolução por nome.
+impl btv_domain::ports::ToolsPort for ToolRegistry {
+    fn specs(&self) -> Vec<btv_domain::chat::ToolSpec> {
+        self.iter()
+            .map(|t| btv_domain::chat::ToolSpec {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                input_schema: t.input_schema(),
+            })
+            .collect()
+    }
+
+    fn get(&self, name: &str) -> Option<&dyn Tool> {
+        ToolRegistry::get(self, name)
+    }
+}

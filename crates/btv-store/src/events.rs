@@ -8,8 +8,6 @@
 //! schema. A versão do evento vai embutida no `type` (convenção `nome.N`).
 
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EventError {
@@ -29,34 +27,11 @@ pub enum EventError {
     Serde(#[from] serde_json::Error),
 }
 
-/// Evento novo a anexar; `id`/`seq` são atribuídos pelo store.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct EventInput {
-    /// Tipo do evento, com a versão embutida (ex.: `message.1`).
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub data: Value,
-}
-
-impl EventInput {
-    pub fn new(kind: impl Into<String>, data: Value) -> Self {
-        Self {
-            kind: kind.into(),
-            data,
-        }
-    }
-}
-
-/// Evento persistido; `(aggregate_id, seq)` é único.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StoredEvent {
-    pub id: String,
-    pub aggregate_id: String,
-    pub seq: i64,
-    #[serde(rename = "type")]
-    pub kind: String,
-    pub data: Value,
-}
+// D1t: os tipos de dado moram em `btv-domain::event` (a sessão durável de
+// btv-core os constrói/replaya via `EventStorePort` sem conhecer o driver);
+// re-exportados aqui sob os caminhos históricos — definição byte-idêntica,
+// replay de bancos antigos intacto.
+pub use btv_domain::event::{EventInput, StoredEvent};
 
 /// Mesmo DDL do opencode (menos a preocupação de compat com o TS):
 /// `IF NOT EXISTS` torna a criação idempotente.
@@ -291,5 +266,67 @@ mod tests {
             .unwrap();
         assert_eq!(store.head_seq("a").unwrap(), 1);
         assert_eq!(store.read("b", 0).unwrap().len(), 1);
+    }
+}
+
+/// D1t: o `EventStore` local implementa a porta do domínio. Este arquivo É
+/// o adapter do modo LOCAL (`.btv/events.db`, sem coluna de tenant) — a
+/// mesma decisão registrada do B2 para as outras portas: contexto de outro
+/// tenant é RECUSADO fail-closed, nunca aceito fingindo isolamento que o
+/// schema não tem. O adapter SaaS de sessões, quando existir, nasce no PG.
+impl btv_domain::ports::EventStorePort for EventStore {
+    type NewEvent = EventInput;
+    type StoredEvent = StoredEvent;
+
+    fn append(
+        &mut self,
+        ctx: &btv_domain::TenantContext,
+        aggregate_id: &str,
+        expected_head: i64,
+        events: Vec<EventInput>,
+    ) -> Result<i64, btv_domain::ports::RepositoryError> {
+        exige_local(ctx)?;
+        EventStore::append(self, aggregate_id, expected_head, events).map_err(porta)
+    }
+
+    fn read(
+        &self,
+        ctx: &btv_domain::TenantContext,
+        aggregate_id: &str,
+        from_seq: i64,
+    ) -> Result<Vec<StoredEvent>, btv_domain::ports::RepositoryError> {
+        exige_local(ctx)?;
+        EventStore::read(self, aggregate_id, from_seq).map_err(porta)
+    }
+
+    fn head_seq(
+        &self,
+        ctx: &btv_domain::TenantContext,
+        aggregate_id: &str,
+    ) -> Result<i64, btv_domain::ports::RepositoryError> {
+        exige_local(ctx)?;
+        EventStore::head_seq(self, aggregate_id).map_err(porta)
+    }
+}
+
+fn exige_local(ctx: &btv_domain::TenantContext) -> Result<(), btv_domain::ports::RepositoryError> {
+    if ctx.tenant != btv_domain::TenantId::LOCAL {
+        return Err(btv_domain::ports::RepositoryError::Storage(format!(
+            "recusado (fail-closed): este event store é o do modo LOCAL e não isola tenants; \
+             contexto do tenant {} não pode usá-lo",
+            ctx.tenant
+        )));
+    }
+    Ok(())
+}
+
+/// `Conflict` vira o `ConcurrencyConflict` do domínio (semântica prometida
+/// no rustdoc do port, G1); o resto é storage.
+fn porta(e: EventError) -> btv_domain::ports::RepositoryError {
+    match e {
+        EventError::Conflict {
+            expected, found, ..
+        } => btv_domain::ports::RepositoryError::ConcurrencyConflict { expected, found },
+        outro => btv_domain::ports::RepositoryError::Storage(outro.to_string()),
     }
 }

@@ -24,5 +24,7 @@ tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+# D1t: a composição sessão durável × SQLite real é provada aqui
+btv-core.workspace = true
 # B2: a suíte de contrato genérica julga este adapter (e o PG em B4)
 btv-contract.workspace = true
