@@ -35,6 +35,7 @@ from btv_proto import squad_pb2, squad_pb2_grpc
 from btv_squad.grpc_clients import GrpcGatewayClient, GrpcPermissionClient, GrpcToolClient
 from btv_squad.memory import AgentMemorySystem
 from btv_squad.orchestrator import UnifiedOrchestrator
+from btv_squad.tenant import TenantContext
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,20 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
         return squad_pb2.HealthResponse(ready=True, version=VERSION)
 
     async def ExecuteTask(self, request, context):  # noqa: N802
+        # D4t: o par tenant/actor do proto vira TIPO na entrada (parse,
+        # don't validate) — inválido é recusado fail-closed como um único
+        # SquadEvent de erro, nunca propagado às cegas; vazio segue sendo o
+        # wire pré-D2t (sem contexto). O eco nos eventos continua VERBATIM.
+        try:
+            ctx = TenantContext.from_wire(request.tenant_id, request.actor)
+        except ValueError as exc:
+            yield _to_squad_event(
+                request.task_id,
+                {"kind": "error", "message": f"contexto de tenant inválido (fail-closed): {exc}"},
+            )
+            return
+        tenant_id = ctx.tenant_id if ctx else ""
+        actor = ctx.actor if ctx else ""
         evidence, evidence_missing = _parse_verification_evidence(request.verification_evidence_json)
         # Roster de personas (U7, Fase 1): cada uma vira agente cujo system
         # prompt É `prompt`. Vazio = elenco fixo do motor (retrocompatível).
@@ -210,7 +225,7 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
                 event = await queue.get()
                 if event is None:
                     break
-                yield _to_squad_event(request.task_id, event, request.tenant_id, request.actor)
+                yield _to_squad_event(request.task_id, event, tenant_id, actor)
         finally:
             await runner
             await channel.close()

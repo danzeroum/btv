@@ -1963,3 +1963,24 @@ por PR); nenhuma mudança breaking de gRPC (G3 reservado para D3t/C4).
 Prova ponta a ponta em squad_e2e.rs (Rust → UDS → Python real → volta:
 cada evento asserta o tenant/actor que entrou) com prova-que-morde
 (propagação removida no server.py → teste reprova; revertida).
+
+**[registro]** Check de vocabulário do `btv doctor` ENTREGUE (fecha a
+pendência da revisão do A4): `GET /api/doctor` ganha a 5ª checagem
+(`vocabulario`) — varre runs/deliverables (`TaskId`/`RunStatus`) e o
+ledger (`LedgerKind`) com os MESMOS parses fail-closed do domínio e
+aponta A LINHA ofensora (tabela+linha+coluna+valor+erro). O SQL mora em
+btv-store (métodos de scan com testes que corrompem uma linha e conferem
+o diagnóstico); o handler só agrega (espírito do T4-B). `certification`
+no ledger aparecer na varredura é diagnóstico correto (exclusão
+consciente do vocabulário, sem emissor real — nota do A3), não falso
+positivo.
+
+**[registro]** D4t mínimo — `TenantContext` Pydantic em `btv_squad`
+(`tenant.py`): o par tenant/actor do proto (D2t) vira TIPO na entrada do
+`ExecuteTask` — paridade DECLARADA com o Rust (valida a forma canônica
+que o `TenantId` EMITE: UUID minúsculo hifenizado; actor não-vazio); par
+vazio = wire pré-D2t → None (nunca LOCAL fabricado — quem resolve tenant
+é a borda, ADR 0029); inválido/parcial = recusa fail-closed com UM
+SquadEvent de erro antes de abrir qualquer canal. Protocols existentes
+intocados; o eco nos eventos segue verbatim. O espelho Pydantic COMPLETO
+do D4t (demais tipos) continua na janela dele.
