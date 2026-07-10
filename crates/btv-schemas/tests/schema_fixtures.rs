@@ -82,7 +82,28 @@ fn ledger_entry_fixture_valida_e_desserializa() {
     let parsed: LedgerEntry =
         serde_json::from_value(doc["valid"].clone()).expect("desserializa em LedgerEntry");
     assert_eq!(parsed.kind, "session.start");
+    assert!(
+        parsed.tenant.is_none(),
+        "entrada legada (sem o campo) desserializa com tenant ausente"
+    );
 
+    // B3 (ADR 0027): `tenant` é ADITIVO no v1 — presente valida e
+    // desserializa no TenantId; fora do formato UUID reprova o schema.
+    assert!(
+        validator.is_valid(&doc["valid_with_tenant"]),
+        "fixture com tenant não bateu o schema: {:?}",
+        validator
+            .iter_errors(&doc["valid_with_tenant"])
+            .collect::<Vec<_>>()
+    );
+    let com_tenant: LedgerEntry = serde_json::from_value(doc["valid_with_tenant"].clone())
+        .expect("desserializa em LedgerEntry");
+    assert_eq!(com_tenant.tenant, Some(btv_domain::TenantId::LOCAL));
+
+    assert!(
+        !validator.is_valid(&doc["invalid_tenant_nao_uuid"]),
+        "tenant fora do formato UUID deveria reprovar o schema"
+    );
     assert!(
         !validator.is_valid(&doc["invalid_missing_entry_hash"]),
         "documento sem 'entry_hash' deveria reprovar o schema"

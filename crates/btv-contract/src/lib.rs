@@ -10,7 +10,9 @@
 //! Uso (no teste do adapter): `btv_contract::suite_run_repository(|| meu_adapter())`
 //! — cada caso recebe um repositório FRESCO da factory (estado isolado).
 
-use btv_domain::ports::{PersonaRepository, RunRepository, RunStatus};
+use btv_domain::ports::{
+    DomainEvent, DomainEventKind, LedgerRepository, PersonaRepository, RunRepository, RunStatus,
+};
 use btv_domain::tenant::{ActorId, TenantContext, TenantId};
 use btv_domain::{Deliverable, Run, TaskId};
 
@@ -286,5 +288,119 @@ pub fn suite_persona_repository<P: PersonaRepository>(mut make: impl FnMut() -> 
             id_b,
             "a persona de B segue intacta"
         );
+    }
+}
+
+/// Evento de domínio para os cenários do ledger — `actor` explícito porque
+/// o contrato diz que o adapter NÃO reescreve `actor`/`ts` do evento.
+pub fn evento_gate(ctx: &TenantContext, actor: &str, ts: &str) -> DomainEvent {
+    DomainEvent {
+        tenant: ctx.tenant,
+        actor: ActorId::new(actor).unwrap(),
+        ts: ts.into(),
+        kind: DomainEventKind::GateApproved {
+            task_id: TaskId::new(1),
+            stage: Some("Gate do contrato".into()),
+            gates_approved: 1,
+        },
+    }
+}
+
+/// Contrato do `LedgerRepository` (B3, ADR 0027): cadeias independentes por
+/// tenant, verificáveis e exportáveis ISOLADAMENTE — os appends são
+/// deliberadamente INTERCALADOS entre os dois tenants (é o teste dos "2
+/// tenants concorrentes" da Definição de Pronto do plano; a INDEPENDÊNCIA
+/// das cadeias é observável pela assinatura: seq 1..N por tenant, verify e
+/// export cegos para o vizinho).
+pub fn suite_ledger_repository<L: LedgerRepository>(mut make: impl FnMut() -> L) {
+    // Appends intercalados: cada tenant numera a PRÓPRIA cadeia do 1.
+    {
+        let mut repo = make();
+        assert_eq!(
+            repo.append(&ctx_a(), &evento_gate(&ctx_a(), "contract:a", "t1"))
+                .expect("append A#1"),
+            1
+        );
+        assert_eq!(
+            repo.append(&ctx_b(), &evento_gate(&ctx_b(), "contract:b", "t2"))
+                .expect("append B#1 — a cadeia de B ignora a de A"),
+            1
+        );
+        assert_eq!(
+            repo.append(&ctx_a(), &evento_gate(&ctx_a(), "contract:a", "t3"))
+                .expect("append A#2"),
+            2
+        );
+        assert_eq!(
+            repo.append(&ctx_b(), &evento_gate(&ctx_b(), "contract:b", "t4"))
+                .expect("append B#2"),
+            2
+        );
+        assert_eq!(
+            repo.append(&ctx_a(), &evento_gate(&ctx_a(), "contract:a", "t5"))
+                .expect("append A#3"),
+            3
+        );
+
+        // verify: cada cadeia fecha sozinha, com a contagem própria.
+        assert_eq!(repo.verify_chain(&ctx_a()).expect("verify A"), 3);
+        assert_eq!(repo.verify_chain(&ctx_b()).expect("verify B"), 2);
+
+        // export: a trilha completa do tenant, nada do vizinho.
+        assert_eq!(repo.export(&ctx_a()).expect("export A").len(), 3);
+        assert_eq!(repo.export(&ctx_b()).expect("export B").len(), 2);
+
+        // recent: escopo do tenant + limite.
+        assert_eq!(repo.recent(&ctx_a(), 10, None).expect("recent A").len(), 3);
+        assert_eq!(repo.recent(&ctx_a(), 2, None).expect("limit").len(), 2);
+        assert_eq!(repo.recent(&ctx_b(), 10, None).expect("recent B").len(), 2);
+    }
+
+    // Tenant sem nenhuma entrada: cadeia vazia é VÁLIDA (0), export/recent
+    // vazios — indistinguível de tenant inexistente (fail-closed na leitura).
+    {
+        let mut repo = make();
+        repo.append(&ctx_a(), &evento_gate(&ctx_a(), "contract:a", "t1"))
+            .unwrap();
+        assert_eq!(repo.verify_chain(&ctx_b()).expect("cadeia vazia"), 0);
+        assert!(repo.export(&ctx_b()).unwrap().is_empty());
+        assert!(repo.recent(&ctx_b(), 10, None).unwrap().is_empty());
+    }
+
+    // Filtro de actor combinado com o limite, dentro do tenant.
+    {
+        let mut repo = make();
+        repo.append(&ctx_a(), &evento_gate(&ctx_a(), "humano", "t1"))
+            .unwrap();
+        for i in 0..4 {
+            repo.append(
+                &ctx_a(),
+                &evento_gate(&ctx_a(), "robo", &format!("t{}", i + 2)),
+            )
+            .unwrap();
+        }
+        let humano = ActorId::new("humano").unwrap();
+        let so_humano = repo
+            .recent(&ctx_a(), 2, Some(&humano))
+            .expect("filtro de actor");
+        assert_eq!(
+            so_humano.len(),
+            1,
+            "o filtro encontra o actor raro mesmo com limite pequeno"
+        );
+        // O actor de A não vaza na consulta de B.
+        assert!(repo.recent(&ctx_b(), 10, Some(&humano)).unwrap().is_empty());
+    }
+
+    // Fail-closed na escrita: evento cujo tenant ≠ contexto é recusado —
+    // e a cadeia do contexto NÃO cresce.
+    {
+        let mut repo = make();
+        let err = repo
+            .append(&ctx_a(), &evento_gate(&ctx_b(), "contract:b", "t1"))
+            .expect_err("evento de outro tenant não entra");
+        assert!(!err.to_string().is_empty());
+        assert_eq!(repo.verify_chain(&ctx_a()).unwrap(), 0, "nada foi gravado");
+        assert_eq!(repo.verify_chain(&ctx_b()).unwrap(), 0);
     }
 }

@@ -157,6 +157,7 @@ proptest! {
                     r#override: None,
                     fake_marker: None,
                     ts: TS.into(),
+                    tenant: None,
                 })
                 .unwrap();
             prop_assert_eq!(&registrado.kind, kind);

@@ -161,6 +161,9 @@ fn append_ledger(
         r#override: None,
         fake_marker: None,
         ts: crate::session::now_rfc3339(),
+        // Emissor legado dos kinds `btv.*` (sem contexto): cadeia LOCAL,
+        // corpo idêntico — C3 troca isto pela porta `LedgerRepository`.
+        tenant: None,
     };
     let mut guard = ledger.lock().unwrap_or_else(|e| e.into_inner());
     guard

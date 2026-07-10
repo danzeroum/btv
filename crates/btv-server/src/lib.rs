@@ -785,6 +785,7 @@ mod tests {
             r#override: None,
             fake_marker: None,
             ts: "2026-07-05T00:00:00Z".into(),
+            tenant: None,
         }
     }
 

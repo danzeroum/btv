@@ -106,6 +106,7 @@ fn entrada(kind: &str, actor: &str, payload: serde_json::Value, ts: &str) -> Led
         r#override: None,
         fake_marker: None,
         ts: ts.into(),
+        tenant: None,
     }
 }
 

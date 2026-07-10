@@ -49,6 +49,9 @@ pub(crate) async fn save_workflow(
         r#override: None,
         fake_marker: None,
         ts: now_rfc3339(),
+        // Porta legada (sem contexto): cai na cadeia LOCAL, corpo idêntico
+        // ao de sempre (decisão do B2 reusada no B3 — pendencias.md).
+        tenant: None,
     };
     let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
     match ledger.append(entry) {
