@@ -1,9 +1,10 @@
 //! Fase 7 Onda 13 (Modelo & Onboarding): `GET /api/doctor` agrega checagens
 //! já existentes mas espalhadas (env vars do gateway, `uv --version`, ping ao
 //! Docker via bollard, git) numa única resposta — mesmo padrão de agregação
-//! de `GET /api/sandbox`/`GET /api/mcp` (Ondas 7/10). Mora aqui (não em
-//! `btv-server`) porque a checagem de Docker precisa de
-//! `btv_tools::sandbox::Sandbox` — regra de posicionamento de rota da fase.
+//! de `GET /api/sandbox`/`GET /api/mcp` (Ondas 7/10). C4: migrou de `btv-cli`
+//! para cá com `sandbox_console` (a casa da borda axum consolida em
+//! `btv-server`); a checagem de Docker usa `btv_tools::sandbox::Sandbox`, que
+//! este crate passou a depender na primeira onda do C4.
 
 use axum::extract::State;
 use axum::response::{IntoResponse, Json};
@@ -27,11 +28,12 @@ struct DoctorView {
     checks: Vec<DoctorCheck>,
 }
 
-/// Mesma ordem/conjunto de `btv-server`'s `KNOWN_PROVIDERS` (Onda 12) —
-/// duplicada, não importada: a direção de dependência entre os dois crates
-/// só permite `btv-cli` depender de `btv-server`, nunca o contrário, e
-/// isto mora em `btv-cli`. Mesma convenção já usada por `git_sha`/
-/// `now_rfc3339`.
+/// Mesma ordem/conjunto do `KNOWN_PROVIDERS` da Onda 12 (handler de providers).
+/// Com o C4 este módulo passou a MORAR em `btv-server` — a duplicação, que
+/// existia só pela fronteira de crate (btv-cli não podia importar do server),
+/// virou duplicação INTRA-crate e é candidata a dedup. Fica para um passo
+/// próprio: C4 é movimento puro, e unir os dois consts é refino, não a mudança
+/// desta onda (goldens byte-idênticos primeiro).
 const KNOWN_PROVIDERS: [&str; 3] = ["anthropic", "deepseek", "openai"];
 
 fn providers_check() -> DoctorCheck {
@@ -77,12 +79,12 @@ fn uv_check_with_path(path_override: Option<&str>) -> DoctorCheck {
     }
 }
 
-/// Reusa `crate::git_sha()` (`main.rs`) — mesma checagem que já formata o sha
-/// no cabeçalho do `btv verify`, aqui só reinterpretada como um check
-/// ok/detail. `pub(crate)` não é necessário: `git_sha` já é visível a
-/// qualquer módulo deste crate (item privado do módulo raiz).
+/// Reusa `btv_verify::git_sha()` — mesma checagem que já formata o sha no
+/// cabeçalho do `btv verify` (o outro consumidor). C4: multi-consumidor não se
+/// duplica; o helper mora em `btv-verify`, o crate compartilhado abaixo dos
+/// dois (e o sha é o commit que a evidência de verificação carimba).
 fn git_check() -> DoctorCheck {
-    match crate::git_sha() {
+    match btv_verify::git_sha() {
         Some(sha) => DoctorCheck {
             id: "git",
             ok: true,

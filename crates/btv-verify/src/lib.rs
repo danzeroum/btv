@@ -20,6 +20,24 @@ pub mod vetter;
 use btv_schemas::verification::{Finding, VerificationEvidence, VerificationStep};
 use std::time::Duration;
 
+/// SHA do HEAD do repositório atual (`git rev-parse HEAD`), ou `None` fora de
+/// um repo / sem `git` no PATH. É o commit que a evidência de verificação
+/// carimba (`VerificationEvidence.git_sha`) — por isso mora AQUI, o crate
+/// compartilhado abaixo dos consumidores (C4: `btv verify` na `btv-cli` e o
+/// `/api/doctor` na `btv-server`), sem duplicar "qual commit sou eu".
+pub fn git_sha() -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|s| s.trim().to_string())
+}
+
 /// Qual parser aplicar à stdout do passo para extrair findings estruturados.
 /// `None` = sem parser — o passo ainda conta para o veredito via exit_code,
 /// só não produz findings individuais.

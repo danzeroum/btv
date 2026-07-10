@@ -10,7 +10,6 @@ mod btv_agent;
 mod btv_agent_golden;
 mod cache;
 mod convert;
-mod doctor_console;
 mod lsp_console;
 mod mcp_console;
 mod memory_console;
@@ -402,10 +401,11 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
                 _ => {}
             }
         }
-        let doctor_router = doctor_console::router(doctor_console::DoctorStores {
-            ledger: ledger.clone(),
-            btv: btv_store.clone(),
-        });
+        let doctor_router =
+            btv_server::doctor_console::router(btv_server::doctor_console::DoctorStores {
+                ledger: ledger.clone(),
+                btv: btv_store.clone(),
+            });
         // Resolve o modo (via `from_env`) UMA vez, no arranque — o modo é
         // propriedade do processo, não da requisição (E1s.4). O mesmo
         // `TenantResolucao` (clonado) alimenta os dois pontos da borda: o
@@ -480,7 +480,7 @@ pub(crate) fn run_verify_pipeline(
     };
 
     let run_id = format!("run-{:x}", nanos_now() & 0xffff_ffff_ffff);
-    let sha = git_sha().unwrap_or_else(|| "unknown".to_string());
+    let sha = btv_verify::git_sha().unwrap_or_else(|| "unknown".to_string());
     let produced_at = now_rfc3339();
     Ok(btv_verify::run_pipeline(
         &run_id,
@@ -552,19 +552,6 @@ fn run_verify(config: Option<PathBuf>, out: Option<PathBuf>, format: VerifyForma
 
 /// `git rev-parse HEAD` best-effort — git ausente/repo fora de um worktree
 /// não deve abortar o verify, só perder a rastreabilidade do sha.
-fn git_sha() -> Option<String> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout)
-        .ok()
-        .map(|s| s.trim().to_string())
-}
-
 fn nanos_now() -> u128 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
