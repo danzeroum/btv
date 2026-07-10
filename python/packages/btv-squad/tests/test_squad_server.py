@@ -73,7 +73,7 @@ async def _run_scenario(
     aud_conf,
     approved,
     permission_allow,
-    verification_evidence_json="",
+    verification_evidence=None,
     model="",
     pool_model="claude-sonnet-5",
 ):
@@ -101,7 +101,7 @@ async def _run_scenario(
                 task_id="t1",
                 description="publicar serviço",
                 decision_type="architecture",
-                verification_evidence_json=verification_evidence_json,
+                verification_evidence=verification_evidence,
                 model=model,
             )
         ):
@@ -210,33 +210,35 @@ def test_handoff_start_e_complete_aparecem(tmp_path):
     assert squad_pb2.Handoff.Phase.COMPLETE in phases
 
 
-# --- Fase 5 Onda 3: verification_evidence_json atravessa a fronteira gRPC ---
-# (ADR 0008). proto3 zera campo string ausente para "" — sem tratamento
-# explícito no server.py, isso viraria silenciosamente "sem evidência, tudo
-# bem". Os dois testes abaixo prova por CONTAGEM DE CHAMADAS ao gateway (via
-# o FakeCoreServicer real, não um mock que finge) que o campo de fato
-# atravessou Rust→Python e mudou o comportamento do orquestrador: ausente ⇒
-# fail-closed sem gastar uma chamada de LLM em validate_results; presente e
-# válida ⇒ o fluxo normal (execute + validate_results) roda.
+# --- Fase 5 Onda 3 (D3t): verification_evidence atravessa a fronteira gRPC ---
+# (ADR 0008/0030). Antes uma string JSON (`verification_evidence_json`); agora
+# mensagem TIPADA. Campo de mensagem em proto3 tem PRESENÇA (`HasField`) — sem
+# tratamento explícito no server.py, ausente viraria silenciosamente "sem
+# evidência, tudo bem". Os três testes abaixo provam por CONTAGEM DE CHAMADAS
+# ao gateway (via o FakeCoreServicer real, não um mock que finge) que o campo
+# de fato atravessou Rust→Python e mudou o comportamento do orquestrador:
+# ausente OU inválida (verdict UNSPECIFIED) ⇒ fail-closed sem gastar uma chamada
+# de LLM em validate_results; presente e válida ⇒ o fluxo normal roda.
 
 
 def test_verification_evidence_ausente_e_fail_closed_sem_chamar_validate_results(tmp_path):
-    # SquadTask sem verification_evidence_json (default "" do proto3) deve
-    # fazer o orquestrador reprovar SEM sequer chamar o gateway para
-    # validate_results — só a chamada de execute() (proposta) acontece.
+    # SquadTask sem verification_evidence (campo de mensagem não setado,
+    # HasField falso) deve fazer o orquestrador reprovar SEM sequer chamar o
+    # gateway para validate_results — só a chamada de execute() (proposta).
     events, core = asyncio.run(_run_scenario(tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True))
     assert core.generate_calls.count("auditor") == 1  # só a proposta, não validate_results
     assert "step" in _kinds(events)  # os passos ainda executam — só a validação final é que reprova
 
 
 def test_verification_evidence_valida_permite_validate_results_normal(tmp_path):
-    evidence = json.dumps(
-        {"run_id": "r1", "git_sha": "deadbeef", "steps": [], "verdict": "pass", "produced_at": "2026-01-01T00:00:00Z"}
+    evidence = squad_pb2.VerificationEvidence(
+        run_id="r1",
+        git_sha="deadbeef",
+        verdict=squad_pb2.Verdict.VERDICT_PASS,
+        produced_at="2026-01-01T00:00:00Z",
     )
     events, core = asyncio.run(
-        _run_scenario(
-            tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True, verification_evidence_json=evidence
-        )
+        _run_scenario(tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True, verification_evidence=evidence)
     )
     # com evidência válida, validate_results roda de verdade: 2 chamadas ao
     # auditor (proposta em execute() + validação final em validate_results()).
@@ -244,16 +246,13 @@ def test_verification_evidence_valida_permite_validate_results_normal(tmp_path):
     assert "step" in _kinds(events)
 
 
-def test_verification_evidence_json_invalido_tambem_e_fail_closed(tmp_path):
+def test_verification_evidence_verdict_invalido_tambem_e_fail_closed(tmp_path):
+    # Mensagem PRESENTE mas com verdict UNSPECIFIED (zero-value proto3) — a
+    # analogia tipada do "JSON inválido" de antes: evidência sem veredito válido
+    # é recusada fail-closed (`from_proto` levanta ValueError), mesmo padrão do
+    # campo ausente.
+    evidence = squad_pb2.VerificationEvidence(run_id="r1", git_sha="deadbeef", produced_at="2026-01-01T00:00:00Z")
     events, core = asyncio.run(
-        _run_scenario(
-            tmp_path,
-            0.9,
-            0.2,
-            0.2,
-            approved=True,
-            permission_allow=True,
-            verification_evidence_json="isto não é json válido {{{",
-        )
+        _run_scenario(tmp_path, 0.9, 0.2, 0.2, approved=True, permission_allow=True, verification_evidence=evidence)
     )
     assert core.generate_calls.count("auditor") == 1  # fail-closed, mesmo padrão do campo ausente
