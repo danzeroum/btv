@@ -62,7 +62,7 @@ struct McpServerView {
 /// acontece quando uma sessão real carrega — `skills::build_registry`); isto
 /// é somente leitura, para exibição.
 async fn list_mcp(State(state): State<McpConsoleState>) -> Response {
-    let configs = crate::skills::read_mcp_server_configs(&state.root);
+    let configs = btv_tools::mcp::read_server_configs(&state.root);
     let build_engine =
         (BUILD.permissions)().overlay(&crate::web_agent::load_rule_overrides(&state.root, "build"));
     let plan_engine =
