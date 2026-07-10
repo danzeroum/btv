@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/btv-cli",
     "crates/btv-core",
+    "crates/btv-domain",
     "crates/btv-golden",
     "crates/btv-llm",
     "crates/btv-proto",
@@ -54,8 +55,10 @@ tokio-stream = { version = "0.1", features = ["net", "sync"] }
 axum = "0.8"
 bollard = "0.17"
 criterion = { version = "0.5", features = ["html_reports"] }
+uuid = { version = "1", features = ["serde"] }
 
 btv-schemas = { path = "crates/btv-schemas" }
+btv-domain = { path = "crates/btv-domain" }
 btv-core = { path = "crates/btv-core" }
 btv-llm = { path = "crates/btv-llm" }
 btv-store = { path = "crates/btv-store" }

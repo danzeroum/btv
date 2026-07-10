@@ -290,6 +290,7 @@ dependencies = [
  "anyhow",
  "axum",
  "btv-core",
+ "btv-domain",
  "btv-golden",
  "btv-llm",
  "btv-proto",
@@ -332,6 +333,16 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "btv-domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -425,6 +436,7 @@ dependencies = [
 name = "btv-store"
 version = "0.1.0"
 dependencies = [
+ "btv-domain",
  "btv-schemas",
  "rusqlite",
  "serde",
@@ -3536,6 +3548,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf80a72845275afea99e7f2b434723d3bc7e38470fcd1c7ed39a599c73319a53"
 dependencies = [
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

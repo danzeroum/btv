@@ -14,6 +14,7 @@ btv-core.workspace = true
 btv-llm.workspace = true
 btv-schemas.workspace = true
 btv-store.workspace = true
+btv-domain.workspace = true
 btv-tools.workspace = true
 btv-tui.workspace = true
 btv-sidecar.workspace = true

@@ -9,7 +9,18 @@
 //! o `LedgerStore` — este store guarda estado consultável, não trilha
 //! imutável.
 
+use btv_domain::TenantId;
 use rusqlite::{params, Connection, OptionalExtension};
+
+// Tarefa A2 do plano DDD: os tipos do produto moram em `btv-domain` (com
+// `tenant` desde já — D1/ADR 0025); este adapter os re-exporta sob os nomes
+// legados para os call sites atuais. Enquanto a coluna `tenant_id` não chega
+// (B2), este adapter SQLite preenche `TenantId::LOCAL` fixo — o modo local É
+// um tenant (ADR 0026). Wire inalterado: `tenant` é `skip_serializing`,
+// provado pelos goldens T1.
+pub use btv_domain::run::{Deliverable as BtvDeliverable, Run as BtvRun};
+pub use btv_domain::user::User as BtvUser;
+pub use btv_domain::{CustomPersona, PersonaOverride};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BtvStoreError {
@@ -17,27 +28,6 @@ pub enum BtvStoreError {
     Storage(#[from] rusqlite::Error),
     #[error("registro não encontrado")]
     NotFound,
-}
-
-/// Uma squad ativada (execução) — linha de "Minhas squads" (U6) e âncora da
-/// tela Ao vivo (U3).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct BtvRun {
-    pub id: i64,
-    pub task_id: String,
-    pub template_id: String,
-    pub template_versao: String,
-    pub nome: String,
-    /// Respostas do briefing (JSON: `[{label, resposta}]`).
-    pub briefing_json: String,
-    /// Papéis ativos (JSON: `["Pauteiro", ...]` — já sem os desligados).
-    pub papeis_json: String,
-    /// `ativa` | `concluida` | `encerrada` | `erro`.
-    pub status: String,
-    /// Quantos gates humanos já foram aprovados neste run (trilha de U4).
-    pub gates_aprovados: i64,
-    pub created_ts: String,
-    pub updated_ts: String,
 }
 
 pub struct BtvStore {
@@ -216,6 +206,7 @@ impl BtvStore {
                 gates_aprovados: row.get(8)?,
                 created_ts: row.get(9)?,
                 updated_ts: row.get(10)?,
+                tenant: TenantId::LOCAL,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -272,6 +263,7 @@ impl BtvStore {
                 versao: row.get(7)?,
                 trilha: row.get(8)?,
                 created_ts: row.get(9)?,
+                tenant: TenantId::LOCAL,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -331,6 +323,7 @@ impl BtvStore {
                 template_id: row.get(0)?,
                 papel: row.get(1)?,
                 prompt: row.get(2)?,
+                tenant: TenantId::LOCAL,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -383,6 +376,7 @@ impl BtvStore {
                 template_id: row.get(1)?,
                 nome: row.get(2)?,
                 prompt: row.get(3)?,
+                tenant: TenantId::LOCAL,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -526,6 +520,7 @@ impl BtvStore {
                 ativo: row.get::<_, i64>(4)? != 0,
                 // Nunca vaza o hash — só se HÁ um PIN.
                 has_pin: row.get::<_, Option<String>>(5)?.is_some(),
+                tenant: TenantId::LOCAL,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -549,52 +544,8 @@ fn pin_hash(created_ts: &str, email: &str, nome: &str, pin: &str) -> String {
     btv_schemas::sha256_hex(&format!("{created_ts}|{email}|{nome}|{pin}"))
 }
 
-/// Perfil local (A6): identidade nomeada para atribuição, com PIN OPCIONAL
-/// verificado pelo backend (hash sha256, nunca em claro). O PIN gate o "assumir
-/// perfil" na UI; não é uma barreira de rede (o dashboard é 127.0.0.1 e
-/// guardado por `Origin`).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct BtvUser {
-    pub id: i64,
-    pub nome: String,
-    pub email: String,
-    pub papel: String,
-    pub ativo: bool,
-    /// Se o perfil exige PIN para ser assumido (o hash em si nunca é exposto).
-    pub has_pin: bool,
-}
-
-/// Artefato exportado — linha da Biblioteca de entregas (U4), com trilha de
-/// procedência real (papéis do run + gates aprovados) e o caminho do arquivo
-/// REAL gravado pelas ferramentas do squad.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct BtvDeliverable {
-    pub id: i64,
-    pub run_id: i64,
-    pub task_id: String,
-    pub template_id: String,
-    pub nome: String,
-    pub path: String,
-    pub formato: String,
-    pub versao: String,
-    pub trilha: String,
-    pub created_ts: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct PersonaOverride {
-    pub template_id: String,
-    pub papel: String,
-    pub prompt: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct CustomPersona {
-    pub id: i64,
-    pub template_id: String,
-    pub nome: String,
-    pub prompt: String,
-}
+// (BtvUser/BtvDeliverable/PersonaOverride/CustomPersona: definições movidas
+// para `btv-domain` na A2 — ver re-exports no topo do módulo.)
 
 #[cfg(test)]
 mod tests {

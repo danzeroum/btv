@@ -1,0 +1,17 @@
+[package]
+name = "btv-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Domínio BuildToValue (Trilha A do plano DDD multitenant): tenant, tipos de produto — SEM infraestrutura (vigiado por scripts/arch-lint.sh)"
+
+# Regra de dependência (ADR 0024/0025, lint T4-A do CI): SÓ serde, thiserror e
+# uuid. rusqlite/axum/tonic/reqwest aqui — direta ou transitivamente — é
+# build vermelho.
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
