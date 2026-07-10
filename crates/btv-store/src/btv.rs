@@ -9,8 +9,8 @@
 //! o `LedgerStore` — este store guarda estado consultável, não trilha
 //! imutável.
 
-use btv_domain::ports::RunStatus;
-use btv_domain::{TaskId, TenantId};
+use btv_domain::ports::{PersonaRepository, RepositoryError, RunRepository, RunStatus};
+use btv_domain::{TaskId, TenantContext, TenantId};
 use rusqlite::{params, Connection, OptionalExtension};
 
 // Tarefa A2 do plano DDD: os tipos do produto moram em `btv-domain` (com
@@ -48,11 +48,20 @@ impl BtvStore {
         Self::init(Connection::open_in_memory()?)
     }
 
+    /// UUID textual do tenant do modo local — o DEFAULT das colunas
+    /// `tenant_id` (backfill determinístico do ADR 0026: legado E escritas
+    /// legadas, sem ctx, caem no LOCAL automaticamente).
+    const LOCAL_TENANT: &'static str = "00000000-0000-0000-0000-000000000001";
+
     fn init(conn: Connection) -> Result<Self, BtvStoreError> {
-        conn.execute_batch(
+        // Fresh DBs nascem multi-tenant (B2): tenant_id em toda tabela com
+        // DEFAULT LOCAL; unicidade/PK compostas COM o tenant — no SaaS cada
+        // tenant gera sq1, sq2, … por processo, então task_id é único POR
+        // tenant, nunca global.
+        conn.execute_batch(&format!(
             "CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id TEXT NOT NULL UNIQUE,
+                task_id TEXT NOT NULL,
                 template_id TEXT NOT NULL,
                 template_versao TEXT NOT NULL,
                 nome TEXT NOT NULL,
@@ -61,7 +70,9 @@ impl BtvStore {
                 status TEXT NOT NULL,
                 gates_aprovados INTEGER NOT NULL DEFAULT 0,
                 created_ts TEXT NOT NULL,
-                updated_ts TEXT NOT NULL
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                UNIQUE (tenant_id, task_id)
             );
             CREATE TABLE IF NOT EXISTS deliverables (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,19 +84,23 @@ impl BtvStore {
                 formato TEXT NOT NULL,
                 versao TEXT NOT NULL,
                 trilha TEXT NOT NULL,
-                created_ts TEXT NOT NULL
+                created_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}'
             );
             CREATE TABLE IF NOT EXISTS persona_overrides (
                 template_id TEXT NOT NULL,
                 papel TEXT NOT NULL,
                 prompt TEXT NOT NULL,
                 updated_ts TEXT NOT NULL,
-                PRIMARY KEY (template_id, papel)
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                PRIMARY KEY (tenant_id, template_id, papel)
             );
             CREATE TABLE IF NOT EXISTS template_pub (
-                template_id TEXT PRIMARY KEY,
+                template_id TEXT NOT NULL,
                 publicado INTEGER NOT NULL,
-                updated_ts TEXT NOT NULL
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                PRIMARY KEY (tenant_id, template_id)
             );
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,21 +109,99 @@ impl BtvStore {
                 papel TEXT NOT NULL,
                 ativo INTEGER NOT NULL DEFAULT 1,
                 created_ts TEXT NOT NULL,
-                pin_hash TEXT
+                pin_hash TEXT,
+                tenant_id TEXT NOT NULL DEFAULT '{local}'
             );
             CREATE TABLE IF NOT EXISTS custom_personas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 template_id TEXT NOT NULL,
                 nome TEXT NOT NULL,
                 prompt TEXT NOT NULL,
-                updated_ts TEXT NOT NULL
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}'
             );",
-        )?;
+            local = Self::LOCAL_TENANT
+        ))?;
+        Self::migrate_legacy(&conn)?;
         // Migração defensiva para bancos criados antes do PIN do A6: adiciona a
         // coluna se ausente (SQLite não tem "ADD COLUMN IF NOT EXISTS"; um erro
         // de coluna duplicada em banco já migrado é ignorado).
         let _ = conn.execute("ALTER TABLE users ADD COLUMN pin_hash TEXT", []);
         Ok(Self { conn })
+    }
+
+    /// Migra um banco PRÉ-tenant (B2, ADR 0026): backfill determinístico
+    /// `TenantId::LOCAL` em toda linha existente, sem perda — provado por
+    /// teste que abre um DB com o schema antigo populado. `deliverables`/
+    /// `users`/`custom_personas` ganham a coluna por `ADD COLUMN … DEFAULT`
+    /// (que preenche as linhas existentes); `runs`/`persona_overrides`/
+    /// `template_pub` precisam de REBUILD porque a unicidade/PK muda para
+    /// incluir o tenant (SQLite não altera constraint por ALTER).
+    fn migrate_legacy(conn: &Connection) -> Result<(), BtvStoreError> {
+        let tem_tenant: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'tenant_id'")?
+            .exists([])?;
+        if tem_tenant {
+            return Ok(());
+        }
+        conn.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+            ALTER TABLE deliverables ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '{local}';
+            ALTER TABLE users ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '{local}';
+            ALTER TABLE custom_personas ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '{local}';
+
+            CREATE TABLE runs_b2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL,
+                template_id TEXT NOT NULL,
+                template_versao TEXT NOT NULL,
+                nome TEXT NOT NULL,
+                briefing_json TEXT NOT NULL,
+                papeis_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                gates_aprovados INTEGER NOT NULL DEFAULT 0,
+                created_ts TEXT NOT NULL,
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                UNIQUE (tenant_id, task_id)
+            );
+            INSERT INTO runs_b2 (id, task_id, template_id, template_versao, nome,
+                                 briefing_json, papeis_json, status, gates_aprovados,
+                                 created_ts, updated_ts, tenant_id)
+                SELECT id, task_id, template_id, template_versao, nome,
+                       briefing_json, papeis_json, status, gates_aprovados,
+                       created_ts, updated_ts, '{local}' FROM runs;
+            DROP TABLE runs;
+            ALTER TABLE runs_b2 RENAME TO runs;
+
+            CREATE TABLE persona_overrides_b2 (
+                template_id TEXT NOT NULL,
+                papel TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                PRIMARY KEY (tenant_id, template_id, papel)
+            );
+            INSERT INTO persona_overrides_b2 (template_id, papel, prompt, updated_ts, tenant_id)
+                SELECT template_id, papel, prompt, updated_ts, '{local}' FROM persona_overrides;
+            DROP TABLE persona_overrides;
+            ALTER TABLE persona_overrides_b2 RENAME TO persona_overrides;
+
+            CREATE TABLE template_pub_b2 (
+                template_id TEXT NOT NULL,
+                publicado INTEGER NOT NULL,
+                updated_ts TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT '{local}',
+                PRIMARY KEY (tenant_id, template_id)
+            );
+            INSERT INTO template_pub_b2 (template_id, publicado, updated_ts, tenant_id)
+                SELECT template_id, publicado, updated_ts, '{local}' FROM template_pub;
+            DROP TABLE template_pub;
+            ALTER TABLE template_pub_b2 RENAME TO template_pub;
+            COMMIT;",
+            local = Self::LOCAL_TENANT
+        ))?;
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -145,10 +238,14 @@ impl BtvStore {
     /// a primeira ativação após um redeploy geraria `sq1` de novo e bateria em
     /// `UNIQUE constraint failed: runs.task_id`. Usado no arranque do dashboard.
     pub fn max_run_task_seq(&self) -> u64 {
-        let Ok(mut stmt) = self.conn.prepare("SELECT task_id FROM runs") else {
+        let Ok(mut stmt) = self
+            .conn
+            .prepare("SELECT task_id FROM runs WHERE tenant_id = ?1")
+        else {
             return 0;
         };
-        let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else {
+        let Ok(rows) = stmt.query_map(params![Self::LOCAL_TENANT], |r| r.get::<_, String>(0))
+        else {
             return 0;
         };
         rows.flatten()
@@ -169,8 +266,9 @@ impl BtvStore {
     /// quantas reconciliou.
     pub fn reconcile_stale_runs(&self, now: &str) -> Result<usize, BtvStoreError> {
         let n = self.conn.execute(
-            "UPDATE runs SET status = 'encerrada', updated_ts = ?1 WHERE status = 'ativa'",
-            params![now],
+            "UPDATE runs SET status = 'encerrada', updated_ts = ?1
+             WHERE status = 'ativa' AND tenant_id = ?2",
+            params![now, Self::LOCAL_TENANT],
         )?;
         Ok(n)
     }
@@ -180,8 +278,9 @@ impl BtvStore {
     /// watcher pode sobreviver a um run apagado. A4: recebe `RunStatus`
     /// tipado — `status = "qualquer_string"` não compila mais; o SQL grava
     /// exatamente `as_str()` (mesmos bytes de sempre, T3 como juiz). Este
-    /// método morre em B2, quando a mutação passa a fluir pelo agregado +
-    /// `RunRepository::save`.
+    /// método morre em C3, quando o handler migrar para o caminho
+    /// `RunRepository::get → Run::transition_to → save` (o adapter das
+    /// traits já existe neste arquivo desde B2).
     pub fn set_status(
         &self,
         task_id: &str,
@@ -189,61 +288,31 @@ impl BtvStore {
         now: &str,
     ) -> Result<(), BtvStoreError> {
         self.conn.execute(
-            "UPDATE runs SET status = ?2, updated_ts = ?3 WHERE task_id = ?1",
-            params![task_id, status.as_str(), now],
+            "UPDATE runs SET status = ?2, updated_ts = ?3
+             WHERE task_id = ?1 AND tenant_id = ?4",
+            params![task_id, status.as_str(), now, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
 
     /// Runs mais recentes primeiro (a squad em execução aparece no topo de
-    /// U6 porque é a mais nova com status `ativa`).
+    /// U6 porque é a mais nova com status `ativa`). API legada = a porta do
+    /// modo local: escopo fixo no tenant LOCAL (B2) — num banco multi-tenant,
+    /// linhas de outros tenants não vazam por aqui.
     pub fn list_runs(&self) -> Result<Vec<BtvRun>, BtvStoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, task_id, template_id, template_versao, nome, briefing_json,
-                    papeis_json, status, gates_aprovados, created_ts, updated_ts
-             FROM runs ORDER BY id DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            let task_id_raw: String = row.get(1)?;
-            let status_raw: String = row.get(7)?;
-            Ok(BtvRun {
-                id: row.get(0)?,
-                // Fail-closed: linha com task_id/status fora do vocabulário é
-                // ERRO de leitura, não valor fabricado (todo dado real passa —
-                // os dois formatos são os que o próprio produto sempre gravou).
-                task_id: TaskId::parse(&task_id_raw).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        1,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?,
-                template_id: row.get(2)?,
-                template_versao: row.get(3)?,
-                nome: row.get(4)?,
-                briefing_json: row.get(5)?,
-                papeis_json: row.get(6)?,
-                status: RunStatus::parse(&status_raw).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        7,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?,
-                gates_aprovados: row.get(8)?,
-                created_ts: row.get(9)?,
-                updated_ts: row.get(10)?,
-                tenant: TenantId::LOCAL,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {RUN_COLS} FROM runs WHERE tenant_id = ?1 ORDER BY id DESC"
+        ))?;
+        let rows = stmt.query_map(params![Self::LOCAL_TENANT], row_to_run)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
     /// Incrementa a contagem de gates aprovados do run (chamado pelo
     /// handler de gate do BTV — compõe a trilha de procedência de U4).
     pub fn increment_gates(&self, task_id: &str, now: &str) -> Result<(), BtvStoreError> {
         self.conn.execute(
-            "UPDATE runs SET gates_aprovados = gates_aprovados + 1, updated_ts = ?2 WHERE task_id = ?1",
-            params![task_id, now],
+            "UPDATE runs SET gates_aprovados = gates_aprovados + 1, updated_ts = ?2
+             WHERE task_id = ?1 AND tenant_id = ?3",
+            params![task_id, now, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
@@ -277,32 +346,10 @@ impl BtvStore {
     }
 
     pub fn list_deliverables(&self) -> Result<Vec<BtvDeliverable>, BtvStoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, run_id, task_id, template_id, nome, path, formato, versao, trilha, created_ts
-             FROM deliverables ORDER BY id DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            let task_id_raw: String = row.get(2)?;
-            Ok(BtvDeliverable {
-                id: row.get(0)?,
-                run_id: row.get(1)?,
-                task_id: TaskId::parse(&task_id_raw).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        2,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?,
-                template_id: row.get(3)?,
-                nome: row.get(4)?,
-                path: row.get(5)?,
-                formato: row.get(6)?,
-                versao: row.get(7)?,
-                trilha: row.get(8)?,
-                created_ts: row.get(9)?,
-                tenant: TenantId::LOCAL,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {DELIVERABLE_COLS} FROM deliverables WHERE tenant_id = ?1 ORDER BY id DESC"
+        ))?;
+        let rows = stmt.query_map(params![Self::LOCAL_TENANT], row_to_deliverable)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
@@ -319,10 +366,12 @@ impl BtvStore {
         prompt: &str,
         now: &str,
     ) -> Result<(), BtvStoreError> {
+        // B2: a PK agora inclui o tenant — o alvo do ON CONFLICT acompanha
+        // (o DEFAULT da coluna preenche o LOCAL na escrita legada).
         self.conn.execute(
             "INSERT INTO persona_overrides (template_id, papel, prompt, updated_ts)
              VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(template_id, papel) DO UPDATE SET prompt = ?3, updated_ts = ?4",
+             ON CONFLICT(tenant_id, template_id, papel) DO UPDATE SET prompt = ?3, updated_ts = ?4",
             params![template_id, papel, prompt, now],
         )?;
         Ok(())
@@ -334,16 +383,17 @@ impl BtvStore {
         papel: &str,
     ) -> Result<(), BtvStoreError> {
         self.conn.execute(
-            "DELETE FROM persona_overrides WHERE template_id = ?1 AND papel = ?2",
-            params![template_id, papel],
+            "DELETE FROM persona_overrides
+             WHERE template_id = ?1 AND papel = ?2 AND tenant_id = ?3",
+            params![template_id, papel, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
 
     pub fn clear_persona_overrides(&self, template_id: &str) -> Result<(), BtvStoreError> {
         self.conn.execute(
-            "DELETE FROM persona_overrides WHERE template_id = ?1",
-            params![template_id],
+            "DELETE FROM persona_overrides WHERE template_id = ?1 AND tenant_id = ?2",
+            params![template_id, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
@@ -353,14 +403,15 @@ impl BtvStore {
         template_id: &str,
     ) -> Result<Vec<PersonaOverride>, BtvStoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT template_id, papel, prompt FROM persona_overrides WHERE template_id = ?1",
+            "SELECT template_id, papel, prompt, tenant_id FROM persona_overrides
+             WHERE template_id = ?1 AND tenant_id = ?2",
         )?;
-        let rows = stmt.query_map(params![template_id], |row| {
+        let rows = stmt.query_map(params![template_id, Self::LOCAL_TENANT], |row| {
             Ok(PersonaOverride {
                 template_id: row.get(0)?,
                 papel: row.get(1)?,
                 prompt: row.get(2)?,
-                tenant: TenantId::LOCAL,
+                tenant: parse_tenant_col(row, 3)?,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -388,15 +439,18 @@ impl BtvStore {
         now: &str,
     ) -> Result<(), BtvStoreError> {
         self.conn.execute(
-            "UPDATE custom_personas SET nome = ?2, prompt = ?3, updated_ts = ?4 WHERE id = ?1",
-            params![id, nome, prompt, now],
+            "UPDATE custom_personas SET nome = ?2, prompt = ?3, updated_ts = ?4
+             WHERE id = ?1 AND tenant_id = ?5",
+            params![id, nome, prompt, now, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
 
     pub fn delete_custom_persona(&self, id: i64) -> Result<(), BtvStoreError> {
-        self.conn
-            .execute("DELETE FROM custom_personas WHERE id = ?1", params![id])?;
+        self.conn.execute(
+            "DELETE FROM custom_personas WHERE id = ?1 AND tenant_id = ?2",
+            params![id, Self::LOCAL_TENANT],
+        )?;
         Ok(())
     }
 
@@ -405,15 +459,16 @@ impl BtvStore {
         template_id: &str,
     ) -> Result<Vec<CustomPersona>, BtvStoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, template_id, nome, prompt FROM custom_personas WHERE template_id = ?1 ORDER BY id",
+            "SELECT id, template_id, nome, prompt, tenant_id FROM custom_personas
+             WHERE template_id = ?1 AND tenant_id = ?2 ORDER BY id",
         )?;
-        let rows = stmt.query_map(params![template_id], |row| {
+        let rows = stmt.query_map(params![template_id, Self::LOCAL_TENANT], |row| {
             Ok(CustomPersona {
                 id: row.get(0)?,
                 template_id: row.get(1)?,
                 nome: row.get(2)?,
                 prompt: row.get(3)?,
-                tenant: TenantId::LOCAL,
+                tenant: parse_tenant_col(row, 4)?,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -426,9 +481,10 @@ impl BtvStore {
         publicado: bool,
         now: &str,
     ) -> Result<(), BtvStoreError> {
+        // B2: idem persona_overrides — alvo do ON CONFLICT acompanha a PK.
         self.conn.execute(
             "INSERT INTO template_pub (template_id, publicado, updated_ts) VALUES (?1, ?2, ?3)
-             ON CONFLICT(template_id) DO UPDATE SET publicado = ?2, updated_ts = ?3",
+             ON CONFLICT(tenant_id, template_id) DO UPDATE SET publicado = ?2, updated_ts = ?3",
             params![template_id, publicado as i64, now],
         )?;
         Ok(())
@@ -437,8 +493,8 @@ impl BtvStore {
     pub fn list_template_pub(&self) -> Result<Vec<(String, bool)>, BtvStoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT template_id, publicado FROM template_pub")?;
-        let rows = stmt.query_map([], |row| {
+            .prepare("SELECT template_id, publicado FROM template_pub WHERE tenant_id = ?1")?;
+        let rows = stmt.query_map(params![Self::LOCAL_TENANT], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -545,10 +601,11 @@ impl BtvStore {
     }
 
     pub fn list_users(&self) -> Result<Vec<BtvUser>, BtvStoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, nome, email, papel, ativo, pin_hash FROM users ORDER BY id")?;
-        let rows = stmt.query_map([], |row| {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nome, email, papel, ativo, pin_hash, tenant_id FROM users
+             WHERE tenant_id = ?1 ORDER BY id",
+        )?;
+        let rows = stmt.query_map(params![Self::LOCAL_TENANT], |row| {
             Ok(BtvUser {
                 id: row.get(0)?,
                 nome: row.get(1)?,
@@ -557,10 +614,444 @@ impl BtvStore {
                 ativo: row.get::<_, i64>(4)? != 0,
                 // Nunca vaza o hash — só se HÁ um PIN.
                 has_pin: row.get::<_, Option<String>>(5)?.is_some(),
-                tenant: TenantId::LOCAL,
+                tenant: parse_tenant_col(row, 6)?,
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+}
+
+// ── B2: adapter SQLite das traits de `btv-domain::ports` (ADR 0026) ─────────
+//
+// O `BtvStore` É o adapter: os mesmos arquivos `.btv/btv.db` servem a API
+// legada (acima, escopo fixo LOCAL) e as traits com `&TenantContext`. A
+// suíte de contrato (`btv-contract`) julga ESTE bloco — e julgará o adapter
+// Postgres em B4 com os mesmos testes.
+
+/// Colunas do SELECT de runs na ordem que `row_to_run` espera.
+const RUN_COLS: &str = "id, task_id, template_id, template_versao, nome, briefing_json, \
+                        papeis_json, status, gates_aprovados, created_ts, updated_ts, tenant_id";
+
+/// Colunas do SELECT de deliverables na ordem que `row_to_deliverable` espera.
+const DELIVERABLE_COLS: &str =
+    "id, run_id, task_id, template_id, nome, path, formato, versao, trilha, created_ts, tenant_id";
+
+/// Fail-closed: coluna `tenant_id` fora do formato UUID é ERRO de leitura,
+/// não tenant fabricado (mesma regra do `TaskId`/`RunStatus` do A4).
+fn parse_tenant_col(row: &rusqlite::Row, idx: usize) -> Result<TenantId, rusqlite::Error> {
+    let raw: String = row.get(idx)?;
+    TenantId::parse(&raw).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(idx, rusqlite::types::Type::Text, Box::new(e))
+    })
+}
+
+/// Mapeamento tipado da linha de run — task_id/status/tenant com parse
+/// fail-closed (linha fora do vocabulário é erro, não valor fabricado; todo
+/// dado real passa — os formatos são os que o próprio produto sempre gravou).
+fn row_to_run(row: &rusqlite::Row) -> Result<BtvRun, rusqlite::Error> {
+    let task_id_raw: String = row.get(1)?;
+    let status_raw: String = row.get(7)?;
+    Ok(BtvRun {
+        id: row.get(0)?,
+        task_id: TaskId::parse(&task_id_raw).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(e))
+        })?,
+        template_id: row.get(2)?,
+        template_versao: row.get(3)?,
+        nome: row.get(4)?,
+        briefing_json: row.get(5)?,
+        papeis_json: row.get(6)?,
+        status: RunStatus::parse(&status_raw).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(7, rusqlite::types::Type::Text, Box::new(e))
+        })?,
+        gates_aprovados: row.get(8)?,
+        created_ts: row.get(9)?,
+        updated_ts: row.get(10)?,
+        tenant: parse_tenant_col(row, 11)?,
+    })
+}
+
+fn row_to_deliverable(row: &rusqlite::Row) -> Result<BtvDeliverable, rusqlite::Error> {
+    let task_id_raw: String = row.get(2)?;
+    Ok(BtvDeliverable {
+        id: row.get(0)?,
+        run_id: row.get(1)?,
+        task_id: TaskId::parse(&task_id_raw).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e))
+        })?,
+        template_id: row.get(3)?,
+        nome: row.get(4)?,
+        path: row.get(5)?,
+        formato: row.get(6)?,
+        versao: row.get(7)?,
+        trilha: row.get(8)?,
+        created_ts: row.get(9)?,
+        tenant: parse_tenant_col(row, 10)?,
+    })
+}
+
+/// Tradução na fronteira (critério 2 do G1): `rusqlite::Error` NUNCA
+/// atravessa a assinatura das traits — vira `RepositoryError::Storage` com a
+/// mensagem preservada para diagnóstico.
+fn storage(e: rusqlite::Error) -> RepositoryError {
+    RepositoryError::Storage(e.to_string())
+}
+
+/// Fail-closed na ESCRITA: um agregado/entrega cujo `tenant` difere do
+/// contexto é recusado antes de tocar o banco — a suíte de contrato prova
+/// que a recusa no meio de um lote desfaz a transação inteira.
+fn exige_mesmo_tenant(
+    ctx: &TenantContext,
+    dono: TenantId,
+    o_que: &str,
+) -> Result<(), RepositoryError> {
+    if dono != ctx.tenant {
+        return Err(RepositoryError::Storage(format!(
+            "recusado (fail-closed): {o_que} pertence ao tenant {dono}, não ao do contexto {}",
+            ctx.tenant
+        )));
+    }
+    Ok(())
+}
+
+/// Upsert do agregado por `(tenant_id, task_id)` — compartilhado por `save`
+/// e `save_with_deliverables` (que o roda dentro da transação; `Transaction`
+/// deref-a para `Connection`). `id` do struct é ignorado: quem numera a
+/// linha é o banco, e a identidade do agregado é o `task_id` no tenant.
+fn upsert_run(conn: &Connection, run: &btv_domain::Run) -> Result<(), rusqlite::Error> {
+    let tenant = run.tenant.to_string();
+    let task = run.task_id.to_string();
+    let n = conn.execute(
+        "UPDATE runs SET template_id = ?3, template_versao = ?4, nome = ?5,
+                         briefing_json = ?6, papeis_json = ?7, status = ?8,
+                         gates_aprovados = ?9, created_ts = ?10, updated_ts = ?11
+         WHERE tenant_id = ?1 AND task_id = ?2",
+        params![
+            tenant,
+            task,
+            run.template_id,
+            run.template_versao,
+            run.nome,
+            run.briefing_json,
+            run.papeis_json,
+            run.status.as_str(),
+            run.gates_aprovados,
+            run.created_ts,
+            run.updated_ts
+        ],
+    )?;
+    if n == 0 {
+        conn.execute(
+            "INSERT INTO runs (tenant_id, task_id, template_id, template_versao, nome,
+                               briefing_json, papeis_json, status, gates_aprovados,
+                               created_ts, updated_ts)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                tenant,
+                task,
+                run.template_id,
+                run.template_versao,
+                run.nome,
+                run.briefing_json,
+                run.papeis_json,
+                run.status.as_str(),
+                run.gates_aprovados,
+                run.created_ts,
+                run.updated_ts
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+impl RunRepository for BtvStore {
+    fn get(
+        &self,
+        ctx: &TenantContext,
+        task_id: &str,
+    ) -> Result<Option<btv_domain::Run>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {RUN_COLS} FROM runs WHERE tenant_id = ?1 AND task_id = ?2"
+            ))
+            .map_err(storage)?;
+        stmt.query_row(params![ctx.tenant.to_string(), task_id], row_to_run)
+            .optional()
+            .map_err(storage)
+    }
+
+    fn list(&self, ctx: &TenantContext) -> Result<Vec<btv_domain::Run>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {RUN_COLS} FROM runs WHERE tenant_id = ?1 ORDER BY id DESC"
+            ))
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string()], row_to_run)
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    fn save(&mut self, ctx: &TenantContext, run: &btv_domain::Run) -> Result<(), RepositoryError> {
+        exige_mesmo_tenant(ctx, run.tenant, "o run")?;
+        upsert_run(&self.conn, run).map_err(storage)
+    }
+
+    fn save_with_deliverables(
+        &mut self,
+        ctx: &TenantContext,
+        run: &btv_domain::Run,
+        novas: &[btv_domain::Deliverable],
+    ) -> Result<(), RepositoryError> {
+        exige_mesmo_tenant(ctx, run.tenant, "o run")?;
+        // A transação REAL do critério 4 do G1: run + entregas gravam juntos
+        // ou nada grava — retorno antecipado (recusa fail-closed no meio do
+        // lote) derruba `tx` sem commit ⇒ rollback automático.
+        let tx = self.conn.transaction().map_err(storage)?;
+        upsert_run(&tx, run).map_err(storage)?;
+        let run_row_id: i64 = tx
+            .query_row(
+                "SELECT id FROM runs WHERE tenant_id = ?1 AND task_id = ?2",
+                params![ctx.tenant.to_string(), run.task_id.to_string()],
+                |r| r.get(0),
+            )
+            .map_err(storage)?;
+        for entrega in novas {
+            exige_mesmo_tenant(ctx, entrega.tenant, "a entrega")?;
+            tx.execute(
+                "INSERT INTO deliverables (run_id, task_id, template_id, nome, path,
+                                           formato, versao, trilha, created_ts, tenant_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    run_row_id,
+                    entrega.task_id.to_string(),
+                    entrega.template_id,
+                    entrega.nome,
+                    entrega.path,
+                    entrega.formato,
+                    entrega.versao,
+                    entrega.trilha,
+                    entrega.created_ts,
+                    ctx.tenant.to_string()
+                ],
+            )
+            .map_err(storage)?;
+        }
+        tx.commit().map_err(storage)
+    }
+
+    fn list_deliverables(
+        &self,
+        ctx: &TenantContext,
+    ) -> Result<Vec<btv_domain::Deliverable>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {DELIVERABLE_COLS} FROM deliverables WHERE tenant_id = ?1 ORDER BY id DESC"
+            ))
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string()], row_to_deliverable)
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    fn get_deliverable(
+        &self,
+        ctx: &TenantContext,
+        id: i64,
+    ) -> Result<Option<btv_domain::Deliverable>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {DELIVERABLE_COLS} FROM deliverables WHERE tenant_id = ?1 AND id = ?2"
+            ))
+            .map_err(storage)?;
+        stmt.query_row(params![ctx.tenant.to_string(), id], row_to_deliverable)
+            .optional()
+            .map_err(storage)
+    }
+
+    fn max_task_seq(&self, ctx: &TenantContext) -> Result<u64, RepositoryError> {
+        // Mesma semântica do `max_run_task_seq` legado, mas POR tenant e com
+        // erros de storage propagados (não engolidos como 0).
+        let mut stmt = self
+            .conn
+            .prepare("SELECT task_id FROM runs WHERE tenant_id = ?1")
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string()], |r| r.get::<_, String>(0))
+            .map_err(storage)?;
+        let mut max = 0u64;
+        for raw in rows {
+            let raw = raw.map_err(storage)?;
+            if let Ok(task) = TaskId::parse(&raw) {
+                max = max.max(task.seq());
+            }
+        }
+        Ok(max)
+    }
+}
+
+impl PersonaRepository for BtvStore {
+    fn list_overrides(
+        &self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<Vec<PersonaOverride>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT template_id, papel, prompt, tenant_id FROM persona_overrides
+                 WHERE tenant_id = ?1 AND template_id = ?2",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string(), template_id], |row| {
+                Ok(PersonaOverride {
+                    template_id: row.get(0)?,
+                    papel: row.get(1)?,
+                    prompt: row.get(2)?,
+                    tenant: parse_tenant_col(row, 3)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    fn set_override(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        papel: &str,
+        prompt: &str,
+    ) -> Result<(), RepositoryError> {
+        // `updated_ts` é escrituração do ADAPTER, não estado do domínio — a
+        // assinatura aceita no G1 não carrega relógio, então o adapter usa o
+        // do banco (mesmo formato RFC3339 do restante do sistema).
+        self.conn
+            .execute(
+                "INSERT INTO persona_overrides (tenant_id, template_id, papel, prompt, updated_ts)
+                 VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                 ON CONFLICT(tenant_id, template_id, papel)
+                 DO UPDATE SET prompt = ?4, updated_ts = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+                params![ctx.tenant.to_string(), template_id, papel, prompt],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    fn delete_override(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        papel: &str,
+    ) -> Result<(), RepositoryError> {
+        self.conn
+            .execute(
+                "DELETE FROM persona_overrides
+                 WHERE tenant_id = ?1 AND template_id = ?2 AND papel = ?3",
+                params![ctx.tenant.to_string(), template_id, papel],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    fn clear_overrides(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<(), RepositoryError> {
+        self.conn
+            .execute(
+                "DELETE FROM persona_overrides WHERE tenant_id = ?1 AND template_id = ?2",
+                params![ctx.tenant.to_string(), template_id],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    fn list_custom(
+        &self,
+        ctx: &TenantContext,
+        template_id: &str,
+    ) -> Result<Vec<CustomPersona>, RepositoryError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT id, template_id, nome, prompt, tenant_id FROM custom_personas
+                 WHERE tenant_id = ?1 AND template_id = ?2 ORDER BY id",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![ctx.tenant.to_string(), template_id], |row| {
+                Ok(CustomPersona {
+                    id: row.get(0)?,
+                    template_id: row.get(1)?,
+                    nome: row.get(2)?,
+                    prompt: row.get(3)?,
+                    tenant: parse_tenant_col(row, 4)?,
+                })
+            })
+            .map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    fn insert_custom(
+        &mut self,
+        ctx: &TenantContext,
+        template_id: &str,
+        nome: &str,
+        prompt: &str,
+    ) -> Result<i64, RepositoryError> {
+        self.conn
+            .execute(
+                "INSERT INTO custom_personas (tenant_id, template_id, nome, prompt, updated_ts)
+                 VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
+                params![ctx.tenant.to_string(), template_id, nome, prompt],
+            )
+            .map_err(storage)?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    fn update_custom(
+        &mut self,
+        ctx: &TenantContext,
+        id: i64,
+        nome: &str,
+        prompt: &str,
+    ) -> Result<(), RepositoryError> {
+        // 0 linhas = não existe NESTE tenant (id de outro tenant é
+        // indistinguível de inexistente — isolamento também na mutação).
+        let n = self
+            .conn
+            .execute(
+                "UPDATE custom_personas
+                 SET nome = ?3, prompt = ?4, updated_ts = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                 WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id, nome, prompt],
+            )
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn delete_custom(&mut self, ctx: &TenantContext, id: i64) -> Result<(), RepositoryError> {
+        let n = self
+            .conn
+            .execute(
+                "DELETE FROM custom_personas WHERE tenant_id = ?1 AND id = ?2",
+                params![ctx.tenant.to_string(), id],
+            )
+            .map_err(storage)?;
+        if n == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
     }
 }
 
