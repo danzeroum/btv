@@ -1082,6 +1082,7 @@ struct SalvarFluxoBody {
 /// sendo trabalho futuro (mesma honestidade do Designer do console BuildToValue).
 async fn salvar_fluxo_handler(
     State(state): State<BtvAgentState>,
+    Tenant(ctx): Tenant,
     Json(body): Json<SalvarFluxoBody>,
 ) -> Response {
     if body.nome.trim().is_empty() {
@@ -1111,21 +1112,31 @@ async fn salvar_fluxo_handler(
         )
             .into_response();
     }
+    let blocks = nodes.len() as u64;
     let canonico = serde_json::to_string(&body.diagram).unwrap_or_default();
     let diagram_sha256 = btv_schemas::sha256_hex(&canonico);
-    match append_ledger(
-        &state.ledger,
-        "btv.flow_saved",
-        serde_json::json!({
-            "nome": body.nome,
-            "blocos": nodes.len(),
-            "diagram_sha256": diagram_sha256,
-            "versao_semantica": body.versao_semantica,
-            "snapshot_hash": body.snapshot_hash,
-            "audit_head": body.audit_head,
-            "audit_len": body.audit_len,
-        }),
-    ) {
+    // C3.3b: o fato `btv.flow_saved` vai pela porta do ledger com o `Tenant` da
+    // borda — o corpo ganha `tenant` (ADR 0027). Emissor PURO (o fluxo em si
+    // vive no workflow do Designer; o handler só registra o fato); os 7 campos
+    // do `FlowSaved` já são byte-idênticos no adapter desde o B3. Sem porta
+    // nova. `append_ledger` legado morto neste caminho.
+    use btv_domain::ports::LedgerRepository;
+    let evento = btv_domain::ports::DomainEvent {
+        tenant: ctx.tenant,
+        actor: ctx.actor.clone(),
+        ts: crate::session::now_rfc3339(),
+        kind: btv_domain::ports::DomainEventKind::FlowSaved {
+            name: body.nome,
+            blocks,
+            diagram_sha256: diagram_sha256.clone(),
+            semantic_version: body.versao_semantica,
+            snapshot_hash: body.snapshot_hash,
+            audit_head: body.audit_head,
+            audit_len: body.audit_len,
+        },
+    };
+    let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+    match LedgerRepository::append(&mut *ledger, &ctx, &evento) {
         Ok(seq) => (
             StatusCode::CREATED,
             Json(serde_json::json!({ "seq": seq, "diagram_sha256": diagram_sha256 })),
@@ -1133,7 +1144,7 @@ async fn salvar_fluxo_handler(
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody::new("ledger_error", e)),
+            Json(ErrorBody::new("ledger_error", e.to_string())),
         )
             .into_response(),
     }

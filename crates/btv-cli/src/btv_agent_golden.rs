@@ -687,15 +687,16 @@ async fn golden_squad_activation() {
         assert_eq!(publicacao.payload["template_id"], "editorial");
         assert_eq!(publicacao.payload["publicado"], true);
 
-        // C3.3b ato 1: `salvar_fluxo` ainda é LEGADO (`append_ledger` cru) —
-        // reintroduz DE PROPÓSITO o estado misto. O golden pina o corpo legado
-        // (7 campos, SEM tenant) antes do estrangulamento (ato 2); a regravação
-        // com tenant é o ato 3.
+        // C3.3b ato 2: `salvar_fluxo` ESTRANGULADO — o fluxo salvo nasce da
+        // porta do ledger; o corpo carrega `tenant` (ADR 0027). O estado misto
+        // FECHOU de novo — e desta vez para valer: com o `flow_saved` estrangulado
+        // NÃO resta emissor `btv.*` legado neste fluxo (só o `export_generated` e
+        // o `user_removed`, que não passam por ele, ficam para a C3.4). Os 7
+        // campos do adapter mantêm o payload byte-idêntico; o ganho é `tenant`.
         let fluxo = entradas
             .iter()
             .find(|e| e.kind == "btv.flow_saved")
             .expect("entrada de flow_saved existe");
-        assert_eq!(fluxo.tenant, None, "flow_saved ainda LEGADO (ato 1)");
         assert_eq!(fluxo.payload["nome"], "Fluxo de aprovação editorial");
         assert_eq!(fluxo.payload["blocos"], 2);
         assert_eq!(fluxo.payload["versao_semantica"], "1.0.0");
@@ -704,9 +705,8 @@ async fn golden_squad_activation() {
         assert!(
             entradas
                 .iter()
-                .filter(|e| e.kind != "btv.flow_saved")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "todos os JÁ estrangulados têm tenant; só flow_saved (legado) não"
+            "nenhum emissor legado restante no fluxo (flow_saved estrangulado)"
         );
     }
     {
