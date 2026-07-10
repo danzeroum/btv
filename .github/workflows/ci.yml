@@ -57,6 +57,38 @@ jobs:
       - run: git branch ci-buf-baseline "${{ github.event.pull_request.base.sha }}"
       - run: buf breaking schemas/proto --against '.git#branch=ci-buf-baseline,subdir=schemas/proto'
 
+  # B4 (ADR 0026): o adapter Postgres julgado pela MESMA suíte de contrato
+  # que julga o SQLite, contra um Postgres REAL (service container — mesmo
+  # espírito do job `sandbox`, que exige o daemon Docker de verdade). Sem a
+  # env BTV_PG_TEST_URL os testes PG pulam com aviso barulhento; aqui ela
+  # sempre existe, então a metade PG roda de verdade em todo PR. Inclui o
+  # teste ADVERSARIAL de RLS (role sem privilégio + SQL adulterado) e o juiz
+  # da decisão do ADR 0028 (appends concorrentes de pools separados).
+  pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p btv-store --features pg
+        env:
+          BTV_PG_TEST_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      # O gate de clippy do job `rust` roda sem features — o código do
+      # adapter PG só é lintado aqui.
+      - run: cargo clippy -p btv-store --features pg -- -D warnings
+
   # Gate de supply-chain (advisories/licenças) — porte da rust-migration.
   deny:
     runs-on: ubuntu-latest
