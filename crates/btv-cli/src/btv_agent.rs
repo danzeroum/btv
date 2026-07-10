@@ -524,8 +524,16 @@ fn arquivos_escritos(runs: &[crate::squad_agent::ToolRunNote]) -> Vec<String> {
 
 /// `GET /api/btv/squads` — runs persistidos, mais recente primeiro (U6).
 async fn list_runs_handler(State(state): State<BtvAgentState>) -> Response {
+    // C3.1 endpoint 4: leitura pela PORTA (RunRepository::list) com contexto
+    // de fonte LOCAL fixa — mesmo tipo de retorno (Run re-exportado como
+    // BtvRun desde A2), mesma serialização, wire intacto (golden T1 é o
+    // juiz). Nenhum evento: leitura não é fato auditável.
+    use btv_domain::ports::RunRepository;
+    let ctx = btv_domain::TenantContext::local(
+        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+    );
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.list_runs() {
+    match store.list(&ctx) {
         Ok(runs) => Json(runs).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
