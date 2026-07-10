@@ -45,6 +45,9 @@ impl Session {
             r#override: None,
             fake_marker: None,
             ts: now_rfc3339(),
+            // Porta operacional legada (B3): sem contexto ⇒ cadeia LOCAL,
+            // corpo byte-idêntico (decisão do B2 reusada — pendencias.md).
+            tenant: None,
         })?;
         Ok(())
     }
@@ -120,6 +123,7 @@ fn append_entry_impl(
         r#override,
         fake_marker: None,
         ts: now_rfc3339(),
+        tenant: None,
     })?;
     Ok(())
 }

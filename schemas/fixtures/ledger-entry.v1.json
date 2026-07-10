@@ -9,6 +9,26 @@
     "payload": { "task": "corrigir teste" },
     "ts": "2026-07-06T00:00:00Z"
   },
+  "valid_with_tenant": {
+    "seq": 1,
+    "prev_hash": "",
+    "entry_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "btv.gate_approved",
+    "actor": "web:btv",
+    "payload": { "task_id": "sq1", "etapa": "Aprovar o rascunho" },
+    "ts": "2026-07-10T00:00:00Z",
+    "tenant": "00000000-0000-0000-0000-000000000001"
+  },
+  "invalid_tenant_nao_uuid": {
+    "seq": 1,
+    "prev_hash": "",
+    "entry_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kind": "session.start",
+    "actor": "user",
+    "payload": { "task": "corrigir teste" },
+    "ts": "2026-07-06T00:00:00Z",
+    "tenant": "local"
+  },
   "invalid_missing_entry_hash": {
     "seq": 1,
     "prev_hash": "",

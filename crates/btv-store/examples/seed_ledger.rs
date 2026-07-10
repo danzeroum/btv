@@ -40,6 +40,7 @@ fn main() {
             r#override: None,
             fake_marker: None,
             ts,
+            tenant: None,
         })
         .expect("falha ao gravar no ledger");
 

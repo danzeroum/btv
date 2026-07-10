@@ -24,6 +24,11 @@
       "type": "string",
       "description": "Presente quando o payload contém dados simulados/mock (política 'Nada Fake')."
     },
-    "ts": { "type": "string", "format": "date-time" }
+    "ts": { "type": "string", "format": "date-time" },
+    "tenant": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Dono da entrada na cadeia por tenant (ADR 0027). OPCIONAL e aditivo: ausente nas entradas legadas (corpo canônico e hashes pré-B3 permanecem válidos); quando presente, entra no corpo hasheado — reatribuir a entrada a outro tenant quebra entry_hash (anti-transplante)."
+    }
   }
 }

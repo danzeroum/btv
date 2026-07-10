@@ -12,6 +12,9 @@ schemars.workspace = true
 sha2.workspace = true
 hex.workspace = true
 thiserror.workspace = true
+# B3 (ADR 0027): `LedgerEntry.tenant` é o `TenantId` do domínio no corpo
+# hasheado. Sem ciclo: btv-domain não depende de btv-schemas (regra A1).
+btv-domain.workspace = true
 
 [dev-dependencies]
 jsonschema = "0.26"

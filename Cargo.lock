@@ -391,6 +391,7 @@ dependencies = [
 name = "btv-schemas"
 version = "0.1.0"
 dependencies = [
+ "btv-domain",
  "criterion",
  "hex",
  "jsonschema",
