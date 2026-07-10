@@ -349,13 +349,18 @@ fn finish_task_ok(
 ) {
     let _ = ledger_session.finish(true, steps);
     let verified = ledger_session.verify().unwrap_or(0);
+    // Libera ANTES de anunciar: `Done` é o sinal de "pode mandar a próxima"
+    // — publicá-lo com a sessão ainda `busy` abria uma janela de 409 para o
+    // cliente que reage ao evento na hora (flake real no CI: o teste
+    // `post_message_real_dispara_bash_via_modo_roteirizado` via o `done` e
+    // o POST seguinte perdia a corrida contra o `finish_busy`).
+    hub.finish_busy(session_id);
     hub.publish(
         session_id,
         SessionEvent::Done {
             ledger_verified: verified,
         },
     );
-    hub.finish_busy(session_id);
 }
 
 /// Roda uma tarefa do agent loop numa sessão, publicando `SessionEvent`s no
@@ -417,14 +422,15 @@ pub fn spawn_session_task<G>(
             }
             Err(e) => {
                 // Falha antes/durante a abertura do ledger — sem sessão para
-                // registrar `finish`, mas ainda libera a sessão e avisa.
+                // registrar `finish`, mas ainda libera a sessão e avisa
+                // (liberar antes de anunciar, mesma razão do finish_task_ok).
+                hub.finish_busy(&session_id);
                 hub.publish(
                     &session_id,
                     SessionEvent::Error {
                         message: e.to_string(),
                     },
                 );
-                hub.finish_busy(&session_id);
             }
         }
     });
@@ -491,13 +497,14 @@ fn spawn_message_task(
                 finish_task_ok(&hub, &session_id, &mut ledger_session, steps)
             }
             Err(e) => {
+                // Liberar antes de anunciar — mesma razão do finish_task_ok.
+                hub.finish_busy(&session_id);
                 hub.publish(
                     &session_id,
                     SessionEvent::Error {
                         message: e.to_string(),
                     },
                 );
-                hub.finish_busy(&session_id);
             }
         }
     });
