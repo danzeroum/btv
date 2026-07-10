@@ -2164,3 +2164,17 @@ para quem ler o ADR 0030 e o código: "o dict morreu na fronteira e sobrevive
 DECLARADAMENTE no miolo", não "o dict morreu". Gatilho: tipar o miolo do
 `btv-review` com Pydantic espelhando a mensagem — candidato natural quando o
 review ganhar evolução funcional, não uma dívida urgente.
+
+**[padrão — lição que morde duas vezes vira script]** O mascaramento de
+exit-code por pipe (`cargo fmt --all --check | tail -3 && echo OK` devolve o
+exit do `tail`, não do `cargo fmt`) foi diagnosticado na E1s.3 e MORDEU DE NOVO
+no C4-2 (fmt passou local mascarado, quebrou os jobs `rust`+`verify`). Prova de
+que lição que depende de memória é aposta, não lição — o mesmo princípio da
+campanha ("o lint ser burro é o que o torna forte": juiz mecânico > disciplina)
+aplicado à PRÓPRIA verificação. Fixado como MÁQUINA: o alvo `just preflight`
+(justfile) é o pré-push canônico — dogfood do `btv verify` do produto
+(test/clippy/fmt com exit propagado por construção) + os complementos que o CI
+cobre e o `btv verify` default não (arch-lint, clippy da feature `pg`), um gate
+por linha, `just` abortando na primeira falha. A classe inteira de mascaramento
+some porque não há pipe entre o gate e a decisão. Regra geral: **lição que
+morde duas vezes vira script** — nenhum gate crítico fica na memória do operador.

@@ -23,6 +23,22 @@ arch-lint:
 # Pipeline de verificação determinística (evidência JSON — Fase 5 completa o /verify).
 verify: test lint
 
+# Pré-push CANÔNICO — espelha o CI comando-a-comando com exit direto POR
+# CONSTRUÇÃO (`just` aborta na primeira linha não-zero). Mata a classe de
+# mascaramento de exit-code por pipe (`... | tail && echo OK` devolve o exit do
+# `tail`, não do gate) que mordeu duas vezes: juiz mecânico > disciplina
+# lembrada. Dogfood: o próprio `btv verify` do produto roda o pipeline
+# determinístico (cargo test --workspace + clippy + fmt); os complementos que
+# o CI cobre mas o `btv verify` default não (arch-lint, clippy da feature `pg`)
+# entram como gates próprios, um por linha. A suíte pg-contra-Postgres-real
+# (`cargo test -p btv-store --features pg`) exige um Postgres local e roda à
+# parte quando o passo toca store/pg — não é gate de todo push.
+preflight:
+    cargo run -p btv-cli --quiet -- verify --out /tmp/btv-preflight-evidence.json
+    ./scripts/arch-lint.sh
+    cargo clippy -p btv-store --features pg -- -D warnings
+    cargo clippy -p btv-cli --features pg -- -D warnings
+
 # Regenera os stubs gRPC de schemas/proto/*.proto. O lado Rust roda
 # automaticamente a cada build (build.rs do btv-proto, via protoc
 # vendorizado — sem exigir protoc de sistema); o lado Python precisa ser
