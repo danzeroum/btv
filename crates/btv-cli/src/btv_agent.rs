@@ -1244,9 +1244,12 @@ struct NovoUsuarioBody {
     pin: Option<String>,
 }
 
-async fn list_users_handler(State(state): State<BtvAgentState>) -> Response {
+async fn list_users_handler(State(state): State<BtvAgentState>, Tenant(ctx): Tenant) -> Response {
+    // C3.4a: leitura pela porta `UserRepository`, contexto da borda. Mesmo tipo
+    // (`User` re-exportado desde A2), wire byte-idêntico.
+    use btv_domain::ports::UserRepository;
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.list_users() {
+    match store.list(&ctx) {
         Ok(users) => Json(users).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1258,6 +1261,7 @@ async fn list_users_handler(State(state): State<BtvAgentState>) -> Response {
 
 async fn create_user_handler(
     State(state): State<BtvAgentState>,
+    Tenant(ctx): Tenant,
     Json(body): Json<NovoUsuarioBody>,
 ) -> Response {
     if body.nome.trim().is_empty() {
@@ -1268,13 +1272,16 @@ async fn create_user_handler(
             .into_response();
     }
     let papel = body.papel.unwrap_or_else(|| "usuario".into());
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.insert_user(
+    // C3.4a: escrita pela porta; o `created_ts` (salt do pin_hash) é escrituração
+    // do adapter.
+    use btv_domain::ports::UserRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.create(
+        &ctx,
         body.nome.trim(),
         body.email.trim(),
         &papel,
         body.pin.as_deref(),
-        &crate::session::now_rfc3339(),
     ) {
         Ok(id) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
         Err(e) => (
@@ -1287,21 +1294,35 @@ async fn create_user_handler(
 
 /// `DELETE /api/btv/users/:id` — remove um perfil de vez (o toggle "ativo" só
 /// suspende). Registra `btv.user_removed` no ledger para trilha auditável.
-async fn delete_user_handler(State(state): State<BtvAgentState>, Path(id): Path<i64>) -> Response {
+async fn delete_user_handler(
+    State(state): State<BtvAgentState>,
+    Path(id): Path<i64>,
+    Tenant(ctx): Tenant,
+) -> Response {
+    use btv_domain::ports::{LedgerRepository, UserRepository};
     let resultado = {
-        let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        store.delete_user(id)
+        let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+        store.remove(&ctx, id)
     };
     match resultado {
         Ok(()) => {
-            let _ = append_ledger(
-                &state.ledger,
-                "btv.user_removed",
-                serde_json::json!({ "id": id }),
-            );
+            // C3.4a: o fato `btv.user_removed` pela porta do ledger — o corpo
+            // ganha `tenant` (ADR 0027); `UserRemoved{user_id}→{id}` já era
+            // byte-idêntico no adapter (B3). O `let _` que engolia o erro morre
+            // com o `append_ledger` legado (dívida do levantamento fechada).
+            let evento = btv_domain::ports::DomainEvent {
+                tenant: ctx.tenant,
+                actor: ctx.actor.clone(),
+                ts: crate::session::now_rfc3339(),
+                kind: btv_domain::ports::DomainEventKind::UserRemoved { user_id: id },
+            };
+            let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+            if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+                eprintln!("btv: falha ao registrar remoção de perfil no ledger: {e}");
+            }
             StatusCode::OK.into_response()
         }
-        Err(btv_store::BtvStoreError::NotFound) => (
+        Err(btv_domain::ports::RepositoryError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
         )
@@ -1322,12 +1343,14 @@ struct AtivoBody {
 async fn set_user_ativo_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
+    Tenant(ctx): Tenant,
     Json(body): Json<AtivoBody>,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.set_user_ativo(id, body.ativo) {
+    use btv_domain::ports::UserRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.set_active(&ctx, id, body.ativo) {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(btv_store::BtvStoreError::NotFound) => (
+        Err(btv_domain::ports::RepositoryError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
         )
@@ -1351,12 +1374,14 @@ struct SetPinBody {
 async fn set_user_pin_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
+    Tenant(ctx): Tenant,
     Json(body): Json<SetPinBody>,
 ) -> Response {
-    let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.set_user_pin(id, body.pin.as_deref()) {
+    use btv_domain::ports::UserRepository;
+    let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+    match store.set_pin(&ctx, id, body.pin.as_deref()) {
         Ok(()) => StatusCode::OK.into_response(),
-        Err(btv_store::BtvStoreError::NotFound) => (
+        Err(btv_domain::ports::RepositoryError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
         )
@@ -1381,19 +1406,21 @@ struct VerifyPinBody {
 async fn verify_user_pin_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
+    Tenant(ctx): Tenant,
     Json(body): Json<VerifyPinBody>,
 ) -> Response {
+    use btv_domain::ports::UserRepository;
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    match store.verify_user_pin(id, &body.pin) {
+    match store.verify_pin(&ctx, id, &body.pin) {
         Ok(check) => {
             let (ok, reason) = match check {
-                btv_store::PinCheck::NoPin => (true, "no_pin"),
-                btv_store::PinCheck::Ok => (true, "ok"),
-                btv_store::PinCheck::Wrong => (false, "wrong"),
+                btv_domain::PinCheck::NoPin => (true, "no_pin"),
+                btv_domain::PinCheck::Ok => (true, "ok"),
+                btv_domain::PinCheck::Wrong => (false, "wrong"),
             };
             Json(serde_json::json!({ "ok": ok, "reason": reason })).into_response()
         }
-        Err(btv_store::BtvStoreError::NotFound) => (
+        Err(btv_domain::ports::RepositoryError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(ErrorBody::new("user_not_found", "perfil não encontrado")),
         )

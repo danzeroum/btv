@@ -723,22 +723,21 @@ async fn golden_squad_activation() {
         assert_eq!(fluxo.payload["audit_len"], 2);
         assert!(fluxo.payload["diagram_sha256"].is_string());
 
-        // C3.4a ato 1: `delete_user` ainda é LEGADO (`append_ledger` cru) —
-        // reintroduz DE PROPÓSITO o estado misto. O golden pina o corpo legado
-        // (`{id}`, SEM tenant) antes do estrangulamento (ato 2); a regravação
-        // com tenant é o ato 3.
+        // C3.4a ato 2: `delete_user` ESTRANGULADO — a remoção nasce da porta do
+        // ledger; o corpo carrega `tenant` (ADR 0027). O `UserRemoved{user_id}`
+        // → `{id}` do adapter mantém o payload byte-idêntico; o ganho é `tenant`.
+        // Todo emissor `btv.*` DESTE fluxo passa pela porta (o `export_generated`
+        // não passa por aqui — fica para a C3.4b com o teste dedicado).
         let remocao = entradas
             .iter()
             .find(|e| e.kind == "btv.user_removed")
             .expect("entrada de remoção existe");
-        assert_eq!(remocao.tenant, None, "user_removed ainda LEGADO (ato 1)");
         assert_eq!(remocao.payload["id"].as_i64(), Some(uid));
         assert!(
             entradas
                 .iter()
-                .filter(|e| e.kind != "btv.user_removed")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "todos os JÁ estrangulados têm tenant; só user_removed (legado) não"
+            "nenhum emissor legado restante no fluxo (user_removed estrangulado)"
         );
     }
     {
