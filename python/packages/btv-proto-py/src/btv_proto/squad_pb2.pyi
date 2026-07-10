@@ -7,13 +7,24 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class Verdict(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    VERDICT_UNSPECIFIED: _ClassVar[Verdict]
+    VERDICT_PASS: _ClassVar[Verdict]
+    VERDICT_FAIL: _ClassVar[Verdict]
+    VERDICT_SKIPPED: _ClassVar[Verdict]
+VERDICT_UNSPECIFIED: Verdict
+VERDICT_PASS: Verdict
+VERDICT_FAIL: Verdict
+VERDICT_SKIPPED: Verdict
+
 class SquadTask(_message.Message):
-    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence_json", "model", "roster", "tenant_id", "actor")
+    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence", "model", "roster", "tenant_id", "actor")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     DECISION_TYPE_FIELD_NUMBER: _ClassVar[int]
     MAX_AUTONOMY_LEVEL_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATION_EVIDENCE_JSON_FIELD_NUMBER: _ClassVar[int]
+    VERIFICATION_EVIDENCE_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     ROSTER_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -22,12 +33,12 @@ class SquadTask(_message.Message):
     description: str
     decision_type: str
     max_autonomy_level: int
-    verification_evidence_json: str
+    verification_evidence: VerificationEvidence
     model: str
     roster: _containers.RepeatedCompositeFieldContainer[PersonaSpec]
     tenant_id: str
     actor: str
-    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence_json: _Optional[str] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence: _Optional[_Union[VerificationEvidence, _Mapping]] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ...) -> None: ...
 
 class PersonaSpec(_message.Message):
     __slots__ = ("papel", "prompt", "funcao", "ordem", "custom")
@@ -146,6 +157,48 @@ class StepResult(_message.Message):
     success: bool
     summary: str
     def __init__(self, step_id: _Optional[str] = ..., success: _Optional[bool] = ..., summary: _Optional[str] = ...) -> None: ...
+
+class VerificationEvidence(_message.Message):
+    __slots__ = ("run_id", "git_sha", "steps", "verdict", "produced_at")
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    GIT_SHA_FIELD_NUMBER: _ClassVar[int]
+    STEPS_FIELD_NUMBER: _ClassVar[int]
+    VERDICT_FIELD_NUMBER: _ClassVar[int]
+    PRODUCED_AT_FIELD_NUMBER: _ClassVar[int]
+    run_id: str
+    git_sha: str
+    steps: _containers.RepeatedCompositeFieldContainer[VerificationStep]
+    verdict: Verdict
+    produced_at: str
+    def __init__(self, run_id: _Optional[str] = ..., git_sha: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[VerificationStep, _Mapping]]] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., produced_at: _Optional[str] = ...) -> None: ...
+
+class VerificationStep(_message.Message):
+    __slots__ = ("name", "tool", "exit_code", "duration_ms", "findings")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TOOL_FIELD_NUMBER: _ClassVar[int]
+    EXIT_CODE_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    FINDINGS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    tool: str
+    exit_code: int
+    duration_ms: int
+    findings: _containers.RepeatedCompositeFieldContainer[VerificationFinding]
+    def __init__(self, name: _Optional[str] = ..., tool: _Optional[str] = ..., exit_code: _Optional[int] = ..., duration_ms: _Optional[int] = ..., findings: _Optional[_Iterable[_Union[VerificationFinding, _Mapping]]] = ...) -> None: ...
+
+class VerificationFinding(_message.Message):
+    __slots__ = ("tool", "severity", "message", "file", "line")
+    TOOL_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    FILE_FIELD_NUMBER: _ClassVar[int]
+    LINE_FIELD_NUMBER: _ClassVar[int]
+    tool: str
+    severity: str
+    message: str
+    file: str
+    line: int
+    def __init__(self, tool: _Optional[str] = ..., severity: _Optional[str] = ..., message: _Optional[str] = ..., file: _Optional[str] = ..., line: _Optional[int] = ...) -> None: ...
 
 class HealthRequest(_message.Message):
     __slots__ = ()

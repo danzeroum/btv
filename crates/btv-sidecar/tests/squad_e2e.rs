@@ -122,7 +122,7 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
             // Sem evidência (Fase 5 Onda 3) — este teste é do laço 4d, não
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
-            verification_evidence_json: String::new(),
+            verification_evidence: None,
             model: String::new(),
             roster: Vec::new(),
             // D2t: o tenant que ENTRA aqui deve voltar ecoado em TODO evento
@@ -288,7 +288,7 @@ async fn kill_do_sidecar_dispara_fallback() {
             // Sem evidência (Fase 5 Onda 3) — este teste é do laço 4d, não
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
-            verification_evidence_json: String::new(),
+            verification_evidence: None,
             model: String::new(),
             roster: Vec::new(),
             tenant_id: "00000000-0000-0000-0000-000000000001".into(),
@@ -564,14 +564,14 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
         .await
         .expect("squad Python real deveria ficar pronto");
 
-    let evidence_json = serde_json::json!({
-        "run_id": "e2e-fechamento",
-        "git_sha": "e2e",
-        "steps": [],
-        "verdict": "pass",
-        "produced_at": "2026-01-01T00:00:00Z",
-    })
-    .to_string();
+    // D3t: evidência TIPADA no wire (antes string JSON).
+    let evidence = btv_proto::squad::VerificationEvidence {
+        run_id: "e2e-fechamento".into(),
+        git_sha: "e2e".into(),
+        steps: Vec::new(),
+        verdict: btv_proto::squad::Verdict::Pass as i32,
+        produced_at: "2026-01-01T00:00:00Z".into(),
+    };
 
     let stream = client
         .execute_task(SquadTask {
@@ -583,7 +583,7 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
             // dois testes deste arquivo, este PRECISA exercitar
             // validate_results() de verdade (é o veredito final que a
             // definição de pronto exige observar).
-            verification_evidence_json: evidence_json,
+            verification_evidence: Some(evidence),
             model: String::new(),
             roster: Vec::new(),
             tenant_id: "00000000-0000-0000-0000-000000000001".into(),

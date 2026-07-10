@@ -18,11 +18,15 @@ message SquadTask {
   string decision_type = 3;
   // Nível máximo de autonomia permitido (autonomia progressiva).
   uint32 max_autonomy_level = 4;
-  // `verification-evidence.v1` serializada (btv-verify::run_pipeline),
-  // rodada pelo `btv squad` antes de disparar a tarefa — Fase 5 Onda 3.
-  // Ausente/inválida (string vazia ou JSON malformado) é tratado como
-  // fail-closed pelo lado Python (server.py), nunca como "sem evidência = ok".
-  string verification_evidence_json = 5;
+  // `verification-evidence.v1` (btv-verify::run_pipeline), rodada pelo `btv
+  // squad` antes de disparar a tarefa — Fase 5 Onda 3. D3t (G3): antes
+  // `string verification_evidence_json` (JSON opaco), agora mensagem TIPADA
+  // espelhando o schema. É o ÚNICO breaking de wire da campanha — `buf
+  // breaking` acusa por DESIGN (quebra assinada, não silenciosa; ADR 0030);
+  // Rust e Python sobem juntos no mesmo repo (janela de deploy coordenada).
+  // Ausente (campo não setado, `HasField` falso) segue fail-closed no lado
+  // Python (server.py), nunca "sem evidência = ok".
+  VerificationEvidence verification_evidence = 5;
   // Modelo LLM a usar NESTA tarefa (ex.: "deepseek-chat"). Vazio = herda o
   // default do pool/sidecar (`--model`). Permite a tela Modelo/o `--model`
   // controlarem o squad por tarefa, em vez de um modelo fixo por processo.
@@ -124,6 +128,48 @@ message StepResult {
   string step_id = 1;
   bool success = 2;
   string summary = 3;
+}
+
+// Evidência do pipeline de verificação determinística (/verify), espelhando o
+// schema `verification-evidence.v1` (D3t). Antes viajava como string JSON no
+// campo `verification_evidence_json`; agora é tipada no wire — o lado Python
+// valida contra tipo em vez de `dict[str, Any]`.
+message VerificationEvidence {
+  string run_id = 1;
+  string git_sha = 2;
+  repeated VerificationStep steps = 3;
+  Verdict verdict = 4;
+  // RFC3339 (schema: `date-time`).
+  string produced_at = 5;
+}
+
+message VerificationStep {
+  // Nome do passo (ex.: "typecheck", "test", "lint", "sast").
+  string name = 1;
+  // Ferramenta executada (ex.: "cargo test", "pytest", "clippy").
+  string tool = 2;
+  int32 exit_code = 3;
+  uint64 duration_ms = 4;
+  repeated VerificationFinding findings = 5;
+}
+
+message VerificationFinding {
+  string tool = 1;
+  string severity = 2;
+  string message = 3;
+  // Opcionais no schema — `optional` preserva presença (ausência ≠ vazio),
+  // espelhando o `skip_serializing_if = Option::is_none` do lado Rust.
+  optional string file = 4;
+  optional uint64 line = 5;
+}
+
+// Veredito do pipeline (schema: enum ["pass","fail","skipped"]).
+// `VERDICT_UNSPECIFIED` = zero-value proto3; tratado como ausente/fail-closed.
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_PASS = 1;
+  VERDICT_FAIL = 2;
+  VERDICT_SKIPPED = 3;
 }
 
 message HealthRequest {}

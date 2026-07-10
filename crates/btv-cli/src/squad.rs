@@ -140,6 +140,48 @@ where
 
 /// Scope de um `ToolCall` (mesma resolução de dentro de `core_run_tool`) —
 /// exposto para correlacionar execuções à tarefa (trilha de entregas do BTV).
+/// Converte a evidência de verificação canônica (`btv_schemas::verification`)
+/// na mensagem proto TIPADA (D3t). Espelho 1:1 do schema
+/// `verification-evidence.v1` — o mesmo conteúdo que antes viajava como string
+/// JSON no campo `verification_evidence_json`.
+pub(crate) fn evidence_to_proto(
+    e: &btv_schemas::verification::VerificationEvidence,
+) -> btv_proto::squad::VerificationEvidence {
+    use btv_proto::squad as pb;
+    use btv_schemas::verification::Verdict as V;
+    pb::VerificationEvidence {
+        run_id: e.run_id.clone(),
+        git_sha: e.git_sha.clone(),
+        steps: e
+            .steps
+            .iter()
+            .map(|s| pb::VerificationStep {
+                name: s.name.clone(),
+                tool: s.tool.clone(),
+                exit_code: s.exit_code,
+                duration_ms: s.duration_ms,
+                findings: s
+                    .findings
+                    .iter()
+                    .map(|f| pb::VerificationFinding {
+                        tool: f.tool.clone(),
+                        severity: f.severity.clone(),
+                        message: f.message.clone(),
+                        file: f.file.clone(),
+                        line: f.line,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        verdict: match e.verdict {
+            V::Pass => pb::Verdict::Pass,
+            V::Fail => pb::Verdict::Fail,
+            V::Skipped => pb::Verdict::Skipped,
+        } as i32,
+        produced_at: e.produced_at.clone(),
+    }
+}
+
 pub(crate) fn tool_scope(tools: &ToolRegistry, call: &ToolCall) -> String {
     serde_json::from_str::<serde_json::Value>(&call.args_json)
         .ok()
@@ -398,8 +440,8 @@ async fn try_squad(
         evidence.verdict,
         evidence.steps.len()
     );
-    let verification_evidence_json = serde_json::to_string(&evidence)
-        .map_err(|e| format!("falha ao serializar evidência: {e}"))?;
+    // D3t: evidência TIPADA no wire (antes `serde_json::to_string`).
+    let verification_evidence = Some(evidence_to_proto(&evidence));
 
     // `max_autonomy_level` hardcoded (não uma flag de CLI, nem lido do
     // request web): confirmado nesta onda que o campo é ignorado
@@ -415,7 +457,7 @@ async fn try_squad(
             description: task.to_string(),
             decision_type: "architecture".into(),
             max_autonomy_level: 3,
-            verification_evidence_json,
+            verification_evidence,
             // `--model` da CLI também vale por-tarefa (além de ir no `--model`
             // do sidecar): o Python o sobrepõe ao default do orquestrador.
             model: opts.model.clone(),
@@ -542,6 +584,37 @@ mod tests {
     use btv_llm::chat::{AssistantTurn, StopReason, Usage as ChatUsage};
     use btv_llm::gateway::GatewayError;
     use std::sync::Mutex;
+
+    /// D3t — paridade do mapeamento evidência→proto contra a fixture canônica
+    /// `verification-evidence.v1`: o mesmo conteúdo que o caminho pré-D3t
+    /// carregava como string JSON, agora tipado no wire. Prova que
+    /// `evidence_to_proto` é fiel, inclusive a opcionalidade de `file`/`line`
+    /// (espelho do `Option`/`skip_serializing_if` do struct canônico).
+    #[test]
+    fn evidence_to_proto_espelha_a_fixture_v1() {
+        let fixture =
+            include_str!("../../../schemas/fixtures/verification-evidence.v1.example.json");
+        let ev: btv_schemas::verification::VerificationEvidence =
+            serde_json::from_str(fixture).expect("fixture desserializa no struct canônico");
+        let proto = evidence_to_proto(&ev);
+        assert_eq!(proto.run_id, "d3t-parity");
+        assert_eq!(proto.git_sha, "abc123def456");
+        assert_eq!(proto.verdict, btv_proto::squad::Verdict::Fail as i32);
+        assert_eq!(proto.produced_at, "2026-07-10T00:00:00Z");
+        assert_eq!(proto.steps.len(), 2);
+        assert!(proto.steps[0].findings.is_empty());
+        let lint = &proto.steps[1];
+        assert_eq!(lint.exit_code, 1);
+        assert_eq!(lint.duration_ms, 340);
+        assert_eq!(lint.findings.len(), 2);
+        // Finding com localização preenchida.
+        assert_eq!(lint.findings[0].file.as_deref(), Some("src/x.rs"));
+        assert_eq!(lint.findings[0].line, Some(12));
+        // Finding SEM localização: `None`, nunca string vazia — paridade com o
+        // `skip_serializing_if = Option::is_none` do serde.
+        assert_eq!(lint.findings[1].file, None);
+        assert_eq!(lint.findings[1].line, None);
+    }
 
     /// Gerador de teste que só registra as `messages` recebidas — usado
     /// para provar o mapeamento de papel de `core_generate` (Onda 2), sem
@@ -706,7 +779,7 @@ mod tests {
                 description: "tarefa roteirizada".into(),
                 decision_type: "architecture".into(),
                 max_autonomy_level: 3,
-                verification_evidence_json: String::new(),
+                verification_evidence: None,
                 model: String::new(),
                 roster: Vec::new(),
                 tenant_id: btv_domain::TenantId::LOCAL.to_string(),
