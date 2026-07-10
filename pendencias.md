@@ -2131,3 +2131,24 @@ design), o alvo desta mordida re-avalia: se a shell virar rota livre, "vazar a
 shell" deixa de ser vazamento e a mordida re-mira no que PERMANECER gateado.
 Diferimento com gatilho escrito — não decidir agora o que só o desenho do
 login define.
+
+**[registro — C3.4b: C3 FECHADA, `append_ledger` deletado]** O último emissor
+legado dos kinds `btv.*` (`btv.export_generated`, na conclusão de squad) foi
+estrangulado pela porta e a função `append_ledger` DELETADA — a profecia do
+próprio rustdoc cumprida. Grep de fecho: `grep 'fn append_ledger'` = vazio;
+nenhuma chamada no crate. **Semântica do obituário (relê a linha da C3.3a):**
+isto prova "todo emissor **`btv.*`** do produto nasce da porta de DOMÍNIO", NÃO
+"tudo pela porta" — os kinds OPERACIONAIS (`session.*`, `tool.*`, `llm.turn`,
+`squad.*`, `designer.workflow_saved` do console, etc.) seguem pela porta de
+INSTRUMENTAÇÃO por decisão do G1, não por esquecimento.
+
+**[precedente — `TenantContext` fora do escopo de uma requisição]** A C3.4b
+inaugurou o primeiro uso de `TenantContext` numa operação de BACKGROUND (o
+registro de entregas na task de conclusão, `registrar_entregas`). Regra fixada
+(rustdoc da função): o contexto é **capturado** no spawn — clone do `ctx` da
+requisição que ativou a squad — NUNCA fabricado a partir do `run.tenant`
+carregado depois (fabricar inventaria um actor e violaria "contexto nasce na
+borda"). A leitura do run passa pela porta (`RunRepository::get(ctx, …)`), então
+um divórcio entre o tenant capturado e o do run é fail-closed de graça. Futuras
+tasks de background (webhooks, cron, filas) citam este precedente: proveniência
+= tenant E actor de quem originou o trabalho.
