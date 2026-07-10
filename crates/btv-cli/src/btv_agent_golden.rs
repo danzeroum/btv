@@ -616,29 +616,26 @@ async fn golden_squad_activation() {
             Some(btv_domain::TenantId::LOCAL),
             "ativação estrangulada (endpoint 2): tenant no corpo"
         );
-        // C3.2 ato 1: o emissor de persona (`set_override`) ainda é LEGADO
-        // (`append_ledger` cru) — reintroduz DE PROPÓSITO o estado misto que o
-        // endpoint 3 havia fechado. O golden `ledger_bodies` pina o corpo legado
-        // (`papel`, SEM tenant) ANTES do estrangulamento (ato 2); a regravação
-        // com tenant é o ato 3. Todos os OUTROS emissores deste fluxo já passam
-        // pela porta e carregam o tenant.
+        // C3.2 ato 2: `set_override` ESTRANGULADO — o emissor de persona nasce
+        // da porta do ledger; o corpo carrega `tenant` (ADR 0027). O estado
+        // misto FECHOU de novo: todo emissor `btv.*` deste fluxo passa pela
+        // porta. (O `role → "papel"` do adapter mantém o payload byte-idêntico;
+        // o ganho é a linha `tenant`, regravada no golden no ato 3.)
         let persona = entradas
             .iter()
             .find(|e| e.kind == "btv.persona_updated")
             .expect("entrada de persona existe");
-        assert_eq!(
-            persona.tenant, None,
-            "persona ainda é emissor LEGADO no ato 1 — sem tenant"
-        );
         assert_eq!(persona.payload["template_id"], "editorial");
-        assert_eq!(persona.payload["papel"], "Redator");
+        assert_eq!(
+            persona.payload["papel"], "Redator",
+            "adapter mapeia role→papel"
+        );
         assert!(persona.payload["prompt_sha256"].is_string());
         assert!(
             entradas
                 .iter()
-                .filter(|e| e.kind != "btv.persona_updated")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "todos os emissores JÁ estrangulados carregam tenant; só persona (legado) não"
+            "nenhum emissor legado restante no fluxo (persona estrangulada)"
         );
     }
     {
