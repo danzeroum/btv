@@ -9,6 +9,13 @@ description = "CLI da plataforma BuildToValue"
 name = "btv"
 path = "src/main.rs"
 
+[features]
+# E1s.1: o comando `btv session issue` (emissão de token no modo saas) só
+# existe sob esta feature — ela liga `btv-store/pg` (sqlx). O build default
+# do `btv` NÃO a tem: quem desenvolve local não compila sqlx nem ganha um
+# comando que só faz sentido com Postgres. Deploys saas buildam com `--features pg`.
+pg = ["btv-store/pg"]
+
 [dependencies]
 btv-core.workspace = true
 btv-llm.workspace = true

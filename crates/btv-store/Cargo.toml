@@ -10,7 +10,7 @@ description = "Storage da plataforma BuildToValue: SQLite (modo local) e Postgre
 # `cargo test --workspace` de quem desenvolve local não compila nem exige
 # Postgres (coordenada 5 da revisão do B4); o job `pg` do CI liga a feature
 # e roda a suíte de contrato contra um Postgres real.
-pg = ["dep:sqlx", "dep:tokio"]
+pg = ["dep:sqlx", "dep:tokio", "dep:getrandom", "dep:base64"]
 
 [dependencies]
 btv-schemas.workspace = true
@@ -21,6 +21,10 @@ thiserror.workspace = true
 serde.workspace = true
 sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
+# E1s.1: emissão de token de sessão (CSPRNG do SO → base64url). Só sob `pg`
+# (o modo saas) — nem entram no build local, como sqlx.
+getrandom = { version = "0.2", optional = true }
+base64 = { version = "0.22", optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -2030,3 +2030,24 @@ um golden que PINE corpo de ledger fluindo de emissor — se nenhuma tocar,
 o rito não dispara e isso é o resultado honesto, não uma omissão.
 `increment_gates` mantém os usos de seed/teste; o caminho de produção não
 o chama mais.
+
+**[registro]** E1s.1 ENTREGUE (primeiro código da borda; ADR 0029 aceito,
+TTL (a) do dono). Migração `0002_sessions.sql`: a tabela de sessões do
+modo saas como a EXCEÇÃO ÚNICA E NOMEADA sem RLS de tenant (item 5) — o
+lookup de auth é anterior ao `TenantContext`, então RLS de tenant aqui
+mataria a auth fail-closed; a política que substitui é acesso só por
+`token_hash`, token nunca persistido (só sha256), admin tenant-escopado
+por WHERE. `PgStore::{issue_session,resolve_session,revoke_session,
+list_sessions}` — saas-only por design (SEM `SessionsPort` dual-adapter:
+sessões não existem no modo local; fronteira declarada no aceite). TTL
+(a): absoluta 30d + ociosidade 24h renovável em UMA query
+(`LEAST(now()+24h, absoluta)` — renovação nunca ultrapassa o teto);
+inválida/expirada/revogada = None. Emissão (a "chave da porta" que o
+esboço não tinha, adição 1 da revisão): `btv session issue --tenant
+--user` (gate feature `pg` do btv-cli — build default não puxa sqlx),
+token 256-bit CSPRNG base64url prefixo `btvs_`, impresso UMA vez.
+Adversarial da tabela: dump não autentica (sha256 one-way), auth só por
+igualdade de hash, admin tenant-escopado; prova-que-morde da expiração
+(prazos no passado → None). Job `pg` do CI ganha `clippy -p btv-cli
+--features pg`. FALTA da E1s: E1s.2 (extractor + `actor=user:{id}` +
+lint T4-D) → E1s.3 (troca da fonte nos 6) → E1s.4 (adversarial da borda).

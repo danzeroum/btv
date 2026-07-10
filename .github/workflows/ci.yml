@@ -86,8 +86,11 @@ jobs:
         env:
           BTV_PG_TEST_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       # O gate de clippy do job `rust` roda sem features — o código do
-      # adapter PG só é lintado aqui.
+      # adapter PG (e o comando `btv session` da E1s.1) só é lintado aqui.
       - run: cargo clippy -p btv-store --features pg -- -D warnings
+      # E1s.1: o comando `btv session issue` só compila sob a feature `pg` do
+      # btv-cli — o build default não o tem. Compila e linta o caminho saas.
+      - run: cargo clippy -p btv-cli --features pg -- -D warnings
 
   # Gate de supply-chain (advisories/licenças) — porte da rust-migration.
   deny:
