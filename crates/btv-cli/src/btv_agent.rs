@@ -1773,11 +1773,14 @@ mod tests {
                 "formato": "MD",
                 "trilha": "Redator → Editor · 0 gate(s) aprovado(s) por você"
             },
-            "ts": "<volatil>"
+            "ts": "<volatil>",
+            // Ato 3: a única linha que o estrangulamento acrescenta — o corpo
+            // carrega o tenant LOCAL (ADR 0027); payload e actor imóveis.
+            "tenant": "00000000-0000-0000-0000-000000000001"
         });
         assert_eq!(
             obtido, esperado,
-            "corpo legado de btv.export_generated (ato 1, SEM tenant)"
+            "corpo de btv.export_generated pela porta (ato 3, COM tenant)"
         );
     }
 }
