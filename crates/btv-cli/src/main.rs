@@ -23,11 +23,10 @@ mod skills;
 mod squad;
 mod squad_agent;
 // E1s.2 constrói o extractor e o prova por testes unitários; a E1s.3 o
-// PLUGA nos seis consumidores (onde os itens passam a ser usados). Até lá
-// são dead_code LEGÍTIMO — scaffolding da borda, não código morto. A E1s.3
-// remove este allow ao wirar tudo: se sobrar item sem uso lá, o allow
-// removido reacende o lint e denuncia a wiring incompleta.
-#[allow(dead_code)]
+// A E1s.3 wirou a borda: o extractor `Tenant` entra nos seis consumidores e o
+// `guarda_tenant` vira o layer de cobertura universal do `merged_router` — o
+// módulo está todo em uso, o `#[allow(dead_code)]` do scaffolding saiu. Se
+// algum item ficar sem uso, o lint reacende (era essa a promessa do allow).
 mod tenant_extractor;
 #[cfg(test)]
 mod test_support;
@@ -436,6 +435,12 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
             web_dir,
             hub,
             extra_router,
+            // Modo local (o dashboard): sem resolver — a borda universal é
+            // no-op e o extractor devolve TenantContext::local. A onda saas
+            // injeta aqui `Some(Arc::new(PgStore))`, a MESMA fonte do resolver
+            // do BtvAgentState (a borda gateia toda rota, o extractor produz o
+            // contexto dos seis) — troca a fonte sem tocar a borda.
+            tenant_extractor::TenantResolucao::default(),
         )
         .await?;
     } else {

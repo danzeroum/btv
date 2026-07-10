@@ -17,9 +17,10 @@
 //!   por pessoa dentro do tenant). Sem sessão / inválida = recusa
 //!   fail-closed (401), NUNCA fallback para LOCAL.
 
-use axum::extract::{FromRef, FromRequestParts};
+use axum::extract::{FromRef, FromRequestParts, Request, State};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use btv_domain::{ActorId, TenantContext, TenantId};
 use std::sync::Arc;
@@ -129,6 +130,57 @@ pub(crate) fn resolver_contexto(
     }
 }
 
+/// Allowlist NOMEADA de rotas alcançáveis SEM sessão no modo saas — as
+/// "exceções nomeadas" da cobertura universal (E1s.3). VAZIA hoje: não há
+/// endpoint de login HTTP ainda (a E1s.1 entregou só o `btv session issue`,
+/// ato de OPERADOR), então no modo saas TODA rota exige sessão válida — a
+/// superfície inteira nasce fail-closed. É a resposta à pergunta da cobertura:
+/// o modo saas fica de fato INABILITÁVEL pela borda (401 em tudo), mas pelo
+/// MECANISMO REAL da borda, não por uma recusa de arranque — e abre
+/// rota-a-rota, nomeada, à medida que a E1s construir o login e o resto do
+/// fluxo. A primeira entrada aqui será a rota de login.
+pub(crate) const ROTAS_LIVRES: &[&str] = &[];
+
+/// A decisão da borda UNIVERSAL (o que o `guarda_tenant` aplica a TODA rota,
+/// função pura testável sem env, como o `resolver_contexto`): local nunca
+/// recusa; saas deixa passar só as `ROTAS_LIVRES` sem sessão e exige sessão
+/// válida em todo o resto. Reusa `resolver_contexto` — a MESMA decisão de
+/// auth dos seis handlers, agora estendida à superfície inteira.
+pub(crate) fn autoriza_borda(
+    mode: Mode,
+    path: &str,
+    headers: &HeaderMap,
+    resolver: Option<&dyn SessionResolver>,
+) -> Result<(), Recusa> {
+    if mode == Mode::Saas && ROTAS_LIVRES.contains(&path) {
+        return Ok(());
+    }
+    resolver_contexto(mode, headers, resolver).map(|_| ())
+}
+
+/// Layer de cobertura UNIVERSAL (E1s.3, ADR 0029): o extractor `Tenant` só
+/// guarda as rotas que o DECLARAM (os seis consumidores estrangulados); este
+/// middleware fecha o RESTO da superfície (personas/templates/users/... ainda
+/// não estranguladas) para que o modo saas não nasça com a maioria das rotas
+/// sem borda. Em modo local é no-op (passa direto) — a composição local fica
+/// byte-idêntica. Montado em `web_agent::merged_router` ao lado da guarda de
+/// `Origin`. Lê `current_mode()` (peça única — T4-D vale aqui também).
+pub(crate) async fn guarda_tenant(
+    State(TenantResolucao(resolver)): State<TenantResolucao>,
+    req: Request,
+    next: Next,
+) -> Response {
+    match autoriza_borda(
+        current_mode(),
+        req.uri().path(),
+        req.headers(),
+        resolver.as_deref(),
+    ) {
+        Ok(()) => next.run(req).await,
+        Err(recusa) => recusa.into_response(),
+    }
+}
+
 /// O extractor axum: `Tenant(ctx)` num handler resolve o contexto ANTES do
 /// corpo rodar. A E1s.3 troca o `TenantContext::local(...)` fixo dos seis
 /// consumidores por este `Tenant`.
@@ -146,6 +198,23 @@ where
         resolver_contexto(current_mode(), &parts.headers, resolver.as_deref())
             .map(Tenant)
             .map_err(IntoResponse::into_response)
+    }
+}
+
+/// O adapter saas da E1s.3: o `PgStore` (da E1s.1) vira o `SessionResolver`
+/// que a borda pluga no modo saas. Orphan rule OK — o trait é local a este
+/// crate. `resolve_session` já é fail-closed (None em ausente/expirado/
+/// revogado); aqui um erro de storage também vira None (a borda responde
+/// 401, nunca vaza contexto). É a costura de wiring: no modo saas o
+/// `TenantResolucao` carrega `Some(Arc::new(PgStore))` — hoje `main.rs`
+/// injeta `None` (local), a onda saas troca a fonte sem tocar a borda.
+#[cfg(feature = "pg")]
+impl SessionResolver for btv_store::pg::PgStore {
+    fn resolve(&self, token: &str) -> Option<(TenantId, String)> {
+        match self.resolve_session(token) {
+            Ok(Some(s)) => Some((s.tenant, s.user_id)),
+            Ok(None) | Err(_) => None,
+        }
     }
 }
 
@@ -255,6 +324,48 @@ mod tests {
                 None,
             ),
             Err(Recusa::SaasSemResolver)
+        );
+    }
+
+    #[test]
+    fn borda_universal_local_deixa_qualquer_rota_passar_sem_sessao() {
+        // Modo local: a borda universal é no-op — nenhuma rota recusa, com ou
+        // sem token. É o que garante a composição local byte-idêntica.
+        assert_eq!(
+            autoriza_borda(Mode::Local, "/api/btv/templates", &HeaderMap::new(), None),
+            Ok(())
+        );
+        assert_eq!(
+            autoriza_borda(Mode::Local, "/api/personas", &HeaderMap::new(), None),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn borda_universal_saas_recusa_rota_nao_estrangulada_sem_sessao() {
+        // O coração da cobertura universal: uma rota que NÃO declara o
+        // extractor (ex.: templates/personas) é recusada na borda no modo saas
+        // sem sessão — senão o saas nasceria com a superfície sem borda.
+        let r = resolver_de("00000000-0000-0000-0000-00000000e153", "9", "btvs_ok");
+        assert_eq!(
+            autoriza_borda(
+                Mode::Saas,
+                "/api/btv/templates",
+                &HeaderMap::new(),
+                Some(&r)
+            ),
+            Err(Recusa::SemSessao),
+            "rota não estrangulada exige sessão no saas (cobertura universal)"
+        );
+        // Com sessão válida, a mesma rota passa.
+        assert_eq!(
+            autoriza_borda(
+                Mode::Saas,
+                "/api/btv/templates",
+                &headers_com("authorization", "Bearer btvs_ok"),
+                Some(&r),
+            ),
+            Ok(())
         );
     }
 
