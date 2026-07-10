@@ -110,3 +110,119 @@ mod tests {
         assert_eq!(json.as_object().unwrap().len(), 10, "10 campos de wire");
     }
 }
+
+// ── TaskId (A3) ─────────────────────────────────────────────────────────────
+
+/// Id de tarefa de squad — newtype sobre o seq, com o formato `sq{hex}`
+/// como ÚNICA representação textual (a que `SquadHub::new_task` gera e
+/// `BtvStore::max_run_task_seq` parseia — o par gerador↔parser é propriedade
+/// provada por T3 em `wire_strings.rs`, e o round-trip deste tipo é provado
+/// aqui por proptest). `parse` espelha a leniência do parser de produção
+/// (`from_str_radix(16)` aceita hex maiúsculo) — endurecer seria mudança de
+/// comportamento, não tipagem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TaskId(u64);
+
+/// String que não é `sq{hex}`.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("task_id fora do formato sq{{hex}}: {0}")]
+pub struct InvalidTaskId(pub String);
+
+impl TaskId {
+    pub fn new(seq: u64) -> Self {
+        Self(seq)
+    }
+
+    pub fn seq(self) -> u64 {
+        self.0
+    }
+
+    /// Valida `sq{hex}` — fail-closed: sem prefixo, hex inválido ou overflow
+    /// de u64 não viram id.
+    pub fn parse(s: &str) -> Result<Self, InvalidTaskId> {
+        s.strip_prefix("sq")
+            .and_then(|h| u64::from_str_radix(h, 16).ok())
+            .map(TaskId)
+            .ok_or_else(|| InvalidTaskId(s.to_string()))
+    }
+}
+
+impl std::fmt::Display for TaskId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "sq{:x}", self.0)
+    }
+}
+
+impl serde::Serialize for TaskId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TaskId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        TaskId::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+// ── Briefing tipado (A3) ────────────────────────────────────────────────────
+
+/// Uma resposta do briefing do wizard — o item de `briefing_json`
+/// (`[{label, resposta}]`, mesmo shape do corpo de `POST /api/btv/squads`).
+/// Campos com os NOMES DO WIRE (`label`/`resposta` — ADR 0024: campo de
+/// contrato serializado que já é pt permanece); round-trip byte-a-byte
+/// provado no teste contra o JSON real das fixtures. O PARSE do
+/// `briefing_json` persistido é do adapter (serde_json fica fora do lib do
+/// domínio — regra de dependências de A1): o domínio dá o tipo, o adapter
+/// faz `serde_json::from_str::<Vec<BriefingResposta>>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct BriefingResposta {
+    pub label: String,
+    pub resposta: String,
+}
+
+#[cfg(test)]
+mod tests_a3 {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Round-trip do formato canônico para QUALQUER seq de u64 — o mesmo
+        /// par que T3 prova via SQLite real; aqui a propriedade é do tipo.
+        #[test]
+        fn task_id_roundtrip_display_parse(seq in any::<u64>()) {
+            let id = TaskId::new(seq);
+            prop_assert_eq!(TaskId::parse(&id.to_string()), Ok(id));
+            // serde usa a MESMA representação textual
+            let json = serde_json::to_string(&id).unwrap();
+            prop_assert_eq!(json, format!("\"sq{seq:x}\""));
+        }
+    }
+
+    #[test]
+    fn task_id_rejeita_fora_do_formato() {
+        for ruim in ["", "sq", "1a", "sqzz", "sq-1", "SQ1f", "sq 1"] {
+            assert!(TaskId::parse(ruim).is_err(), "aceitou `{ruim}`");
+        }
+        // Leniência do parser de produção preservada: hex maiúsculo passa.
+        assert_eq!(TaskId::parse("sq1F"), Ok(TaskId::new(0x1f)));
+    }
+
+    /// O briefing REAL das fixtures (golden de ativação) parseia e
+    /// re-serializa byte-a-byte — wire congelado.
+    #[test]
+    fn briefing_roundtrip_byte_a_byte_do_json_real() {
+        let real =
+            r#"[{"label":"Qual é a pauta ou tema?","resposta":"logística verde no Brasil"}]"#;
+        let itens: Vec<BriefingResposta> = serde_json::from_str(real).unwrap();
+        assert_eq!(itens.len(), 1);
+        assert_eq!(itens[0].label, "Qual é a pauta ou tema?");
+        assert_eq!(serde_json::to_string(&itens).unwrap(), real);
+
+        let ruim: Result<Vec<BriefingResposta>, _> = serde_json::from_str(r#"[{"so_label":"x"}]"#);
+        assert!(ruim.is_err());
+        let nao_json: Result<Vec<BriefingResposta>, _> = serde_json::from_str("não é json");
+        assert!(nao_json.is_err());
+    }
+}

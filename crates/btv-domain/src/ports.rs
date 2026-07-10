@@ -25,12 +25,13 @@
 use crate::run::{Deliverable, Run};
 use crate::tenant::{ActorId, TenantContext, TenantId};
 
-// ── status do run (A3, aqui só a FORMA — a máquina de transições) ──────────
+// ── status do run (A3 — implementado após o aceite do G1) ──────────────────
 
 /// Os 4 estados reais do banco (`wire-strings.v1.json`, provado por T3).
-/// `as_str`/`parse` devem reproduzir exatamente `ativa`/`concluida`/
-/// `encerrada`/`erro` — byte-a-byte, é contrato de banco.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `as_str`/`parse` reproduzem exatamente `ativa`/`concluida`/`encerrada`/
+/// `erro` — byte-a-byte, é contrato de banco (round-trip provado nos testes
+/// deste módulo contra a fixture canônica).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RunStatus {
     Ativa,
     Concluida,
@@ -38,25 +39,51 @@ pub enum RunStatus {
     Erro,
 }
 
-#[allow(unused_variables)] // corpos todo!() até o aceite do G1
 impl RunStatus {
+    /// Todas as variantes — base dos testes de cobertura (variante nova sem
+    /// entrada aqui não passa no round-trip exaustivo).
+    pub const ALL: [RunStatus; 4] = [
+        RunStatus::Ativa,
+        RunStatus::Concluida,
+        RunStatus::Encerrada,
+        RunStatus::Erro,
+    ];
+
     /// A string EXATA persistida hoje (contrato T3).
     pub fn as_str(self) -> &'static str {
-        todo!("A3, após aceite do G1")
+        match self {
+            RunStatus::Ativa => "ativa",
+            RunStatus::Concluida => "concluida",
+            RunStatus::Encerrada => "encerrada",
+            RunStatus::Erro => "erro",
+        }
     }
 
-    /// Parse fail-closed: string fora do vocabulário é `RunError::InvalidStatus`.
+    /// Parse fail-closed: string fora do vocabulário é `RunError::InvalidStatus`
+    /// — `status = "qualquer_string"` deixa de existir como estado possível.
     pub fn parse(s: &str) -> Result<Self, RunError> {
-        todo!("A3, após aceite do G1")
+        match s {
+            "ativa" => Ok(RunStatus::Ativa),
+            "concluida" => Ok(RunStatus::Concluida),
+            "encerrada" => Ok(RunStatus::Encerrada),
+            "erro" => Ok(RunStatus::Erro),
+            outro => Err(RunError::InvalidStatus(outro.to_string())),
+        }
     }
 
-    /// Máquina de transições (A3): `Concluida → Ativa` retorna `false` — e
-    /// `Run::transition_to` a transforma em `RunError::InvalidTransition` em
-    /// vez de UPDATE silencioso. Transições válidas hoje: `Ativa` → qualquer
-    /// terminal; terminal → nada (a reconciliação de zumbis é `Ativa →
-    /// Encerrada`, coberta).
+    /// Máquina de transições (A3): `Ativa` → qualquer terminal; terminal →
+    /// nada. `Concluida → Ativa` retorna `false` — e `Run::transition_to` a
+    /// transforma em `RunError::InvalidTransition` em vez de UPDATE
+    /// silencioso. A reconciliação de zumbis (`Ativa → Encerrada` no
+    /// arranque) está coberta; auto-transição não é transição.
     pub fn can_transition_to(self, target: RunStatus) -> bool {
-        todo!("A3, após aceite do G1")
+        matches!(
+            (self, target),
+            (
+                RunStatus::Ativa,
+                RunStatus::Concluida | RunStatus::Encerrada | RunStatus::Erro
+            )
+        )
     }
 }
 
@@ -457,6 +484,54 @@ mod tests {
             },
             DomainEventKind::UserRemoved { user_id: 1 },
         ]
+    }
+
+    /// A3: o vocabulário de `RunStatus` é EXATAMENTE o `run_status` da
+    /// fixture canônica (T3), com round-trip exaustivo — `as_str`/`parse`
+    /// reproduzem as strings do banco byte-a-byte.
+    #[test]
+    fn run_status_roundtrip_exaustivo_contra_a_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../schemas/fixtures/wire-strings.v1.json"),
+            )
+            .expect("fixture wire-strings.v1"),
+        )
+        .expect("fixture é JSON");
+        let da_fixture: BTreeSet<String> = fixture["run_status"]
+            .as_array()
+            .expect("lista run_status")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(str::to_string)
+            .collect();
+        let do_enum: BTreeSet<String> = RunStatus::ALL.iter().map(|s| s.as_str().into()).collect();
+        assert_eq!(do_enum, da_fixture);
+        for status in RunStatus::ALL {
+            assert_eq!(RunStatus::parse(status.as_str()), Ok(status));
+        }
+        assert_eq!(
+            RunStatus::parse("qualquer_string"),
+            Err(RunError::InvalidStatus("qualquer_string".into()))
+        );
+    }
+
+    /// A3: a máquina de transições — `Ativa` → terminais; terminal → nada;
+    /// `Concluida → Ativa` (o caso nomeado no plano) é `false`.
+    #[test]
+    fn maquina_de_transicoes_fail_closed() {
+        use RunStatus::*;
+        for terminal in [Concluida, Encerrada, Erro] {
+            assert!(Ativa.can_transition_to(terminal));
+            assert!(!terminal.can_transition_to(Ativa), "{terminal:?}→Ativa");
+            assert!(!terminal.can_transition_to(terminal));
+        }
+        assert!(
+            !Ativa.can_transition_to(Ativa),
+            "auto-transição não é transição"
+        );
+        assert!(!Concluida.can_transition_to(Erro));
     }
 
     /// Pedido da revisão do G1 (lacuna 2): o vocabulário `btv.*` da fixture
