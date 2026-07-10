@@ -812,3 +812,85 @@ mod tests {
         assert_eq!(mode.to_lowercase(), "wal");
     }
 }
+
+impl LedgerStore {
+    /// Varre TODAS as cadeias validando cada `kind` contra o vocabulário
+    /// FECHADO do domínio (`LedgerKind`, A3) — o complemento do doctor à
+    /// verificação de hash: `verify_chain` pega adulteração; isto pega typo
+    /// de kind que entrou antes do vocabulário fechar (ou por caminho
+    /// dinâmico), apontando a linha. `certification` é a exclusão consciente
+    /// do vocabulário (sem emissor real — nota do A3): aparecer aqui é
+    /// diagnóstico correto, não falso positivo.
+    pub fn kinds_fora_do_vocabulario(
+        &self,
+    ) -> Result<Vec<crate::btv::VocabViolation>, LedgerError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT seq, tenant_id, json_extract(body, '$.kind') FROM ledger ORDER BY tenant_id, seq",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut fora = Vec::new();
+        for row in rows {
+            let (seq, tenant, kind) = row?;
+            if let Err(e) = btv_domain::LedgerKind::parse(&kind) {
+                fora.push(crate::btv::VocabViolation {
+                    tabela: "ledger",
+                    linha: seq,
+                    coluna: "kind",
+                    valor: format!("{kind} (tenant {tenant})"),
+                    erro: e.to_string(),
+                });
+            }
+        }
+        Ok(fora)
+    }
+}
+
+#[cfg(test)]
+mod vocab_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// O complemento do doctor ao `verify_chain`: typo de kind (que o parse
+    /// fail-closed do A3 pegaria na escrita tipada, mas o caminho dinâmico
+    /// legado não) vira diagnóstico com a linha — sem quebrar a cadeia (o
+    /// hash continua válido; o problema é de VOCABULÁRIO, não de integridade).
+    #[test]
+    fn scan_de_kinds_aponta_a_linha_fora_do_vocabulario() {
+        let mut store = LedgerStore::open_in_memory().unwrap();
+        let ok = LedgerEntry {
+            seq: 0,
+            prev_hash: String::new(),
+            entry_hash: String::new(),
+            kind: "session.start".into(),
+            actor: "test".into(),
+            payload: json!({}),
+            r#override: None,
+            fake_marker: None,
+            ts: "t".into(),
+            tenant: None,
+        };
+        store.append(ok.clone()).unwrap();
+        assert!(store.kinds_fora_do_vocabulario().unwrap().is_empty());
+
+        let typo = LedgerEntry {
+            kind: "btv.gate_aproved".into(),
+            ..ok
+        };
+        store.append(typo).unwrap();
+
+        let fora = store.kinds_fora_do_vocabulario().unwrap();
+        assert_eq!(fora.len(), 1);
+        assert_eq!(fora[0].tabela, "ledger");
+        assert_eq!(fora[0].linha, 2, "aponta a seq da entrada ofensora");
+        assert!(fora[0].valor.contains("btv.gate_aproved"));
+        // E a cadeia segue ÍNTEGRA — vocabulário e integridade são
+        // diagnósticos independentes.
+        assert_eq!(store.verify_chain().unwrap(), 2);
+    }
+}

@@ -5,11 +5,15 @@
 //! `btv-server`) porque a checagem de Docker precisa de
 //! `btv_tools::sandbox::Sandbox` — regra de posicionamento de rota da fase.
 
+use axum::extract::State;
 use axum::response::{IntoResponse, Json};
 use axum::routing::get;
 use axum::Router;
+use btv_store::btv::VocabViolation;
+use btv_store::{BtvStore, LedgerStore};
 use btv_tools::sandbox::Sandbox;
 use serde::Serialize;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 struct DoctorCheck {
@@ -108,24 +112,88 @@ async fn docker_check() -> DoctorCheck {
     }
 }
 
+/// Varredura de VOCABULÁRIO (pendência da revisão do A4): valida cada
+/// `task_id`/`status` de runs+deliverables e cada `kind` do ledger com os
+/// MESMOS parses fail-closed do domínio (A3) e aponta A LINHA ofensora —
+/// transforma o fail-closed que "grita como UI vazia" em diagnóstico
+/// acionável. O SQL mora em `btv-store` (métodos de scan); aqui só a
+/// agregação, como manda o espírito do T4-B.
+fn vocabulario_check(stores: &DoctorStores) -> DoctorCheck {
+    let mut fora: Vec<VocabViolation> = Vec::new();
+    match stores.btv.lock().unwrap().linhas_fora_do_vocabulario() {
+        Ok(mut v) => fora.append(&mut v),
+        Err(e) => {
+            return DoctorCheck {
+                id: "vocabulario",
+                ok: false,
+                detail: format!("varredura de runs/deliverables falhou: {e}"),
+            }
+        }
+    }
+    match stores.ledger.lock().unwrap().kinds_fora_do_vocabulario() {
+        Ok(mut v) => fora.append(&mut v),
+        Err(e) => {
+            return DoctorCheck {
+                id: "vocabulario",
+                ok: false,
+                detail: format!("varredura do ledger falhou: {e}"),
+            }
+        }
+    }
+    if fora.is_empty() {
+        return DoctorCheck {
+            id: "vocabulario",
+            ok: true,
+            detail: "runs, deliverables e ledger dentro do vocabulário fechado do domínio".into(),
+        };
+    }
+    // A linha ofensora, uma a uma — é o diagnóstico, não um contador.
+    let linhas: Vec<String> = fora
+        .iter()
+        .map(|v| {
+            format!(
+                "{}[{}].{} = {:?} ({})",
+                v.tabela, v.linha, v.coluna, v.valor, v.erro
+            )
+        })
+        .collect();
+    DoctorCheck {
+        id: "vocabulario",
+        ok: false,
+        detail: linhas.join("; "),
+    }
+}
+
+/// Stores do produto injetados pelo `btv dashboard` (as MESMAS instâncias
+/// dos handlers do BuildToValue — nenhuma conexão paralela).
+#[derive(Clone)]
+pub struct DoctorStores {
+    pub ledger: Arc<Mutex<LedgerStore>>,
+    pub btv: Arc<Mutex<BtvStore>>,
+}
+
 /// `GET /api/doctor` — as 4 checagens de `btv init`, hoje espalhadas,
-/// agregadas numa resposta só. Reexecuta tudo a cada request (mesmo estilo
-/// síncrono-por-request de `/api/sandbox`/`/api/mcp`) sem cache — o custo é
-/// baixo (1 spawn de processo cada + 1 ping Docker com timeout curto).
-async fn get_doctor() -> impl IntoResponse {
+/// agregadas numa resposta só + a varredura de vocabulário (A4). Reexecuta
+/// tudo a cada request (mesmo estilo síncrono-por-request de
+/// `/api/sandbox`/`/api/mcp`) sem cache — o custo é baixo (1 spawn de
+/// processo cada + 1 ping Docker com timeout curto + 1 scan SQLite local).
+async fn get_doctor(State(stores): State<DoctorStores>) -> impl IntoResponse {
     let checks = vec![
         providers_check(),
         uv_check_with_path(None),
         docker_check().await,
         git_check(),
+        vocabulario_check(&stores),
     ];
     Json(DoctorView { checks })
 }
 
 /// Router aditivo do doctor — `.merge()`ado ao router do agente web, mesma
 /// composição de `sandbox_console::router`/`lsp_console::router`.
-pub fn router() -> Router {
-    Router::new().route("/api/doctor", get(get_doctor))
+pub fn router(stores: DoctorStores) -> Router {
+    Router::new()
+        .route("/api/doctor", get(get_doctor))
+        .with_state(stores)
 }
 
 #[cfg(test)]
@@ -151,13 +219,24 @@ mod tests {
     /// outro teste rodando em paralelo no mesmo binário. `uv`/`docker`/`git`
     /// não têm valor fixo afirmado aqui (variam por ambiente — mesmo espírito
     /// do teste de `/api/sandbox`); só que vieram bem formados.
+    fn stores_vazios() -> DoctorStores {
+        DoctorStores {
+            ledger: Arc::new(Mutex::new(
+                LedgerStore::open_in_memory().expect("ledger em memória"),
+            )),
+            btv: Arc::new(Mutex::new(
+                BtvStore::open_in_memory().expect("btv em memória"),
+            )),
+        }
+    }
+
     #[tokio::test]
-    async fn doctor_agrega_as_4_checagens_com_providers_real() {
+    async fn doctor_agrega_as_5_checagens_com_providers_real() {
         std::env::remove_var("DEEPSEEK_API_KEY");
         std::env::remove_var("OPENAI_API_KEY");
         std::env::set_var("ANTHROPIC_API_KEY", "test-key-onda-13");
 
-        let app = router();
+        let app = router(stores_vazios());
         let resp = app
             .oneshot(
                 Request::builder()
@@ -173,10 +252,16 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let checks = json["checks"].as_array().unwrap();
-        assert_eq!(checks.len(), 4);
+        assert_eq!(checks.len(), 5);
 
         let ids: Vec<&str> = checks.iter().map(|c| c["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, vec!["providers", "uv", "docker", "git"]);
+        assert_eq!(ids, vec!["providers", "uv", "docker", "git", "vocabulario"]);
+
+        // Bancos frescos: vocabulário fechado, ok=true — o caminho VERMELHO
+        // (linha ofensora apontada) é provado nos testes de scan de
+        // btv-store, onde a conexão é acessível para corromper uma linha.
+        let vocab = checks.iter().find(|c| c["id"] == "vocabulario").unwrap();
+        assert_eq!(vocab["ok"], true);
 
         let providers = checks.iter().find(|c| c["id"] == "providers").unwrap();
         assert_eq!(providers["ok"], true);
