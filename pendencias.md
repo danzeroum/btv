@@ -1932,7 +1932,13 @@ byte-idênticos — re-exports mantêm os caminhos históricos; `ModelTier`
 (enum+threshold) veio junto, `tier_from_id` (regex de nomes de mercado)
 ficou em btv-llm. (c) EMENDA DECLARADA da regra de deps do A1: serde_json
 entra no domínio (puro, zero I/O — args de ferramenta e payloads sempre
-foram `Value` no wire). (d) `DurableSession` vira genérica sobre
+foram `Value` no wire). CERCA da emenda (revisão do D1t): `Value` entrou
+onde o vocabulário é ABERTO POR DESIGN — `ToolUse.input` (cada ferramenta
+define o próprio schema) e `ToolSpec.input_schema` (que É um JSON Schema;
+tipá-lo seria reimplementar o meta-modelo). NÃO é precedente para `Value`
+por conveniência: todo uso novo exige a mesma justificativa ("aberto por
+design", com o dono do schema NOMEADO) no rito de decisão exposta — o
+mesmo raciocínio do defer do `PapelUsuario`, invertido. (d) `DurableSession` vira genérica sobre
 `EventStorePort` e ganha `ctx: TenantContext` no open — a sessão declara
 em nome de quem opera; o CLI local passa `TenantContext::local`. (e)
 `impl EventStorePort for EventStore` é o adapter do modo LOCAL (sem coluna
@@ -1945,3 +1951,15 @@ btv-core — sem ciclo: o core não depende mais de btv-tools); a composição
 sessão×SQLite real para btv-store/tests. Cenários idênticos, nenhum assert
 afrouxado. O unit do core virou 100% mock (<100ms afirmado no teste, DoD
 literal da Fase 2 do plano-mestre).
+
+**[registro]** D2t — tenant_id+actor no SquadTask e ecoados VERBATIM em
+todo SquadEvent (aditivo, tags novas; buf breaking do CI é a prova
+estrutural). O orquestrador Python PROPAGA, nunca decide tenant — quem
+decide é a borda (E1s, ADR 0029). Hoje todo caller envia LOCAL: o valor é
+o encanamento existir antes de a E1s torná-lo real. Eventos sintetizados
+pelo hub Rust (chat/kill-switch/erro) carregam o mesmo dono. Espelho
+Pydantic completo segue no D4t (deliberadamente NÃO adiantado — um passo
+por PR); nenhuma mudança breaking de gRPC (G3 reservado para D3t/C4).
+Prova ponta a ponta em squad_e2e.rs (Rust → UDS → Python real → volta:
+cada evento asserta o tenant/actor que entrou) com prova-que-morde
+(propagação removida no server.py → teste reprova; revertida).

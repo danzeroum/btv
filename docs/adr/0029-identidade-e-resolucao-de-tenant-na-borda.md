@@ -61,7 +61,21 @@ tenant = recusa fail-closed.
    com HITL e permissões ao vivo, e evita a classe inteira de bugs de
    validação de assinatura/claims.
 
-5. **O ator é parte da identidade:** `actor = user:<uuid>` do usuário
+5. **A tabela de sessões é a exceção LEGÍTIMA E ÚNICA à regra "toda query
+   é tenant-escopada" — nomeada, com política própria.** O lookup que
+   resolve o token acontece ANTES de existir `TenantContext`, então essa
+   tabela não pode ser protegida por `app.tenant_id` como as outras. A
+   política que a substitui: (a) acesso SÓ por igualdade com o hash do
+   token apresentado — nenhuma query enumera, lista ou filtra sessões por
+   qualquer outro predicado no caminho de autenticação; (b) o token em si
+   nunca é persistido (só o hash), então nem um dump da tabela autentica
+   ninguém; (c) toda operação ADMINISTRATIVA sobre sessões (listar as
+   sessões do usuário, revogar em massa) acontece DEPOIS da autenticação e
+   é tenant-escopada como qualquer outra. Qualquer outra tabela que um dia
+   precise de leitura pré-contexto passa por ADR próprio — esta exceção
+   não é categoria, é UMA linha nomeada.
+
+6. **O ator é parte da identidade:** `actor = user:<uuid>` do usuário
    autenticado — entra nos eventos de domínio e no ledger como já hoje
    (`DomainEvent.actor`), dando trilha por pessoa DENTRO do tenant.
 
