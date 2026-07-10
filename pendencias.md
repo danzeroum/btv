@@ -2152,3 +2152,15 @@ borda"). A leitura do run passa pela porta (`RunRepository::get(ctx, …)`), ent
 um divórcio entre o tenant capturado e o do run é fail-closed de graça. Futuras
 tasks de background (webhooks, cron, filas) citam este precedente: proveniência
 = tenant E actor de quem originou o trabalho.
+
+**[residual — D3t: o `dict[str, Any]` morreu NA FRONTEIRA, não no miolo]** O D3t
+tipou a evidência no wire e `server.py` valida CONTRA TIPO na entrada
+(`VerificationEvidence.from_proto`) — mas o miolo do `btv-review`
+(`gates.py`/`certification.py`) segue recebendo `dict[str, Any]` internamente. NÃO
+é bug: o contrato do plano-mestre pedia "Python **valida contra** o tipo"
+(cumprido na fronteira), e o dict interno é PÓS-validação (risco contido — a
+malformação já foi recusada fail-closed antes de chegar lá). Distinção honesta
+para quem ler o ADR 0030 e o código: "o dict morreu na fronteira e sobrevive
+DECLARADAMENTE no miolo", não "o dict morreu". Gatilho: tipar o miolo do
+`btv-review` com Pydantic espelhando a mensagem — candidato natural quando o
+review ganhar evolução funcional, não uma dívida urgente.
