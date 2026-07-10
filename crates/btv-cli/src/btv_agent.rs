@@ -17,7 +17,8 @@
 //!   o orquestrador aborta a tarefa com "Plan rejected" (`orchestrator.py`) —
 //!   seria encerrar, não refazer.
 
-use axum::extract::{Path, State};
+use crate::tenant_extractor::{Tenant, TenantResolucao};
+use axum::extract::{FromRef, Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
@@ -77,6 +78,16 @@ pub struct BtvAgentState {
     squad: SquadAgentState,
     ledger: Arc<Mutex<LedgerStore>>,
     store: Arc<Mutex<BtvStore>>,
+    /// E1s.3: o resolver de sessões que o extractor de tenant puxa via
+    /// `FromRef`. None no modo local (o dashboard local-first); Some com o
+    /// `PgStore` no modo saas (a borda resolve o token). Clonável (Arc dentro).
+    tenant_resolver: TenantResolucao,
+}
+
+impl FromRef<BtvAgentState> for TenantResolucao {
+    fn from_ref(state: &BtvAgentState) -> Self {
+        state.tenant_resolver.clone()
+    }
 }
 
 /// Monta a descrição REAL da tarefa que o orquestrador recebe: briefing na
@@ -175,6 +186,7 @@ fn append_ledger(
 /// `POST /api/btv/squads` — ativa uma squad de verdade a partir do wizard.
 async fn ativar_squad_handler(
     State(state): State<BtvAgentState>,
+    Tenant(ctx): Tenant,
     Json(body): Json<AtivarSquadBody>,
 ) -> Response {
     let Some(template) = btv_schemas::squad_template::builtin_templates()
@@ -312,9 +324,6 @@ async fn ativar_squad_handler(
     // agregado emite (fail-closed em id=0). Contexto de fonte LOCAL fixa,
     // como no gate — a E1s troca a fonte. Hub/SSE/pool ficaram acima: o
     // serviço orquestra domínio+portas, não streaming.
-    let ctx = btv_domain::TenantContext::local(
-        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-    );
     let roles: Vec<String> = papeis_ativos.iter().map(|(_, p)| p.to_string()).collect();
     let ts = crate::session::now_rfc3339();
     let run = match btv_domain::Run::activate(
@@ -523,15 +532,12 @@ fn arquivos_escritos(runs: &[crate::squad_agent::ToolRunNote]) -> Vec<String> {
 }
 
 /// `GET /api/btv/squads` — runs persistidos, mais recente primeiro (U6).
-async fn list_runs_handler(State(state): State<BtvAgentState>) -> Response {
+async fn list_runs_handler(State(state): State<BtvAgentState>, Tenant(ctx): Tenant) -> Response {
     // C3.1 endpoint 4: leitura pela PORTA (RunRepository::list) com contexto
     // de fonte LOCAL fixa — mesmo tipo de retorno (Run re-exportado como
     // BtvRun desde A2), mesma serialização, wire intacto (golden T1 é o
     // juiz). Nenhum evento: leitura não é fato auditável.
     use btv_domain::ports::RunRepository;
-    let ctx = btv_domain::TenantContext::local(
-        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-    );
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
     match store.list(&ctx) {
         Ok(runs) => Json(runs).into_response(),
@@ -555,6 +561,7 @@ struct GateBody {
 async fn aprovar_gate_handler(
     State(state): State<BtvAgentState>,
     Path(task_id): Path<String>,
+    Tenant(ctx): Tenant,
     body: Option<Json<GateBody>>,
 ) -> Response {
     match state.squad.hub.resolve_hitl(&task_id, true) {
@@ -568,9 +575,6 @@ async fn aprovar_gate_handler(
             // foi liberado acima, então falha de escrituração é reportada e
             // não desfaz a liberação (como o `let _`/eprintln de antes).
             let etapa = body.and_then(|b| b.0.etapa);
-            let ctx = btv_domain::TenantContext::local(
-                btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-            );
             let evento = {
                 use btv_domain::ports::RunRepository;
                 let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
@@ -637,6 +641,7 @@ struct AjusteBody {
 async fn pedir_ajuste_handler(
     State(state): State<BtvAgentState>,
     Path(task_id): Path<String>,
+    Tenant(ctx): Tenant,
     Json(body): Json<AjusteBody>,
 ) -> Response {
     let instrucao = body.instrucao.trim().to_string();
@@ -679,9 +684,6 @@ async fn pedir_ajuste_handler(
     match btv_domain::TaskId::parse(&task_id) {
         Ok(task) => {
             use btv_domain::ports::LedgerRepository;
-            let ctx = btv_domain::TenantContext::local(
-                btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-            );
             let evento = btv_domain::ports::DomainEvent {
                 tenant: ctx.tenant,
                 actor: ctx.actor.clone(),
@@ -704,14 +706,14 @@ async fn pedir_ajuste_handler(
 }
 
 /// `GET /api/btv/deliverables` — Biblioteca de entregas (U4).
-async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Response {
+async fn list_deliverables_handler(
+    State(state): State<BtvAgentState>,
+    Tenant(ctx): Tenant,
+) -> Response {
     // C3.1 endpoint 5: leitura pela porta (RunRepository::list_deliverables),
     // ctx LOCAL fixo — mesmo tipo (Deliverable re-exportado desde A2), wire
     // intacto. Nenhum evento: leitura não é fato auditável.
     use btv_domain::ports::RunRepository;
-    let ctx = btv_domain::TenantContext::local(
-        btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-    );
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
     match RunRepository::list_deliverables(&*store, &ctx) {
         Ok(list) => Json(list).into_response(),
@@ -732,6 +734,7 @@ async fn list_deliverables_handler(State(state): State<BtvAgentState>) -> Respon
 async fn download_deliverable_handler(
     State(state): State<BtvAgentState>,
     Path(id): Path<i64>,
+    Tenant(ctx): Tenant,
 ) -> Response {
     let deliverable = {
         // C3.1 endpoint 6 (fecha a onda): leitura pela porta, ctx LOCAL
@@ -740,9 +743,6 @@ async fn download_deliverable_handler(
         // do ARQUIVO em disco continua abaixo, fora da porta (é filesystem,
         // não estado do agregado).
         use btv_domain::ports::RunRepository;
-        let ctx = btv_domain::TenantContext::local(
-            btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
-        );
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
         match RunRepository::get_deliverable(&*store, &ctx, id) {
             Ok(Some(d)) => d,
@@ -1421,6 +1421,9 @@ pub fn router(
             squad: SquadAgentState { hub, pool },
             ledger,
             store,
+            // Modo local (o dashboard): sem resolver — o extractor devolve
+            // TenantContext::local. O modo saas injeta Some(PgStore) aqui.
+            tenant_resolver: TenantResolucao::default(),
         })
 }
 

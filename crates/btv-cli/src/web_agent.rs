@@ -910,10 +910,26 @@ pub fn router(hub: SessionHub) -> Router {
 /// o que mais precisar de `btv-sidecar`/`btv-tools`/`btv-core`,
 /// indisponíveis em `btv-server`) e a guarda de `Origin`/`Host` —
 /// `btv-server` continua sem ganhar dependência nenhuma dos três.
-pub fn merged_router(hub: SessionHub, dashboard: Router, extra: Router) -> Router {
+pub fn merged_router(
+    hub: SessionHub,
+    dashboard: Router,
+    extra: Router,
+    tenant_resolver: crate::tenant_extractor::TenantResolucao,
+) -> Router {
     dashboard
         .merge(router(hub))
         .merge(extra)
+        // Borda de tenant UNIVERSAL (E1s.3, ADR 0029): o extractor por-handler
+        // só guarda as rotas que o declaram (os seis consumidores da C3.1);
+        // este layer fecha o RESTO da superfície (personas/templates/users/…
+        // ainda não estranguladas) para que o modo saas não nasça sem borda.
+        // Local = no-op (a composição local fica byte-idêntica). Fica ABAIXO da
+        // guarda de `Origin` — esta, sendo a última `.layer()`, é a mais
+        // externa e roda PRIMEIRO (rejeita cross-origin antes de tocar auth).
+        .layer(middleware::from_fn_with_state(
+            tenant_resolver,
+            crate::tenant_extractor::guarda_tenant,
+        ))
         .layer(middleware::from_fn(require_local_origin))
 }
 
@@ -923,9 +939,10 @@ pub fn merged_router(hub: SessionHub, dashboard: Router, extra: Router) -> Route
 /// `extra` (squad, Onda 4; prompt-render, Onda 5) por trás da guarda de
 /// `Origin`/`Host`. `btv-server` em si segue intocado (zero dependência
 /// nova) — a composição mora aqui.
-// 8 argumentos = os handles/config que `main.rs` já mantém abertos (um por
-// storage) + o que a composição de routers pede — função só encaminha, não
-// teria o que uma struct de agrupamento ganhasse em clareza.
+// 9 argumentos = os handles/config que `main.rs` já mantém abertos (um por
+// storage) + a composição de routers + o resolver de sessões da borda
+// universal (E1s.3) — função só encaminha, não teria o que uma struct de
+// agrupamento ganhasse em clareza.
 #[allow(clippy::too_many_arguments)]
 pub async fn serve_with_agent(
     telemetry: btv_store::Telemetry,
@@ -936,9 +953,10 @@ pub async fn serve_with_agent(
     web_dir: impl AsRef<std::path::Path>,
     hub: SessionHub,
     extra: Router,
+    tenant_resolver: crate::tenant_extractor::TenantResolucao,
 ) -> std::io::Result<()> {
     let dashboard = btv_server::router(telemetry, prompt_library, ledger, root, web_dir);
-    let app = merged_router(hub, dashboard, extra);
+    let app = merged_router(hub, dashboard, extra, tenant_resolver);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await
 }
