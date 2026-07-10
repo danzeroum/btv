@@ -611,17 +611,19 @@ where
     // por engano. Fase 2 (verificação por domínio): produto pula o cargo e
     // envia evidência vazia; o Python não fail-closa por falta dela (o roster
     // sinaliza o domínio não-código).
-    let verification_evidence_json = if roster.is_empty() {
+    // D3t: evidência TIPADA no wire (antes string JSON). Roster vazio (squad de
+    // engenharia) → roda o /verify e anexa; roster de produto → `None`
+    // (fail-closed do Python só vale para o domínio de código).
+    let verification_evidence = if roster.is_empty() {
         let root_for_verify = root.clone();
         let evidence =
             tokio::task::spawn_blocking(move || crate::run_verify_pipeline(&root_for_verify, None))
                 .await
                 .map_err(|e| format!("task de /verify falhou: {e}"))?
                 .map_err(|e| format!("falha ao rodar /verify antes do squad: {e}"))?;
-        serde_json::to_string(&evidence)
-            .map_err(|e| format!("falha ao serializar evidência: {e}"))?
+        Some(crate::squad::evidence_to_proto(&evidence))
     } else {
-        String::new()
+        None
     };
 
     // Abre a sessão de ledger ANTES de mover `description` para o
@@ -648,7 +650,7 @@ where
             description,
             decision_type: "architecture".into(),
             max_autonomy_level: 3,
-            verification_evidence_json,
+            verification_evidence,
             model,
             // Roster de personas (U7): o Python usa `prompt` de cada uma como
             // system prompt do agente do estágio correspondente. Vazio = elenco
