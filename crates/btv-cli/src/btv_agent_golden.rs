@@ -611,6 +611,25 @@ async fn golden_squad_activation() {
     )
     .await;
 
+    // C3.4a (cobertura NOVA — ato 1, ANTES de estrangular `delete_user`): cria
+    // e remove um perfil para o golden pinar o corpo legado de
+    // `btv.user_removed` — o ÚLTIMO emissor cru dos que passam por este fluxo.
+    // A criação me dá o id que a remoção emite.
+    let uresp = client
+        .post(format!("{base}/api/btv/users"))
+        .json(&serde_json::json!({"nome": "Perfil de teste", "email": "teste@exemplo.com"}))
+        .send()
+        .await
+        .unwrap();
+    let uid = uresp.json::<serde_json::Value>().await.unwrap()["id"]
+        .as_i64()
+        .expect("id do perfil criado");
+    let _ = client
+        .delete(format!("{base}/api/btv/users/{uid}"))
+        .send()
+        .await
+        .unwrap();
+
     // Anti-fake, fora do golden: o fluxo EXECUTOU — auditoria no ledger e
     // contador de gates persistido, não só respostas HTTP bem formadas.
     {
@@ -627,6 +646,7 @@ async fn golden_squad_activation() {
             "C3.3 ato 1: 1 publicação"
         );
         assert_eq!(conta("btv.flow_saved"), 1, "C3.3b ato 1: 1 fluxo salvo");
+        assert_eq!(conta("btv.user_removed"), 1, "C3.4a ato 1: 1 remoção");
         guard.verify_chain().unwrap();
 
         // C3.1 (primeiro estrangulado): a entrada de gate agora nasce da
@@ -702,11 +722,23 @@ async fn golden_squad_activation() {
         assert_eq!(fluxo.payload["versao_semantica"], "1.0.0");
         assert_eq!(fluxo.payload["audit_len"], 2);
         assert!(fluxo.payload["diagram_sha256"].is_string());
+
+        // C3.4a ato 1: `delete_user` ainda é LEGADO (`append_ledger` cru) —
+        // reintroduz DE PROPÓSITO o estado misto. O golden pina o corpo legado
+        // (`{id}`, SEM tenant) antes do estrangulamento (ato 2); a regravação
+        // com tenant é o ato 3.
+        let remocao = entradas
+            .iter()
+            .find(|e| e.kind == "btv.user_removed")
+            .expect("entrada de remoção existe");
+        assert_eq!(remocao.tenant, None, "user_removed ainda LEGADO (ato 1)");
+        assert_eq!(remocao.payload["id"].as_i64(), Some(uid));
         assert!(
             entradas
                 .iter()
+                .filter(|e| e.kind != "btv.user_removed")
                 .all(|e| e.tenant == Some(btv_domain::TenantId::LOCAL)),
-            "nenhum emissor legado restante no fluxo (flow_saved estrangulado)"
+            "todos os JÁ estrangulados têm tenant; só user_removed (legado) não"
         );
     }
     {

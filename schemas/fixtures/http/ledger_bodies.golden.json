@@ -12,6 +12,17 @@
           {
             "actor": "web:btv",
             "entry_hash": "<volatil>",
+            "kind": "btv.user_removed",
+            "payload": {
+              "id": 1
+            },
+            "prev_hash": "<volatil>",
+            "seq": 8,
+            "ts": "<volatil>"
+          },
+          {
+            "actor": "web:btv",
+            "entry_hash": "<volatil>",
             "kind": "btv.flow_saved",
             "payload": {
               "audit_head": "head-1",
