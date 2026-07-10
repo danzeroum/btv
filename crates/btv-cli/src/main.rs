@@ -10,7 +10,6 @@ mod btv_agent;
 mod btv_agent_golden;
 mod cache;
 mod convert;
-mod lsp_console;
 mod mcp_console;
 mod memory_console;
 mod prompt_render;
@@ -427,7 +426,7 @@ async fn run_dashboard(host: std::net::IpAddr, port: u16, web_agent: bool) -> Re
         let memory_service = memory_console::default_memory_service(&root);
         let memory_router = memory_console::router(memory_service);
         let sandbox_router = btv_server::sandbox_console::router();
-        let lsp_router = lsp_console::router(root.clone());
+        let lsp_router = btv_server::lsp_console::router(root.clone());
         let extra_router = squad_router
             .merge(btv_router)
             .merge(prompt_router)
