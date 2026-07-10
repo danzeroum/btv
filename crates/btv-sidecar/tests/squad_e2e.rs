@@ -125,6 +125,11 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
             verification_evidence_json: String::new(),
             model: String::new(),
             roster: Vec::new(),
+            // D2t: o tenant que ENTRA aqui deve voltar ecoado em TODO evento
+            // (a asserção logo abaixo é a prova ponta a ponta da propagação
+            // — Rust → UDS → orquestrador Python real → de volta).
+            tenant_id: "00000000-0000-0000-0000-000000000001".into(),
+            actor: "test:e2e".into(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -136,6 +141,16 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
     core_task.abort();
 
     assert!(!events.is_empty(), "o squad deveria ter emitido eventos");
+
+    // D2t: propagação ponta a ponta — o Python ecoa tenant/actor do
+    // SquadTask em CADA SquadEvent, sem exceção (propaga, nunca decide).
+    for ev in &events {
+        assert_eq!(
+            ev.tenant_id, "00000000-0000-0000-0000-000000000001",
+            "evento sem o tenant que entrou: {ev:?}"
+        );
+        assert_eq!(ev.actor, "test:e2e", "evento sem o actor que entrou");
+    }
 
     // Propostas dos 3 agentes que votam.
     let proposers: Vec<String> = events
@@ -276,6 +291,8 @@ async fn kill_do_sidecar_dispara_fallback() {
             verification_evidence_json: String::new(),
             model: String::new(),
             roster: Vec::new(),
+            tenant_id: "00000000-0000-0000-0000-000000000001".into(),
+            actor: "test:e2e".into(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");
@@ -569,6 +586,8 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
             verification_evidence_json: evidence_json,
             model: String::new(),
             roster: Vec::new(),
+            tenant_id: "00000000-0000-0000-0000-000000000001".into(),
+            actor: "test:e2e".into(),
         })
         .await
         .expect("ExecuteTask deveria abrir o stream");

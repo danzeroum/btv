@@ -421,6 +421,10 @@ async fn try_squad(
             model: opts.model.clone(),
             // A CLI `btv squad` não tem personas de template — elenco fixo.
             roster: Vec::new(),
+            // D2t: a CLI é o modo local por definição; o Python só PROPAGA
+            // (ecoado em todo evento — o tenant real chega com a E1s).
+            tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+            actor: "cli:squad".into(),
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -625,13 +629,19 @@ mod tests {
             &self,
             req: tonic::Request<SquadTask>,
         ) -> Result<Response<Self::ExecuteTaskStream>, Status> {
-            let task_id = req.into_inner().task_id;
+            let task = req.into_inner();
+            let task_id = task.task_id;
+            let (tenant_id, actor) = (task.tenant_id, task.actor);
             let (tx, rx) = tokio::sync::mpsc::channel(8);
-            let ev = |payload| {
+            let ev = move |payload| {
                 Ok(SquadEvent {
                     task_id: task_id.clone(),
                     ts: "2026-01-01T00:00:00Z".into(),
                     payload: Some(payload),
+                    // D2t: o mock respeita o contrato do servidor real —
+                    // tenant/actor do task ecoados em todo evento.
+                    tenant_id: tenant_id.clone(),
+                    actor: actor.clone(),
                 })
             };
             tx.try_send(ev(squad_event::Payload::Proposal(Proposal {
@@ -699,6 +709,8 @@ mod tests {
                 verification_evidence_json: String::new(),
                 model: String::new(),
                 roster: Vec::new(),
+                tenant_id: btv_domain::TenantId::LOCAL.to_string(),
+                actor: "test:squad".into(),
             })
             .await
             .expect("stream aberto");

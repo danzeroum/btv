@@ -48,8 +48,17 @@ _PHASE = {
 }
 
 
-def _to_squad_event(task_id: str, event: dict[str, Any]) -> squad_pb2.SquadEvent:
-    ev = squad_pb2.SquadEvent(task_id=task_id, ts=datetime.now(timezone.utc).isoformat())
+def _to_squad_event(
+    task_id: str, event: dict[str, Any], tenant_id: str = "", actor: str = ""
+) -> squad_pb2.SquadEvent:
+    # D2t: tenant/actor do SquadTask ecoados VERBATIM em todo evento — o
+    # orquestrador propaga, nunca decide tenant (quem decide é a borda, E1s).
+    ev = squad_pb2.SquadEvent(
+        task_id=task_id,
+        ts=datetime.now(timezone.utc).isoformat(),
+        tenant_id=tenant_id,
+        actor=actor,
+    )
     kind = event["kind"]
     if kind == "proposal":
         ev.proposal.CopyFrom(
@@ -201,7 +210,7 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
                 event = await queue.get()
                 if event is None:
                     break
-                yield _to_squad_event(request.task_id, event)
+                yield _to_squad_event(request.task_id, event, request.tenant_id, request.actor)
         finally:
             await runner
             await channel.close()

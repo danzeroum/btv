@@ -9,8 +9,9 @@
 //! 1. **Tenant fail-closed sem exceção** — todo método de toda trait recebe
 //!    `&TenantContext` (tenant + actor: o actor alimenta o ledger e não se
 //!    perde na assinatura). Não há método de conveniência sem contexto.
-//! 2. **Assinaturas limpas de infraestrutura** — nenhum `rusqlite::Error`/
-//!    `serde_json::Value`/tipo de wire; erros são enums de domínio
+//! 2. **Assinaturas limpas de infraestrutura** — nas traits de REPOSITÓRIO,
+//!    nenhum `rusqlite::Error`/`serde_json::Value`/tipo de wire; erros são
+//!    enums de domínio
 //!    (`RepositoryError`/`RunError`), tipos de entrada/saída são deste crate
 //!    (o que ainda é do adapter fica em associated type, decisão visível).
 //! 3. **O agregado é a única porta** — `Run::approve_gate` valida a

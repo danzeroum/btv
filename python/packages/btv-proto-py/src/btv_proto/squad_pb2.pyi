@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class SquadTask(_message.Message):
-    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence_json", "model", "roster")
+    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence_json", "model", "roster", "tenant_id", "actor")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     DECISION_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -16,6 +16,8 @@ class SquadTask(_message.Message):
     VERIFICATION_EVIDENCE_JSON_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     ROSTER_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     description: str
     decision_type: str
@@ -23,7 +25,9 @@ class SquadTask(_message.Message):
     verification_evidence_json: str
     model: str
     roster: _containers.RepeatedCompositeFieldContainer[PersonaSpec]
-    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence_json: _Optional[str] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ...) -> None: ...
+    tenant_id: str
+    actor: str
+    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence_json: _Optional[str] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ...) -> None: ...
 
 class PersonaSpec(_message.Message):
     __slots__ = ("papel", "prompt", "funcao", "ordem", "custom")
@@ -40,9 +44,11 @@ class PersonaSpec(_message.Message):
     def __init__(self, papel: _Optional[str] = ..., prompt: _Optional[str] = ..., funcao: _Optional[str] = ..., ordem: _Optional[int] = ..., custom: _Optional[bool] = ...) -> None: ...
 
 class SquadEvent(_message.Message):
-    __slots__ = ("task_id", "ts", "proposal", "consensus", "handoff", "hitl", "step", "error", "chat")
+    __slots__ = ("task_id", "ts", "tenant_id", "actor", "proposal", "consensus", "handoff", "hitl", "step", "error", "chat")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     TS_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
     PROPOSAL_FIELD_NUMBER: _ClassVar[int]
     CONSENSUS_FIELD_NUMBER: _ClassVar[int]
     HANDOFF_FIELD_NUMBER: _ClassVar[int]
@@ -52,6 +58,8 @@ class SquadEvent(_message.Message):
     CHAT_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     ts: str
+    tenant_id: str
+    actor: str
     proposal: Proposal
     consensus: Consensus
     handoff: Handoff
@@ -59,7 +67,7 @@ class SquadEvent(_message.Message):
     step: StepResult
     error: str
     chat: ChatMessage
-    def __init__(self, task_id: _Optional[str] = ..., ts: _Optional[str] = ..., proposal: _Optional[_Union[Proposal, _Mapping]] = ..., consensus: _Optional[_Union[Consensus, _Mapping]] = ..., handoff: _Optional[_Union[Handoff, _Mapping]] = ..., hitl: _Optional[_Union[HitlEscalation, _Mapping]] = ..., step: _Optional[_Union[StepResult, _Mapping]] = ..., error: _Optional[str] = ..., chat: _Optional[_Union[ChatMessage, _Mapping]] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., ts: _Optional[str] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ..., proposal: _Optional[_Union[Proposal, _Mapping]] = ..., consensus: _Optional[_Union[Consensus, _Mapping]] = ..., handoff: _Optional[_Union[Handoff, _Mapping]] = ..., hitl: _Optional[_Union[HitlEscalation, _Mapping]] = ..., step: _Optional[_Union[StepResult, _Mapping]] = ..., error: _Optional[str] = ..., chat: _Optional[_Union[ChatMessage, _Mapping]] = ...) -> None: ...
 
 class ChatMessage(_message.Message):
     __slots__ = ("author", "author_role", "text", "in_reply_to")
