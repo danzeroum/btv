@@ -502,17 +502,55 @@ async fn aprovar_gate_handler(
 ) -> Response {
     match state.squad.hub.resolve_hitl(&task_id, true) {
         Ok(()) => {
-            let etapa = body.and_then(|b| b.0.etapa).unwrap_or_default();
-            {
-                let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-                let _ = store.increment_gates(&task_id, &crate::session::now_rfc3339());
-            }
-            if let Err(e) = append_ledger(
-                &state.ledger,
-                "btv.gate_approved",
-                serde_json::json!({ "task_id": task_id, "etapa": etapa }),
-            ) {
-                eprintln!("btv: falha ao registrar gate no ledger: {e}");
+            // C3.1 (primeiro estrangulado): agregado + portas no lugar de
+            // increment_gates cru + JSON solto — `Run::approve_gate` valida a
+            // transição, incrementa e RETORNA o evento; as portas gravam. O
+            // contexto vem de fonte LOCAL FIXA (mesma decisão dos adapters
+            // desde o B2) — a E1s troca a FONTE do contexto, não este
+            // consumidor. Semântica preservada do legado: o gate do hub já
+            // foi liberado acima, então falha de escrituração é reportada e
+            // não desfaz a liberação (como o `let _`/eprintln de antes).
+            let etapa = body.and_then(|b| b.0.etapa);
+            let ctx = btv_domain::TenantContext::local(
+                btv_domain::ActorId::new("web:btv").expect("actor fixo válido"),
+            );
+            let evento = {
+                use btv_domain::ports::RunRepository;
+                let mut store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+                match store.get(&ctx, &task_id) {
+                    Ok(Some(mut run)) => {
+                        match run.approve_gate(&ctx, etapa, crate::session::now_rfc3339()) {
+                            Ok(evento) => match store.save(&ctx, &run) {
+                                Ok(()) => Some(evento),
+                                Err(e) => {
+                                    eprintln!(
+                                        "btv: gate liberado, mas o run não pôde ser salvo: {e}"
+                                    );
+                                    None
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("btv: gate liberado, mas o agregado recusou: {e}");
+                                None
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        eprintln!("btv: gate liberado sem run correspondente ({task_id})");
+                        None
+                    }
+                    Err(e) => {
+                        eprintln!("btv: gate liberado, mas o run não pôde ser lido: {e}");
+                        None
+                    }
+                }
+            };
+            if let Some(evento) = evento {
+                use btv_domain::ports::LedgerRepository;
+                let mut ledger = state.ledger.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = LedgerRepository::append(&mut *ledger, &ctx, &evento) {
+                    eprintln!("btv: falha ao registrar gate no ledger: {e}");
+                }
             }
             StatusCode::OK.into_response()
         }
