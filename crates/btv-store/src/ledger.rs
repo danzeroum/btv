@@ -252,33 +252,8 @@ impl LedgerStore {
                 row.get::<_, String>(3)?,
             ))
         })?;
-
-        let mut expected_prev = String::new();
-        let mut count = 0u64;
-        for row in rows {
-            let (seq, prev_hash, entry_hash, body) = row?;
-            let entry: LedgerEntry = serde_json::from_str(&body)?;
-            if let Some(body_tenant) = entry.tenant {
-                if body_tenant.to_string() != tenant {
-                    return Err(LedgerError::ForeignEntry {
-                        seq,
-                        body_tenant: body_tenant.to_string(),
-                        chain_tenant: tenant.to_string(),
-                    });
-                }
-            }
-            let recomputed = entry.chain_hash(&expected_prev);
-            if prev_hash != expected_prev || entry_hash != recomputed {
-                return Err(LedgerError::BrokenChain {
-                    seq,
-                    expected: recomputed,
-                    found: entry_hash,
-                });
-            }
-            expected_prev = entry_hash;
-            count += 1;
-        }
-        Ok(count)
+        let rows = rows.collect::<Result<Vec<_>, _>>()?;
+        verifica_cadeia_rows(tenant, rows)
     }
 
     /// A cadeia COMPLETA de um tenant, do `seq` 1 ao topo (ordem
@@ -312,6 +287,9 @@ impl LedgerStore {
 /// O payload EXATO do wire para cada variante — chaves em pt, como os
 /// emissores de `btv_agent.rs` sempre gravaram (decisão da revisão do G1: o
 /// DTO do adapter é o ÚNICO dono das chaves pt; o domínio fica em inglês).
+/// `pub(crate)` desde B4: o adapter Postgres usa ESTA função — dois adapters,
+/// um só DTO (paridade por construção, cobrada pelo teste de determinismo
+/// cross-adapter da suíte).
 ///
 /// Lacunas DECLARADAS vs. os emissores atuais (registradas em
 /// `pendencias.md`, decisão de C3): `btv.squad_activated` hoje grava também
@@ -321,7 +299,7 @@ impl LedgerStore {
 /// `gates_aprovados` (enriquecimento deliberado da variante). Igualar os
 /// dois lados é decisão do dono quando C3 trocar os emissores — com os
 /// goldens como juízes e regravação consciente.
-fn payload_wire(kind: &DomainEventKind) -> serde_json::Value {
+pub(crate) fn payload_wire(kind: &DomainEventKind) -> serde_json::Value {
     match kind {
         DomainEventKind::SquadActivated {
             task_id,
@@ -400,6 +378,74 @@ fn payload_wire(kind: &DomainEventKind) -> serde_json::Value {
     }
 }
 
+/// Constrói o `LedgerEntry` de um `DomainEvent` — o DTO ÚNICO da porta de
+/// domínio, compartilhado pelos DOIS adapters (SQLite aqui, Postgres em
+/// `pg.rs` desde B4): mesma serialização canônica ⇒ mesmos hashes, provado
+/// pelo teste de determinismo cross-adapter. Fail-closed embutido (mesma
+/// regra do B2): evento de outro tenant não entra pela cadeia do contexto.
+pub(crate) fn entry_de_dominio(
+    ctx: &TenantContext,
+    event: &DomainEvent,
+) -> Result<LedgerEntry, RepositoryError> {
+    if event.tenant != ctx.tenant {
+        return Err(RepositoryError::Storage(format!(
+            "recusado (fail-closed): evento pertence ao tenant {}, não ao do contexto {}",
+            event.tenant, ctx.tenant
+        )));
+    }
+    Ok(LedgerEntry {
+        seq: 0,
+        prev_hash: String::new(),
+        entry_hash: String::new(),
+        kind: event.kind.wire_kind().into(),
+        // O `ts`/`actor` do evento são a verdade — o adapter não os
+        // reescreve (contrato do port, aceito no G1).
+        actor: event.actor.as_str().into(),
+        payload: payload_wire(&event.kind),
+        r#override: None,
+        fake_marker: None,
+        ts: event.ts.clone(),
+        // Entradas novas nascem com o tenant NO CORPO HASHEADO
+        // (ADR 0027 item 2) — transplante entre cadeias quebra o hash.
+        tenant: Some(ctx.tenant),
+    })
+}
+
+/// Percorre as linhas de UMA cadeia (ordenadas por `seq` ascendente),
+/// validando hashes encadeados + anti-transplante — a MESMA verificação para
+/// os dois adapters (extraída em B4; o SQLite a usava inline desde B3).
+/// Linha = `(seq, prev_hash, entry_hash, body)`.
+pub(crate) fn verifica_cadeia_rows(
+    tenant: &str,
+    rows: impl IntoIterator<Item = (u64, String, String, String)>,
+) -> Result<u64, LedgerError> {
+    let mut expected_prev = String::new();
+    let mut count = 0u64;
+    for (seq, prev_hash, entry_hash, body) in rows {
+        let entry: LedgerEntry = serde_json::from_str(&body)?;
+        if let Some(body_tenant) = entry.tenant {
+            if body_tenant.to_string() != tenant {
+                return Err(LedgerError::ForeignEntry {
+                    seq,
+                    body_tenant: body_tenant.to_string(),
+                    chain_tenant: tenant.to_string(),
+                });
+            }
+        }
+        let recomputed = entry.chain_hash(&expected_prev);
+        if prev_hash != expected_prev || entry_hash != recomputed {
+            return Err(LedgerError::BrokenChain {
+                seq,
+                expected: recomputed,
+                found: entry_hash,
+            });
+        }
+        expected_prev = entry_hash;
+        count += 1;
+    }
+    Ok(count)
+}
+
 impl LedgerRepository for LedgerStore {
     /// Gatilho do `AuditEntry` próprio do domínio registrado na revisão do
     /// G1 (pendencias.md): até o domínio precisar INTERPRETAR entradas, o
@@ -407,30 +453,7 @@ impl LedgerRepository for LedgerStore {
     type Entry = LedgerEntry;
 
     fn append(&mut self, ctx: &TenantContext, event: &DomainEvent) -> Result<u64, RepositoryError> {
-        // Fail-closed na escrita (mesma regra do B2): evento de outro
-        // tenant não entra pela cadeia do contexto.
-        if event.tenant != ctx.tenant {
-            return Err(RepositoryError::Storage(format!(
-                "recusado (fail-closed): evento pertence ao tenant {}, não ao do contexto {}",
-                event.tenant, ctx.tenant
-            )));
-        }
-        let entry = LedgerEntry {
-            seq: 0,
-            prev_hash: String::new(),
-            entry_hash: String::new(),
-            kind: event.kind.wire_kind().into(),
-            // O `ts`/`actor` do evento são a verdade — o adapter não os
-            // reescreve (contrato do port, aceito no G1).
-            actor: event.actor.as_str().into(),
-            payload: payload_wire(&event.kind),
-            r#override: None,
-            fake_marker: None,
-            ts: event.ts.clone(),
-            // Entradas novas nascem com o tenant NO CORPO HASHEADO
-            // (ADR 0027 item 2) — transplante entre cadeias quebra o hash.
-            tenant: Some(ctx.tenant),
-        };
+        let entry = entry_de_dominio(ctx, event)?;
         LedgerStore::append(self, entry)
             .map(|e| e.seq)
             .map_err(|e| RepositoryError::Storage(e.to_string()))

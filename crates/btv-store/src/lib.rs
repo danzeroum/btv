@@ -7,6 +7,10 @@
 pub mod btv;
 pub mod events;
 pub mod ledger;
+/// Adapter Postgres do modo SaaS (B4, ADR 0026) — atrás da feature `pg`:
+/// o build default (modo local) não compila nem exige Postgres.
+#[cfg(feature = "pg")]
+pub mod pg;
 pub mod prompt_cache;
 pub mod prompt_library;
 pub mod rule_store;

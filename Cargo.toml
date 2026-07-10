@@ -37,6 +37,9 @@ libc = "0.2"
 toml = "0.8"
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "io-util", "sync", "net"] }
+# B4 (ADR 0026): adapter Postgres do modo SaaS — só entra no build com a
+# feature `pg` de btv-store (o desenvolvimento local continua 100% SQLite).
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "migrate", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 futures-util = "0.3"
 ignore = "0.4"

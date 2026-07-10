@@ -629,11 +629,12 @@ impl BtvStore {
 // Postgres em B4 com os mesmos testes.
 
 /// Colunas do SELECT de runs na ordem que `row_to_run` espera.
-const RUN_COLS: &str = "id, task_id, template_id, template_versao, nome, briefing_json, \
+pub(crate) const RUN_COLS: &str =
+    "id, task_id, template_id, template_versao, nome, briefing_json, \
                         papeis_json, status, gates_aprovados, created_ts, updated_ts, tenant_id";
 
 /// Colunas do SELECT de deliverables na ordem que `row_to_deliverable` espera.
-const DELIVERABLE_COLS: &str =
+pub(crate) const DELIVERABLE_COLS: &str =
     "id, run_id, task_id, template_id, nome, path, formato, versao, trilha, created_ts, tenant_id";
 
 /// Fail-closed: coluna `tenant_id` fora do formato UUID é ERRO de leitura,
@@ -700,7 +701,7 @@ fn storage(e: rusqlite::Error) -> RepositoryError {
 /// Fail-closed na ESCRITA: um agregado/entrega cujo `tenant` difere do
 /// contexto é recusado antes de tocar o banco — a suíte de contrato prova
 /// que a recusa no meio de um lote desfaz a transação inteira.
-fn exige_mesmo_tenant(
+pub(crate) fn exige_mesmo_tenant(
     ctx: &TenantContext,
     dono: TenantId,
     o_que: &str,
