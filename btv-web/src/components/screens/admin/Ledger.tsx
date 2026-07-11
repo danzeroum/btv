@@ -71,7 +71,7 @@ export function Ledger() {
           const humano =
             e.kind === 'btv.gate_approved' ||
             e.kind === 'btv.adjust_requested' ||
-            /human|você|voc[eê]|usu[aá]ri|marina/i.test(e.actor)
+            /human|você|voc[eê]|usu[aá]ri/i.test(e.actor)
           return (
             <div key={e.seq} style={{ display: 'grid', gridTemplateColumns: '120px 1.7fr 1fr 1fr 110px', gap: 14, padding: '12px 20px', borderBottom: '1px solid var(--line)', alignItems: 'baseline' }}>
               <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>

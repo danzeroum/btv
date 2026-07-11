@@ -32,7 +32,10 @@ export function Personas() {
 
   const recarregar = useCallback(() => {
     fetchPersonas(templateId)
-      .then(setData)
+      .then((d) => {
+        setData(d)
+        setErro(null)
+      })
       .catch((e: Error) => setErro(e.message))
   }, [templateId])
 

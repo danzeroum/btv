@@ -1,5 +1,6 @@
 import type { SquadEventEnvelope } from '../api/squad'
 import type { SquadTemplate } from '../api/templates'
+import { hhmm } from './time'
 
 /** Etapa da esteira (handoff §6 U3). `gate: true` = ponto onde a squad para
  *  e espera o humano. */
@@ -168,11 +169,6 @@ const HANDOFF_LABEL: Record<number, string> = {
   2: 'confirmou handoff de',
   3: 'concluiu handoff para',
   4: 'falhou handoff para',
-}
-
-function hhmm(ts: string): string {
-  const m = ts.match(/T(\d{2}):(\d{2})/)
-  return m ? `${m[1]}:${m[2]}` : ts.slice(0, 5)
 }
 
 export interface FeedItem {

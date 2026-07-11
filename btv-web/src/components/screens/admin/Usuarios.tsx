@@ -36,12 +36,14 @@ export function Usuarios() {
     if (!nome) return
     const email = emailRef.current?.value.trim() ?? ''
     const pin = pinRef.current?.value.trim() || undefined
-    void createUser(nome, email, users.length === 0 ? 'admin' : 'usuario', pin).then(() => {
-      nomeRef.current!.value = ''
-      if (emailRef.current) emailRef.current.value = ''
-      if (pinRef.current) pinRef.current.value = ''
-      recarregar()
-    })
+    void createUser(nome, email, users.length === 0 ? 'admin' : 'usuario', pin)
+      .then(() => {
+        nomeRef.current!.value = ''
+        if (emailRef.current) emailRef.current.value = ''
+        if (pinRef.current) pinRef.current.value = ''
+        recarregar()
+      })
+      .catch((e: Error) => setErro(e.message))
   }
 
   const entrar = (u: BtvUser) => {
@@ -56,7 +58,8 @@ export function Usuarios() {
 
   const confirmarPin = (u: BtvUser) => {
     const pin = desafioRef.current?.value ?? ''
-    void verifyUserPin(u.id, pin).then((r) => {
+    void verifyUserPin(u.id, pin)
+      .then((r) => {
       if (r.ok) {
         setAtivo({ id: u.id, nome: u.nome })
         setDesafio(null)
@@ -64,7 +67,8 @@ export function Usuarios() {
       } else {
         setPinErro('PIN incorreto.')
       }
-    })
+      })
+      .catch(() => setPinErro('Não consegui verificar o PIN. Tente de novo.'))
   }
 
   const remover = (u: BtvUser) => {
