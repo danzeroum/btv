@@ -13,12 +13,11 @@ parte do plano por trás de uma chamada real ao modelo).
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
+from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
 from btv_squad.gateway import LlmRequest
 
@@ -41,9 +40,6 @@ Dado um problema, responda SOMENTE com um objeto JSON (sem markdown, sem texto f
 }
 "confidence" é um float entre 0.0 e 1.0 representando sua certeza na recomendação.
 Todos os campos devem refletir o problema específico recebido — nunca liste componentes ou riscos genéricos que serviriam para qualquer sistema."""
-
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
-
 
 class ArchitectAgent(BaseAgent):
     """Arquiteto sênior capaz de análise Chain-of-Thought real."""
@@ -113,17 +109,7 @@ class ArchitectAgent(BaseAgent):
         """Extrai o JSON estruturado da resposta do modelo, com fallback
         defensivo — uma resposta mal-formada nunca derruba o agente."""
 
-        parsed: dict[str, Any] = {}
-        match = _JSON_BLOCK.search(raw_text)
-        if match:
-            try:
-                candidate = json.loads(match.group(0))
-                if isinstance(candidate, dict):
-                    parsed = candidate
-            except json.JSONDecodeError:
-                logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-        else:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
+        parsed = extract_json_object(raw_text)
 
         return {
             "problem_analysis": parsed.get("problem_analysis", problem.strip() or "Problema não especificado"),

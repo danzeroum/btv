@@ -25,9 +25,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from typing import Any, Optional, Protocol
 
+from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
 from btv_squad.gateway import LlmRequest
 from btv_squad.tool_client import ToolCallRequest, ToolClient
@@ -54,8 +54,6 @@ Depois de criar ou editar um arquivo, rode um comando de verificação (ex.: sha
 
 _MAX_REACT_STEPS = 12
 _REACT_TIMEOUT_SECONDS = 600
-
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 
 class ReviewSystem(Protocol):
@@ -258,31 +256,13 @@ class DeveloperAgent(BaseAgent):
             }
 
     def _parse_react_action(self, raw_text: str) -> dict[str, Any]:
-        match = _JSON_BLOCK.search(raw_text)
-        if not match:
-            logger.warning("Resposta do modelo (ReAct) não contém um bloco JSON: %r", raw_text[:200])
-            return {"action": "parse_error"}
-        try:
-            candidate = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            logger.warning("Resposta do modelo (ReAct) não é JSON válido: %r", raw_text[:200])
-            return {"action": "parse_error"}
-        if not isinstance(candidate, dict) or candidate.get("action") not in {"tool_call", "final_answer"}:
+        candidate = extract_json_object(raw_text, context="ReAct")
+        if candidate.get("action") not in {"tool_call", "final_answer"}:
             return {"action": "parse_error"}
         return candidate
 
     def _parse_result(self, raw_text: str) -> dict[str, Any]:
-        parsed: dict[str, Any] = {}
-        match = _JSON_BLOCK.search(raw_text)
-        if match:
-            try:
-                candidate = json.loads(match.group(0))
-                if isinstance(candidate, dict):
-                    parsed = candidate
-            except json.JSONDecodeError:
-                logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-        else:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
+        parsed = extract_json_object(raw_text)
 
         return {
             "final_output": parsed.get("final_output", ""),

@@ -26,16 +26,14 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from btv_squad._json import extract_json_object
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
-
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 
 def _format_recall(context: dict[str, Any] | None) -> str | None:
@@ -253,13 +251,4 @@ class AdaptivePlanner:
         }
 
     def _extract_json(self, raw_text: str) -> dict[str, Any]:
-        match = _JSON_BLOCK.search(raw_text)
-        if not match:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
-            return {}
-        try:
-            candidate = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-            return {}
-        return candidate if isinstance(candidate, dict) else {}
+        return extract_json_object(raw_text)
