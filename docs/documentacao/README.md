@@ -46,6 +46,23 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 15 | [ADRs](referencia/15-adrs.md) | Resumo das 32 decisões de arquitetura |
 | 16 | [Glossário](referencia/16-glossario.md) | Termos do domínio e da plataforma |
 
+### Parte III — Mapeamento de dados (`dados/`)
+
+Dicionário de dados exaustivo: todos os dados de **entrada**, **saída** e **processamento
+intermediário** de cada módulo (leitura linha-a-linha), incluindo dados locais descartados.
+
+| # | Documento | Escopo |
+|---|---|---|
+| 00 | [Mapa de dados do sistema](dados/00-mapa-de-dados.md) | Metodologia, mapa global de fluxo, reservatórios, env vars, fronteiras `wire` |
+| 10 | [Domínio e contratos Rust](dados/10-rust-dominio-e-contratos.md) | btv-domain, btv-schemas |
+| 11 | [Core e gateway Rust](dados/11-rust-core-e-llm.md) | btv-core, btv-llm |
+| 12 | [Tools e verify Rust](dados/12-rust-tools-e-verify.md) | btv-tools, btv-verify |
+| 13 | [Store, proto e sidecar Rust](dados/13-rust-store-proto-sidecar.md) | btv-store, btv-proto, btv-sidecar |
+| 14 | [CLI Rust](dados/14-rust-cli.md) | btv-cli (composition root) |
+| 15 | [Server e demais Rust](dados/15-rust-server-e-outros.md) | btv-server, btv-tui, btv-golden, btv-contract |
+| 16 | [Python](dados/16-python.md) | os 5 pacotes |
+| 17 | [TypeScript e HTML](dados/17-typescript-e-html.md) | web/, btv-web/ |
+
 ---
 
 ## Metodologia da análise
