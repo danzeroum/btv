@@ -14,6 +14,16 @@
 > `from __future__ import annotations` no Python, `oxlint` no TS). Mudanças que
 > tocam o contrato `prompt-cache-key.v1` ou config de build entram como
 > **recomendação com alerta**, não como diff trivial.
+>
+> **Relação com a auditoria exaustiva:** existe um documento irmão,
+> `docs/REVIEW-AUDITORIA-COMPLETA.md`, que é a varredura arquivo-a-arquivo dos
+> 337 arquivos (43 subagentes, verificação adversarial dos altas). **Este
+> documento curado PREVALECE** nos itens sobrepostos — é ele que traz os diffs
+> prontos, o rito das correções e a análise SOLID completa. A auditoria é a
+> fonte exaustiva que o alimenta (revelou 2 bugs de alta severidade não vistos na
+> triagem: o vazamento de slot em `SquadPool::acquire` e o deadlock de pipe em
+> `bash.rs`); itens novos dela são promovidos para cá antes de virar PR. Backlog
+> único — estruturais dos dois referenciam `pendencias.md:2182`/`:1829`.
 
 ---
 
