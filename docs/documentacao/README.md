@@ -63,6 +63,23 @@ intermediário** de cada módulo (leitura linha-a-linha), incluindo dados locais
 | 16 | [Python](dados/16-python.md) | os 5 pacotes |
 | 17 | [TypeScript e HTML](dados/17-typescript-e-html.md) | web/, btv-web/ |
 
+### Parte IV — Mapeamentos operacionais (`mapeamentos/`)
+
+Oito mapas para operação, evolução e risco. **Números de runtime não medidos aparecem
+marcados `⟨medir⟩`, nunca fabricados** (regra "Nada Fake").
+
+| # | Documento | Pergunta que responde |
+|---|---|---|
+| 00 | [Como usar](mapeamentos/00-como-usar.md) | Índice, por cenário, e como obter os `⟨medir⟩` |
+| 01 | [Dependências de build e features](mapeamentos/01-dependencias-build-features.md) | Se eu mexer/remover X, o que quebra? |
+| 02 | [Caminho crítico de performance](mapeamentos/02-caminho-critico-performance.md) | Onde cada ms importa? |
+| 03 | [Failure modes e propagação de erro](mapeamentos/03-failure-modes.md) | Se X falha, o sistema para ou continua? |
+| 04 | [Cobertura de testes por caminho](mapeamentos/04-cobertura-de-testes.md) | O que NÃO está coberto? |
+| 05 | [Feature flags e variáveis de ambiente](mapeamentos/05-feature-flags-e-env.md) | Quem controla o quê? |
+| 06 | [Migração de schema (DB + protobuf)](mapeamentos/06-migracao-de-schema.md) | O que quebra se eu alterar o schema? |
+| 07 | [Custos por operação](mapeamentos/07-custos-por-operacao.md) | Quanto custa cada ação? |
+| 08 | [Dados sensíveis e segurança](mapeamentos/08-dados-sensiveis-e-seguranca.md) | Onde entram/saem/repousam PII e keys? |
+
 ---
 
 ## Metodologia da análise
