@@ -28,7 +28,7 @@ impl<G: Generator> CachedGenerator<G> {
         }
     }
 
-    fn cache_key(req: &GenerateRequest) -> String {
+    fn cache_key(req: &GenerateRequest) -> Result<String, btv_schemas::CacheKeyError> {
         // O "messages" do contrato v1 é o envelope canônico completo do
         // request — inclui modelo/system/tools para evitar colisões.
         let envelope = json!({
@@ -48,7 +48,13 @@ impl<G: Generator + Sync> Generator for CachedGenerator<G> {
         req: GenerateRequest,
         on_delta: &mut (dyn FnMut(&str) + Send),
     ) -> Result<AssistantTurn, GatewayError> {
-        let key = Self::cache_key(&req);
+        // Request com número proibido pelo v1 (ex.: temperatura 1.0) não tem
+        // chave de cache válida — segue sem cache em vez de gerar uma chave que
+        // divergiria de outros produtores (ADR 0032).
+        let key = match Self::cache_key(&req) {
+            Ok(k) => k,
+            Err(_) => return self.inner.generate(req, on_delta).await,
+        };
 
         let hit = { self.cache.lock().unwrap().get(&key).ok().flatten() };
         if let Some(stored) = hit {

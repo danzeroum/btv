@@ -3,8 +3,15 @@
 > **Nota:** este arquivo é o registro do trabalho de **review de qualidade**
 > (sessão de code-review). É separado do `pendencias.md` da raiz (o log de
 > trabalho de 151KB do projeto) para não colidir com ele. Aqui ficam: o que foi
-> entregue, o que foi **deliberadamente adiado** e por quê, e as **dúvidas de
-> produto** que aguardam decisão do dono.
+> entregue, o que foi **deliberadamente adiado** e por quê, e as **decisões do
+> dono** na auditoria da rodada.
+
+> **Governança registrada:** o **auto-merge** usado nos PRs #58–#61 foi *desvio
+> sancionado desta rodada* (autorizado no arranque do loop), válido para lote de
+> correções com juízes automáticos fortes — **não é novo default**. O rito da
+> campanha (merge do dono) volta a valer, em especial para qualquer coisa que
+> toque **contrato, ADR ou comportamento visível**. Por isso o PR do guard do
+> hash (ADR 0032) **não** é auto-mergeado: fica para o dono.
 
 ## 1. Entregue (3 PRs mergeados em `main`)
 
@@ -45,13 +52,18 @@ tsc/vitest quando tocou TS). Todos os 13 jobs da CI verdes antes de cada merge.
 
 ## 2. Deliberadamente adiado (por recomendação própria)
 
-### 2.1 Refactor mecânico `erro()`/`lock_store()` (~96 sítios em `btv_agent.rs`)
+### 2.1 Refactor mecânico `erro()`/`lock_store()` (~96 sítios em `btv_agent.rs`) — **RECUSADO (Q2)**
 DRY cosmético de **alto churn** e baixo valor: colapsar os ~65 blocos
 `(...).into_response()` e os ~31 `lock().unwrap_or_else(|e| e.into_inner())` num
 helper. **Risco desproporcional:** os corpos de erro são pinados **byte-a-byte**
 por golden (`squad_activation_errors.golden.json`); qualquer drift quebra o CI, e
 os 96 sítios são varredura manual propensa a erro. O ganho é só de legibilidade.
-Fica catalogado; se feito, é um PR isolado com os goldens como rede.
+
+**Decisão da auditoria (Q2): recusado com razão (não "adiado").** A distinção
+importa para o backlog — adiado tem gatilho e vence; recusado tem razão e
+encerra. **Cláusula de reabertura:** se algum dia os corpos de erro *precisarem*
+mudar (regravação justificada de golden por outra razão), o refactor pega carona
+aí de graça.
 
 ### 2.2 Splits estruturais (god-objects / mega-funções)
 Decompor `ativar_squad_handler` (~244 linhas), `BtvStore`/`PgStore` (API dupla,
@@ -65,13 +77,20 @@ B2 — a porta do modo local com escopo fixo no tenant LOCAL): colapsá-la sem
 preservar esse escopo reintroduziria vazamento cross-tenant. **Não abrir backlog
 concorrente** — segue a pendência existente.
 
-### 2.3 Restrição numérica do hash `prompt-cache-key.v1` (decisão de contrato)
-`hashing.py`/`canonical.rs` documentam (só em prosa) que floats com fração zero
-(`1.0`) são proibidos no v1 — mas nada os rejeita, então um produtor JS (`1`) e
-o Python/Rust (`1.0`) divergem silenciosamente na chave de cache. Adicionar um
-guard que **rejeite** muda comportamento e toca o **contrato**: exige ADR novo +
-regenerar `schemas/fixtures/` + os 2 testes de paridade verdes. É trabalho de
-contrato com decisão de produto — **ver §3**.
+### 2.3 Restrição numérica do hash `prompt-cache-key.v1` — **APROVADO E IMPLEMENTADO (Q1)**
+`hashing.py`/`canonical.rs` documentavam (só em prosa) que floats com fração zero
+(`1.0`) são proibidos no v1 — mas nada os rejeitava, então um produtor JS (`1`) e
+o Python/Rust (`1.0`) divergiam silenciosamente na chave de cache (cache-miss
+cross-produtor = custo real de API pago sem sinal).
+
+**Decisão da auditoria (Q1): SIM — próximo trabalho de mérito** (único deferido
+com impacto de *correção*). **Implementado nesta PR:** ADR 0032 + validador
+compartilhado (`validate_cache_key`/`CacheKeyError` nos dois lados) chamado por
+`request_hash` (que passa a falhar: `Result` em Rust, `raise` em Python); o
+`CachedGenerator` degrada pulando o cache em chave proibida; fixtures ganharam
+`reject_cases` (regeneração não-circular, hashes válidos byte-idênticos) e os
+2 testes de paridade agora provam a recusa nos dois lados. **Merge é do dono**
+(contrato/ADR — ver nota de governança no topo).
 
 ### 2.4 Baixa severidade remanescente
 O restante do `docs/REVIEW-AUDITORIA-COMPLETA.md` (dos 239 achados, após os
@@ -82,20 +101,26 @@ São melhorias incrementais de manutenibilidade sem impacto de correção/segura
 melhor tratadas em lotes pequenos por módulo do que forçadas num churn amplo.
 Catálogo completo (arquivo:linha) já está em `REVIEW-AUDITORIA-COMPLETA.md §3`.
 
-## 3. Dúvidas de produto — aguardam sua decisão
+## 3. Decisões do dono (auditoria da rodada) — registradas
 
-1. **Guard numérico do hash (§2.3):** quer que eu abra um ADR + implemente a
-   rejeição de `1.0`/NaN/Inf no `prompt-cache-key.v1` (com regeneração de
-   fixtures e paridade)? É a única pendência com impacto de **correção**
-   (cache-miss cross-produtor silencioso), mas mexe em contrato.
-2. **Refactor mecânico `erro()`/`lock_store()` (§2.1):** vale o PR de baixo valor
-   / alto churn, ou deixamos como está? (Recomendação: deixar.)
-3. **Defaults de config agora env-ováveis (#60):** os defaults preservados
-   (`BTV_PG_MAX_CONNECTIONS=4`, `BTV_WEB_MAX_STEPS=30`, `BTV_WEB_MAX_TOKENS=4096`,
-   `BTV_WEB_CONTEXT_WINDOW=200000`) fazem sentido para o seu alvo de deploy, ou
-   quer outros defaults?
-4. **Splits estruturais (§2.2):** confirma que ficam presos ao gatilho "segundo
-   consumidor" de `pendencias.md:2182` (recomendação), ou quer antecipá-los?
+1. **Q1 — Guard numérico do hash: SIM.** Implementado nesta PR (§2.3, ADR 0032).
+   Único deferido com impacto de correção; feito no rito completo, **merge do
+   dono** por ser contrato. *Vencimento observado:* quanto mais produtores de
+   cache-key surgirem, mais caro fica o buraco — por isso foi priorizado.
+2. **Q2 — Refactor `erro()`/`lock_store()`: NÃO** (§2.1). Promovido de "adiado"
+   para **recusado com razão**, com cláusula de reabertura (pega carona se um
+   golden precisar ser regravado por outra razão).
+3. **Q3 — Defaults de config (#60): sem ação agora, adiado com gatilho.** Os
+   valores preservam o comportamento byte-a-byte; a pergunta "servem ao alvo de
+   deploy?" só tem resposta quando existir alvo de deploy. **Pertence ao pacote
+   de lançamento SaaS** (junto de E3s/E5s — observabilidade e quotas), onde os
+   números viram decisão de capacidade. Revisitar lá.
+4. **Q4 — Splits estruturais: mantém o gatilho, sem antecipação** (§2.2). Extração
+   sem segundo consumidor é custo sem comprador; a API dupla do `BtvStore` é
+   decisão registrada (B2). Quando o modo saas precisar do motor em processo
+   separado, a decomposição paga a si mesma e vira campanha própria com seus
+   portões.
 
-Enquanto não houver decisão, o estado atual é coerente e verde — nada aqui bloqueia
-o funcionamento; são escolhas de evolução.
+**Frentes vivas depois desta PR:** só a **bifurcação SaaS** (que engole Q3 e,
+eventualmente, Q4). O guard do hash (Q1) fecha aqui, aguardando só o merge do
+dono. O repositório segue verde; o resto são escolhas de evolução.

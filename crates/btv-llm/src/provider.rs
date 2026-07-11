@@ -25,8 +25,10 @@ pub struct LlmRequest {
 }
 
 impl LlmRequest {
-    /// Chave de cache do request (contrato `prompt-cache-key.v1`).
-    pub fn cache_key(&self) -> String {
+    /// Chave de cache do request (contrato `prompt-cache-key.v1`). `Err` quando
+    /// a entrada viola a restrição numérica do v1 (ex.: `temperature` 1.0) — o
+    /// chamador degrada pulando o cache em vez de gerar uma chave divergente.
+    pub fn cache_key(&self) -> Result<String, btv_schemas::CacheKeyError> {
         let temperature = self
             .temperature
             .map(|t| serde_json::json!(t))
@@ -53,5 +55,17 @@ mod tests {
             max_tokens: None,
         };
         assert_eq!(req.cache_key(), req.cache_key());
+        assert!(req.cache_key().is_ok(), "temperatura 0.7 é válida");
+    }
+
+    #[test]
+    fn cache_key_rejeita_temperatura_float_inteira() {
+        let req = LlmRequest {
+            model: "deepseek-chat".into(),
+            messages: serde_json::json!([{"role": "user", "content": "oi"}]),
+            temperature: Some(1.0),
+            max_tokens: None,
+        };
+        assert!(req.cache_key().is_err(), "temperatura 1.0 é proibida no v1");
     }
 }
