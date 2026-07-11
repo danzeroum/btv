@@ -30,6 +30,14 @@ from typing import Any, Optional
 
 from btv_squad.permission import PermissionClient, PermissionRequest
 
+# Limiares de score de confiança que definem o nível de autonomia (0..3):
+# score < 0.4 → 0, < 0.6 → 1, < 0.8 → 2, senão 3.
+_AUTONOMY_THRESHOLDS = (0.4, 0.6, 0.8)
+# Ajuste do score após cada ação real — assimétrico de propósito: a confiança
+# sobe devagar e cai rápido (perde-se mais fácil do que se ganha).
+_TRUST_REWARD = 0.02
+_TRUST_PENALTY = 0.1
+
 
 @dataclass
 class ProgressiveAutonomyManager:
@@ -52,13 +60,7 @@ class ProgressiveAutonomyManager:
 
     def _get_autonomy_level(self, agent: str) -> int:
         score = self.agent_trust_scores.get(agent, 0.5)
-        if score < 0.4:
-            return 0
-        if score < 0.6:
-            return 1
-        if score < 0.8:
-            return 2
-        return 3
+        return sum(1 for limiar in _AUTONOMY_THRESHOLDS if score >= limiar)
 
     async def execute_with_autonomy(self, agent: str, action: dict[str, Any]) -> dict[str, Any]:
         """Portão de aprovação — não executa a ação, só decide se ela pode
@@ -109,9 +111,9 @@ class ProgressiveAutonomyManager:
     def _update_score(self, agent: str, success: bool) -> float:
         score = self.agent_trust_scores.get(agent, 0.5)
         if success:
-            score = min(1.0, score + 0.02)
+            score = min(1.0, score + _TRUST_REWARD)
         else:
-            score = max(0.0, score - 0.1)
+            score = max(0.0, score - _TRUST_PENALTY)
         self.agent_trust_scores[agent] = score
         return score
 

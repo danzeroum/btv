@@ -19,7 +19,7 @@ from btv_squad.security import SecurityConfig
 
 try:
     import docker
-except Exception:  # pragma: no cover - dependência opcional
+except ImportError:  # pragma: no cover - dependência opcional
     docker = None
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,9 @@ class SecureToolSandbox:
             raise ValueError(f"Dangerous parameters detected for {tool_name}")
 
     def _validate_params_safety(self, params: dict[str, Any]) -> bool:
-        param_str = json.dumps(params, ensure_ascii=False)
+        # Mesma serialização canônica de `validate_tool_call` — os dois guards
+        # não podem divergir, senão um payload escapa de um deles.
+        param_str = SecurityConfig.canonical_params(params)
         for pattern in SecurityConfig.FORBIDDEN_PATTERNS:
             if re.search(pattern, param_str, re.IGNORECASE):
                 logger.error("Padrão proibido detectado na validação do sandbox: %s", pattern)

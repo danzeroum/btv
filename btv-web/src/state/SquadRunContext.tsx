@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useAppDispatch } from './AppContext'
+import { hhmm } from '../lib/time'
 import { ativarSquad, aprovarGate, pedirAjuste, type AtivarSquadPayload, type BtvRun } from '../api/btv'
 import {
   connectSquadEvents,
@@ -60,11 +61,6 @@ export interface SquadRunApi {
 }
 
 const SquadRunContext = createContext<SquadRunApi | null>(null)
-
-function hhmm(ts: string): string {
-  const m = ts.match(/T(\d{2}):(\d{2})/)
-  return m ? `${m[1]}:${m[2]}` : ts.slice(0, 5)
-}
 
 export function SquadRunProvider({ children }: { children: ReactNode }) {
   const [run, setRun] = useState<RunState | null>(null)

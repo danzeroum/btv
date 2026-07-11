@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
+from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -35,13 +36,10 @@ _SYSTEM_PROMPT = """Você é um designer de produto sênior (UX/UI). Dada uma ta
 }
 Todos os campos devem refletir a tarefa específica — não repita um design genérico."""
 
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
-
-
 class DesignerAgent(BaseAgent):
     """Produz artefatos de design reais via gateway LLM."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("designer")
         self.model = model
         self.design_patterns: list[str] = ["material", "fluent", "carbon"]
@@ -79,17 +77,7 @@ class DesignerAgent(BaseAgent):
         return design
 
     def _parse_design(self, raw_text: str) -> dict[str, Any]:
-        parsed: dict[str, Any] = {}
-        match = _JSON_BLOCK.search(raw_text)
-        if match:
-            try:
-                candidate = json.loads(match.group(0))
-                if isinstance(candidate, dict):
-                    parsed = candidate
-            except json.JSONDecodeError:
-                logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-        else:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
+        parsed = extract_json_object(raw_text)
 
         return {
             "pattern": parsed.get("pattern", "material"),

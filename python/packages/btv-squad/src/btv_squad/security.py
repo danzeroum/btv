@@ -9,6 +9,7 @@ qualquer chamada chegar ao `SecureToolSandbox`.
 
 from __future__ import annotations
 
+import json
 import re
 
 
@@ -42,10 +43,24 @@ class SecurityConfig:
     }
 
     @classmethod
+    def canonical_params(cls, params: dict[str, object]) -> str:
+        """Serialização única usada por TODOS os guards de padrão proibido.
+
+        Antes, `validate_tool_call` casava os padrões contra `str(params)`
+        (repr Python) e o `SecureToolSandbox` contra `json.dumps(...)` — duas
+        formas textuais do mesmo objeto, então um payload podia casar um guard
+        e escapar do outro. Uma serialização só fecha o buraco de bypass.
+        `default=str` garante que valores não-serializáveis nunca derrubem a
+        checagem (o `str(params)` anterior também nunca levantava).
+        """
+
+        return json.dumps(params, ensure_ascii=False, sort_keys=True, default=str)
+
+    @classmethod
     def validate_tool_call(cls, tool_name: str, params: dict[str, object]) -> tuple[bool, str]:
         if tool_name in cls.HIGH_RISK_TOOLS:
             return False, f"Tool {tool_name} requires human approval"
-        payload = str(params)
+        payload = cls.canonical_params(params)
         for pattern in cls.FORBIDDEN_PATTERNS:
             if re.search(pattern, payload, re.IGNORECASE):
                 return False, f"Forbidden pattern detected: {pattern}"

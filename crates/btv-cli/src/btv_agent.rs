@@ -210,13 +210,30 @@ async fn ativar_squad_handler(
         // golden de ativação é o juiz).
         use btv_domain::ports::PersonaRepository;
         let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-        let overrides = store
-            .list_overrides(&ctx, &template.id)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|o| (o.papel, o.prompt))
-            .collect();
-        let proprias = store.list_custom(&ctx, &template.id).unwrap_or_default();
+        // Falha de leitura das personas NÃO pode degradar em silêncio: ativar
+        // com override vazio produziria prompt padrão e hash de procedência
+        // MENTINDO sobre o que rodou. Aborta a ativação (500) em vez disso.
+        let overrides: std::collections::HashMap<String, String> =
+            match store.list_overrides(&ctx, &template.id) {
+                Ok(v) => v.into_iter().map(|o| (o.papel, o.prompt)).collect(),
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody::new("store_error", e.to_string())),
+                    )
+                        .into_response();
+                }
+            };
+        let proprias = match store.list_custom(&ctx, &template.id) {
+            Ok(v) => v,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("store_error", e.to_string())),
+                )
+                    .into_response();
+            }
+        };
         (overrides, proprias)
     };
     let template_nome = template.nome.clone();
@@ -915,12 +932,19 @@ async fn list_personas_handler(
             .into_response();
     };
     let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-    let overrides: std::collections::HashMap<String, String> = store
-        .list_overrides(&ctx, &template_id)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|o| (o.papel, o.prompt))
-        .collect();
+    // Erro de leitura vira 500, não um 200 com `editado:false` que mentiria
+    // dizendo que o usuário não tem overrides.
+    let overrides: std::collections::HashMap<String, String> =
+        match store.list_overrides(&ctx, &template_id) {
+            Ok(v) => v.into_iter().map(|o| (o.papel, o.prompt)).collect(),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody::new("store_error", e.to_string())),
+                )
+                    .into_response();
+            }
+        };
     let personas = template
         .papeis
         .iter()
@@ -939,7 +963,16 @@ async fn list_personas_handler(
             }
         })
         .collect();
-    let proprias = store.list_custom(&ctx, &template_id).unwrap_or_default();
+    let proprias = match store.list_custom(&ctx, &template_id) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody::new("store_error", e.to_string())),
+            )
+                .into_response();
+        }
+    };
     Json(PersonasResponse {
         template_id,
         personas,

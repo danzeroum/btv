@@ -234,11 +234,23 @@ impl SquadPool {
             .acquire_owned()
             .await
             .expect("semaphore do SquadPool nunca é fechado");
-        let slot = {
+        // O slot sai de `free` aqui, mas só volta via `SquadLease::drop` — que
+        // não existe se `acquire` sair cedo por erro de spawn/wait_ready. Sem
+        // guarda, cada falha vazaria um slot e, após `capacity` falhas, o
+        // `free.pop().expect(...)` derrubaria o processo. O `SlotGuard` devolve
+        // o slot em qualquer saída antecipada (erro ou panic); só é desarmado
+        // quando o `SquadLease` assume a posse.
+        let guard = {
             let mut free = self.free.lock().unwrap_or_else(|e| e.into_inner());
-            free.pop()
-                .expect("permit obtido implica slot livre disponível (invariante 1:1)")
+            let slot = free
+                .pop()
+                .expect("permit obtido implica slot livre disponível (invariante 1:1)");
+            SlotGuard {
+                pool: Arc::clone(self),
+                slot: Some(slot),
+            }
         };
+        let slot = guard.slot();
 
         let mut state = self.slot_states[slot].lock().await;
         if let Some(s) = state.as_mut() {
@@ -247,7 +259,7 @@ impl SquadPool {
                 drop(state);
                 return Ok(SquadLease {
                     pool: Arc::clone(self),
-                    slot,
+                    slot: guard.disarm(),
                     client,
                     _permit: permit,
                 });
@@ -265,7 +277,7 @@ impl SquadPool {
         drop(state);
         Ok(SquadLease {
             pool: Arc::clone(self),
-            slot,
+            slot: guard.disarm(),
             client: ready,
             _permit: permit,
         })
@@ -289,6 +301,35 @@ impl SquadPool {
             s.supervisor.kill().await?;
         }
         Ok(())
+    }
+}
+
+/// Retém o slot já retirado de `free` enquanto o [`SquadLease`] ainda não foi
+/// construído. Se `acquire` retornar cedo (erro de spawn/wait_ready) ou entrar
+/// em panic, o `Drop` devolve o slot à lista de livres, mantendo a invariante
+/// 1:1 com o semáforo. `disarm` transfere a posse ao lease no caminho de
+/// sucesso, sem devolver o slot.
+struct SlotGuard {
+    pool: Arc<SquadPool>,
+    slot: Option<usize>,
+}
+
+impl SlotGuard {
+    fn slot(&self) -> usize {
+        self.slot.expect("slot ainda retido pelo guard")
+    }
+
+    fn disarm(mut self) -> usize {
+        self.slot.take().expect("slot já transferido")
+    }
+}
+
+impl Drop for SlotGuard {
+    fn drop(&mut self) {
+        if let Some(slot) = self.slot.take() {
+            let mut free = self.pool.free.lock().unwrap_or_else(|e| e.into_inner());
+            free.push(slot);
+        }
     }
 }
 
@@ -335,6 +376,33 @@ mod tests {
             .arg("--version")
             .output()
             .is_err()
+    }
+
+    /// Regressão do vazamento de slot: um `acquire` que falha em spawn/wait_ready
+    /// (aqui, workspace Python inexistente) precisa devolver o slot à `free`.
+    /// Antes do `SlotGuard`, o slot vazava e o SEGUNDO `acquire` batia no
+    /// `free.pop().expect(...)` (panic, derrubando o processo). Com o guard,
+    /// as três tentativas são `Err` limpos e a invariante 1:1 se mantém.
+    #[tokio::test]
+    async fn acquire_que_falha_devolve_o_slot_a_free() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pool = Arc::new(SquadPool::new(
+            tmp.path().join("workspace-inexistente"),
+            tmp.path().to_path_buf(),
+            tmp.path().join("core.sock"),
+            "modelo-inexistente".into(),
+            1,
+            Duration::from_millis(150),
+        ));
+        for tentativa in 0..3 {
+            let r = pool.acquire().await;
+            assert!(
+                r.is_err(),
+                "acquire {tentativa} deveria falhar sem workspace Python"
+            );
+            let livres = pool.free.lock().unwrap_or_else(|e| e.into_inner()).len();
+            assert_eq!(livres, 1, "o slot deve voltar para free após a falha");
+        }
     }
 
     /// Fronteira da Onda 3 (PromptForge): 3 requisições sequenciais não

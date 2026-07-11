@@ -40,10 +40,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
+from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,6 @@ Responda SOMENTE com um objeto JSON:
   "agent_scores": {"nome_do_agente": 0.0}
 }
 Avalie cada resultado pelo conteúdo real reportado (sucesso, confiança declarada, presença de erros) — não aprove por padrão. Quando houver evidência determinística de verificação (`verification_evidence` — typecheck/test/lint/SAST reais), pese o veredito e os achados dela — um veredito "fail" ou achados de severidade alta pesam contra a aprovação, mas a decisão final ainda é sua, considerando o contexto da tarefa. Os agentes reportam apenas o texto que AFIRMAM ter produzido — nenhuma ferramenta grava em disco nesta etapa. NUNCA afirme que um artefato existe, foi salvo ou foi persistido no filesystem; isso não está nos resultados que você recebe."""
-
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 _DANGEROUS_PATTERNS = [
     ("eval(", "Code injection risk"),
@@ -119,7 +118,7 @@ def _claims_completion_without_write_evidence(results: list[dict[str, Any]]) -> 
 class AuditorAgent(BaseAgent):
     """Especialista em segurança e qualidade com veredito real via gateway."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("auditor")
         self.model = model
         self.validation_history: list[dict[str, Any]] = []
@@ -262,13 +261,4 @@ class AuditorAgent(BaseAgent):
         }
 
     def _extract_json(self, raw_text: str) -> dict[str, Any]:
-        match = _JSON_BLOCK.search(raw_text)
-        if not match:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
-            return {}
-        try:
-            candidate = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-            return {}
-        return candidate if isinstance(candidate, dict) else {}
+        return extract_json_object(raw_text)

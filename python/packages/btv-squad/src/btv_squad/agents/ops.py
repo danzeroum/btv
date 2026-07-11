@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
+from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -41,13 +42,10 @@ _SYSTEM_PROMPT = """Você é um engenheiro de operações sênior (deploy e obse
 }
 Dimensione scaling, health checks e alertas para o serviço descrito — não use valores genéricos que serviriam para qualquer serviço."""
 
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
-
-
 class OpsAgent(BaseAgent):
     """Planeja deploy e monitoramento reais via gateway LLM."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("ops")
         self.model = model
         self.deployment_strategies = ["blue-green", "canary", "rolling"]
@@ -83,17 +81,7 @@ class OpsAgent(BaseAgent):
         return plan
 
     def _parse_plan(self, raw_text: str) -> dict[str, Any]:
-        parsed: dict[str, Any] = {}
-        match = _JSON_BLOCK.search(raw_text)
-        if match:
-            try:
-                candidate = json.loads(match.group(0))
-                if isinstance(candidate, dict):
-                    parsed = candidate
-            except json.JSONDecodeError:
-                logger.warning("Resposta do modelo não é JSON válido: %r", raw_text[:200])
-        else:
-            logger.warning("Resposta do modelo não contém um bloco JSON: %r", raw_text[:200])
+        parsed = extract_json_object(raw_text)
 
         return {
             "strategy": parsed.get("strategy", "blue-green"),

@@ -32,6 +32,7 @@ from typing import Any, Optional
 
 from btv_squad.agents import ArchitectAgent, AuditorAgent, DesignerAgent, DeveloperAgent, OpsAgent
 from btv_squad.chains import ResilientPromptChain
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.consensus import Proposal, WeightedConsensusEngine
 from btv_squad.evaluation import ContinuousEvaluator
 from btv_squad.gateway import GatewayClient
@@ -86,7 +87,7 @@ class UnifiedOrchestrator:
         self,
         gateway: GatewayClient,
         permission_client: Optional[PermissionClient] = None,
-        model: str = "claude-sonnet-5",
+        model: str = DEFAULT_MODEL,
         memory: Optional[AgentMemorySystem] = None,
         tool_client: Optional[ToolClient] = None,
     ) -> None:

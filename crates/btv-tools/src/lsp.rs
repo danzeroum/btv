@@ -36,6 +36,9 @@ const DIAG_BUDGET: Duration = Duration::from_secs(12);
 /// pendurar a thread da consulta para sempre.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Intervalo de polling entre tentativas enquanto o server LSP ainda indexa.
+const LSP_POLL_INTERVAL: Duration = Duration::from_millis(300);
+
 /// Um language server declarado pelo usuário: o comando que o sobe via stdio, e
 /// a raiz do workspace que ele deve analisar.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -375,19 +378,7 @@ impl LspSession {
         // Enquanto o rust-analyzer indexa, a resposta vem vazia; re-tenta. O
         // mesmo vale para ContentModified/ServerCancelled: o server invalidou o
         // request no meio da indexação e a spec LSP manda o cliente re-tentar.
-        let start = Instant::now();
-        loop {
-            match proc.request(method, params.clone(), REQUEST_TIMEOUT) {
-                Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
-                Err(e) => return Err(e),
-                Ok(res) => {
-                    if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
-                        return Ok(res);
-                    }
-                }
-            }
-            std::thread::sleep(Duration::from_millis(300));
-        }
+        retry_until_ready(|| proc.request(method, params.clone(), REQUEST_TIMEOUT))
     }
 
     /// Busca símbolos por NOME (`workspace/symbol`): o server acha as
@@ -397,23 +388,13 @@ impl LspSession {
         let mut guard = self.proc.lock().map_err(|_| "lock LSP envenenado")?;
         Self::ensure_started(&mut guard, &self.config)?;
         let proc = guard.as_mut().expect("proc iniciado");
-        let start = Instant::now();
-        loop {
-            match proc.request(
+        retry_until_ready(|| {
+            proc.request(
                 "workspace/symbol",
                 json!({ "query": name }),
                 REQUEST_TIMEOUT,
-            ) {
-                Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
-                Err(e) => return Err(e),
-                Ok(res) => {
-                    if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
-                        return Ok(res);
-                    }
-                }
-            }
-            std::thread::sleep(Duration::from_millis(300));
-        }
+            )
+        })
     }
 
     /// Diagnósticos do arquivo. São empurrados de forma assíncrona pelo server
@@ -696,6 +677,25 @@ fn respond_server_request(w: &mut impl Write, m: &Value) -> Result<(), String> {
 
 fn is_empty(v: &Value) -> bool {
     v.is_null() || v.as_array().map(|a| a.is_empty()).unwrap_or(false)
+}
+
+/// Re-tenta `request` enquanto o server indexa (resultado vazio) ou emite erros
+/// transitórios (ContentModified/ServerCancelled), até assentar ou estourar
+/// `READY_TIMEOUT`. Centraliza o loop idêntico de `position_query` e `symbol`.
+fn retry_until_ready(mut request: impl FnMut() -> Result<Value, String>) -> Result<Value, String> {
+    let start = Instant::now();
+    loop {
+        match request() {
+            Err(e) if is_retryable_lsp_error(&e) && start.elapsed() <= READY_TIMEOUT => {}
+            Err(e) => return Err(e),
+            Ok(res) => {
+                if !is_empty(&res) || start.elapsed() > READY_TIMEOUT {
+                    return Ok(res);
+                }
+            }
+        }
+        std::thread::sleep(LSP_POLL_INTERVAL);
+    }
 }
 
 /// Erros que a spec LSP define como re-tentáveis: `ContentModified` (-32801,

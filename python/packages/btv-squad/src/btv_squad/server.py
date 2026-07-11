@@ -32,6 +32,7 @@ import grpc
 
 from btv_proto import squad_pb2, squad_pb2_grpc
 
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.grpc_clients import GrpcGatewayClient, GrpcPermissionClient, GrpcToolClient
 from btv_squad.memory import AgentMemorySystem
 from btv_squad.orchestrator import UnifiedOrchestrator
@@ -141,7 +142,7 @@ def _verification_evidence_from_request(request: Any) -> tuple[Optional[dict[str
 class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
     """Roda o orquestrador e streama seus eventos como `SquadEvent`."""
 
-    def __init__(self, core_socket: str, model: str = "claude-sonnet-5", memory_dir: Optional[Path] = None) -> None:
+    def __init__(self, core_socket: str, model: str = DEFAULT_MODEL, memory_dir: Optional[Path] = None) -> None:
         self.core_socket = core_socket
         self.model = model
         self.memory_dir = memory_dir
@@ -233,7 +234,7 @@ class SquadServicer(squad_pb2_grpc.SquadServiceServicer):
             await channel.close()
 
 
-async def serve(socket_path: str, core_socket: str, model: str = "claude-sonnet-5") -> None:
+async def serve(socket_path: str, core_socket: str, model: str = DEFAULT_MODEL) -> None:
     if os.path.exists(socket_path):
         os.remove(socket_path)
     server = grpc.aio.server()
@@ -250,7 +251,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sidecar gRPC do Squad")
     parser.add_argument("--socket", required=True, help="caminho do UDS do SquadService")
     parser.add_argument("--core-socket", required=True, help="caminho do UDS do CoreService (Rust)")
-    parser.add_argument("--model", default="claude-sonnet-5")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     asyncio.run(serve(args.socket, args.core_socket, args.model))
