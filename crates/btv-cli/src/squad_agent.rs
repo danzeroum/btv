@@ -564,6 +564,26 @@ async fn run_squad_task<B>(
     hub.finish_task(&task_id);
 }
 
+/// Prazo para o core-server (gRPC sobre UDS) criar o socket antes de desistir.
+const SOCKET_READY_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Espera o arquivo de socket aparecer, com veredito explícito. Diferente do
+/// loop cego anterior (`for _ in 0..100 { … }`), FALHA se o socket nunca surgir
+/// no prazo, em vez de seguir e estourar opaco depois no `connect`.
+async fn wait_for_socket(path: &std::path::Path, timeout: Duration) -> Result<(), String> {
+    let start = std::time::Instant::now();
+    while !path.exists() {
+        if start.elapsed() > timeout {
+            return Err(format!(
+                "socket {} não apareceu em {timeout:?}",
+                path.display()
+            ));
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_squad_task_inner<B>(
     hub: SquadHub,
@@ -596,12 +616,7 @@ where
         tool_permissions,
     );
     let core_task = tokio::spawn(serve_core(backend, core_sock.clone()));
-    for _ in 0..100 {
-        if core_sock.exists() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    wait_for_socket(&core_sock, SOCKET_READY_TIMEOUT).await?;
 
     // Verificação de CÓDIGO (cargo test/clippy/fmt sobre o workspace) só faz
     // sentido para squads de engenharia (CLI `btv squad` / `/api/squad/run`,
@@ -1013,6 +1028,27 @@ pub fn default_hub() -> SquadHub {
 mod tests {
     use super::*;
     use crate::test_support::lock_cwd;
+
+    #[tokio::test]
+    async fn wait_for_socket_estoura_quando_o_socket_nunca_aparece() {
+        let dir = tempfile::tempdir().unwrap();
+        let inexistente = dir.path().join("nunca.sock");
+        let r = wait_for_socket(&inexistente, Duration::from_millis(80)).await;
+        assert!(
+            r.is_err(),
+            "socket ausente deve virar erro, não seguir calado"
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_for_socket_ok_quando_o_socket_existe() {
+        let dir = tempfile::tempdir().unwrap();
+        let existe = dir.path().join("existe.sock");
+        std::fs::write(&existe, b"").unwrap();
+        assert!(wait_for_socket(&existe, Duration::from_millis(80))
+            .await
+            .is_ok());
+    }
 
     fn uv_missing() -> bool {
         std::process::Command::new("uv")
