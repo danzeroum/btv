@@ -19,6 +19,7 @@ from typing import Any
 
 from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ Dimensione scaling, health checks e alertas para o serviço descrito — não us
 class OpsAgent(BaseAgent):
     """Planeja deploy e monitoramento reais via gateway LLM."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("ops")
         self.model = model
         self.deployment_strategies = ["blue-green", "canary", "rolling"]

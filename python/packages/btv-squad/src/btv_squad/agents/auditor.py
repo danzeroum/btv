@@ -44,6 +44,7 @@ from typing import Any
 
 from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ def _claims_completion_without_write_evidence(results: list[dict[str, Any]]) -> 
 class AuditorAgent(BaseAgent):
     """Especialista em segurança e qualidade com veredito real via gateway."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("auditor")
         self.model = model
         self.validation_history: list[dict[str, Any]] = []

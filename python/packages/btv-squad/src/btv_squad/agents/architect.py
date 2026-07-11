@@ -19,6 +19,7 @@ from typing import Any
 
 from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ Todos os campos devem refletir o problema específico recebido — nunca liste c
 class ArchitectAgent(BaseAgent):
     """Arquiteto sênior capaz de análise Chain-of-Thought real."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         super().__init__("architect")
         self.model = model
         self.reasoning_history: list[dict[str, Any]] = []

@@ -29,6 +29,7 @@ from typing import Any, Optional, Protocol
 
 from btv_squad._json import extract_json_object
 from btv_squad.agents.base import BaseAgent
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 from btv_squad.tool_client import ToolCallRequest, ToolClient
 
@@ -66,7 +67,7 @@ class ReviewSystem(Protocol):
 class DeveloperAgent(BaseAgent):
     """Desenvolvedor full-stack que implementa tarefas via gateway LLM real."""
 
-    def __init__(self, model: str = "claude-sonnet-5", review_system: Optional[ReviewSystem] = None) -> None:
+    def __init__(self, model: str = DEFAULT_MODEL, review_system: Optional[ReviewSystem] = None) -> None:
         super().__init__("developer")
         self.model = model
         self.review_system = review_system

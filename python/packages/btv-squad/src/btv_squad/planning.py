@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from btv_squad._json import extract_json_object
+from btv_squad.config import DEFAULT_MODEL
 from btv_squad.gateway import LlmRequest
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ Responda SOMENTE com um objeto JSON (sem markdown):
 class AdaptivePlanner:
     """Cria planos adaptativos reais e recupera de falhas via gateway LLM."""
 
-    def __init__(self, model: str = "claude-sonnet-5") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
         self.model = model
         self.gateway = None  # injetado preguiçosamente (mesmo padrão de BaseAgent)
         self.plan_history: list[dict[str, Any]] = []
