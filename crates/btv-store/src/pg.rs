@@ -51,6 +51,16 @@ fn storage(e: impl std::fmt::Display) -> RepositoryError {
     RepositoryError::Storage(e.to_string())
 }
 
+/// Tamanho do pool de conexões Postgres (modo SaaS). Overridável por ambiente
+/// sem recompilar — `BTV_PG_MAX_CONNECTIONS` (default 4). Valor inválido ou
+/// ausente cai no default.
+fn pool_max_connections() -> u32 {
+    std::env::var("BTV_PG_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(4)
+}
+
 /// Fixa o tenant da TRANSAÇÃO para as policies de RLS (`is_local = true`:
 /// evapora no COMMIT/ROLLBACK — nada vaza para a próxima transação da mesma
 /// conexão do pool).
@@ -124,7 +134,7 @@ impl PgStore {
             .map_err(storage)?;
         let pool = rt.block_on(async {
             let pool = PgPoolOptions::new()
-                .max_connections(4)
+                .max_connections(pool_max_connections())
                 .connect_with(opts)
                 .await
                 .map_err(storage)?;

@@ -30,6 +30,21 @@ use std::time::Duration;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt as _;
 
+/// Lê `key` do ambiente e faz parse; ausente ou inválido cai no `default`.
+/// Base dos overrides 12-Factor dos limites da sessão web (antes hardcoded).
+fn env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+/// Modelo LLM padrão da sessão de código pelo navegador quando o corpo não o
+/// especifica. Overridável por `BTV_DEFAULT_MODEL` (default `claude-sonnet-5`).
+fn default_web_model() -> String {
+    std::env::var("BTV_DEFAULT_MODEL").unwrap_or_else(|_| "claude-sonnet-5".into())
+}
+
 /// Eventos observáveis de uma sessão web — espelha `LoopEvent` (ver `From`
 /// abaixo) mais os eventos que só existem no servidor: pedido de permissão
 /// pendente, fim, erro. `#[serde(tag = "type")]` dá um contrato estável por
@@ -397,8 +412,8 @@ pub fn spawn_session_task<G>(
                 permissions,
                 model,
                 system,
-                max_steps: 30,
-                max_tokens: 4096,
+                max_steps: env_or("BTV_WEB_MAX_STEPS", 30usize),
+                max_tokens: env_or("BTV_WEB_MAX_TOKENS", 4096u32),
             };
             let mut resolver = WebPermissionResolver {
                 hub: hub.clone(),
@@ -550,12 +565,12 @@ async fn send_message_handler(
     }
 
     let opts = crate::RunOpts {
-        model: body.model.unwrap_or_else(|| "claude-sonnet-5".into()),
+        model: body.model.unwrap_or_else(default_web_model),
         agent: body.agent.unwrap_or_else(|| "build".into()),
         yes: false,
         no_cache: false,
         session: Some(session_id.clone()),
-        context_window: 200_000,
+        context_window: env_or("BTV_WEB_CONTEXT_WINDOW", 200_000usize),
     };
     let root = match std::env::current_dir() {
         Ok(r) => r,
