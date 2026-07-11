@@ -28,6 +28,11 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 07 | [Atividades](diagramas/07-atividades.md) | Orquestração do squad (consenso/HITL/fallback) e ciclo de ferramenta |
 | 08 | [Implantação](diagramas/08-implantacao.md) | Local-first + SaaS opcional + esqueleto de infra e CI |
 | 09 | [Análise crítica](diagramas/09-analise-critica.md) | Coesão, acoplamento, oportunidades de refatoramento |
+| 10 | [Modelo C4](diagramas/10-c4-modelo.md) | Contexto → Contêiner → Componente (Rust, Python, SPA) |
+| 11 | [Modelo de dados (ER)](diagramas/11-modelo-de-dados.md) | Esquema de persistência: produto, ledger, event store, telemetria, sessões PG |
+| 12 | [Máquinas de estado](diagramas/12-maquinas-de-estado.md) | RunStatus, permissão, handoff, verdict, degradação, sidecar, sessão web |
+| 13 | [Módulos por crate (Rust)](diagramas/13-modulos-rust.md) | Estrutura interna dos 14 crates |
+| 14 | [Módulos Python e frontend](diagramas/14-modulos-python-e-frontend.md) | Estrutura interna dos 5 pacotes Python e das 2 SPAs |
 
 ### Parte II — Referência detalhada (`referencia/`)
 
@@ -40,6 +45,23 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 14 | [Endpoints HTTP](referencia/14-endpoints-http.md) | Tabela completa REST + SSE, com o handler Rust e o consumidor TS |
 | 15 | [ADRs](referencia/15-adrs.md) | Resumo das 32 decisões de arquitetura |
 | 16 | [Glossário](referencia/16-glossario.md) | Termos do domínio e da plataforma |
+
+### Parte III — Mapeamento de dados (`dados/`)
+
+Dicionário de dados exaustivo: todos os dados de **entrada**, **saída** e **processamento
+intermediário** de cada módulo (leitura linha-a-linha), incluindo dados locais descartados.
+
+| # | Documento | Escopo |
+|---|---|---|
+| 00 | [Mapa de dados do sistema](dados/00-mapa-de-dados.md) | Metodologia, mapa global de fluxo, reservatórios, env vars, fronteiras `wire` |
+| 10 | [Domínio e contratos Rust](dados/10-rust-dominio-e-contratos.md) | btv-domain, btv-schemas |
+| 11 | [Core e gateway Rust](dados/11-rust-core-e-llm.md) | btv-core, btv-llm |
+| 12 | [Tools e verify Rust](dados/12-rust-tools-e-verify.md) | btv-tools, btv-verify |
+| 13 | [Store, proto e sidecar Rust](dados/13-rust-store-proto-sidecar.md) | btv-store, btv-proto, btv-sidecar |
+| 14 | [CLI Rust](dados/14-rust-cli.md) | btv-cli (composition root) |
+| 15 | [Server e demais Rust](dados/15-rust-server-e-outros.md) | btv-server, btv-tui, btv-golden, btv-contract |
+| 16 | [Python](dados/16-python.md) | os 5 pacotes |
+| 17 | [TypeScript e HTML](dados/17-typescript-e-html.md) | web/, btv-web/ |
 
 ---
 
