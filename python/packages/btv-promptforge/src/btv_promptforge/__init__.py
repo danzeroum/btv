@@ -7,15 +7,23 @@ gateway Rust (`prompt-cache-key.v1`).
 
 from btv_promptforge.generators import Field as GeneratorField
 from btv_promptforge.generators import Generator, GENERATORS
-from btv_promptforge.hashing import canonical_json, request_hash, sha256_hex
+from btv_promptforge.hashing import (
+    CacheKeyError,
+    canonical_json,
+    request_hash,
+    sha256_hex,
+    validate_cache_key,
+)
 from btv_promptforge.lint import lint_prompt
 
 __all__ = [
     "GENERATORS",
+    "CacheKeyError",
     "Generator",
     "GeneratorField",
     "canonical_json",
     "lint_prompt",
     "request_hash",
     "sha256_hex",
+    "validate_cache_key",
 ]

@@ -1,5 +1,5 @@
 {
-  "$comment": "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por btv-schemas (Rust, tests/parity.rs) e btv_promptforge (Python, tests/test_hashing.py). Regeneração: just gen-fixtures.",
+  "$comment": "Fixtures de paridade do contrato prompt-cache-key.v1. Validadas por btv-schemas (Rust, tests/parity.rs) e btv_promptforge (Python, tests/test_hashing.py). `cases` = entradas válidas com sha256; `reject_cases` = entradas proibidas (ADR 0032) que ambos os lados devem recusar. Regeneração: just gen-fixtures.",
   "cases": [
     {
       "name": "simples",
@@ -93,6 +93,39 @@
       ],
       "temperature": 1,
       "sha256": "c0a36a55a3b663bb6b79587b14a1d529d4799f21a09764e87589b0527c7954c7"
+    }
+  ],
+  "reject_cases": [
+    {
+      "name": "temperatura-float-inteira",
+      "messages": [
+        {
+          "role": "user",
+          "content": "oi"
+        }
+      ],
+      "temperature": 1.0
+    },
+    {
+      "name": "temperatura-zero-float",
+      "messages": [
+        {
+          "role": "user",
+          "content": "oi"
+        }
+      ],
+      "temperature": 0.0
+    },
+    {
+      "name": "float-inteiro-aninhado-em-messages",
+      "messages": [
+        {
+          "role": "user",
+          "content": "x",
+          "n": 3.0
+        }
+      ],
+      "temperature": 0.5
     }
   ]
 }
