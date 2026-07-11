@@ -489,7 +489,11 @@ fn spawn_message_task(
                 &mut resolver,
                 &mut on_event,
             ));
-            let _persisted = durable.persist_new().unwrap_or(0);
+            if let Err(e) = durable.persist_new() {
+                eprintln!(
+                    "web_agent: falha ao persistir a sessão durável ({e}) — o histórico da conversa pode não ter sido salvo"
+                );
+            }
             Ok((result?.steps, ledger_session))
         })();
         match outcome {

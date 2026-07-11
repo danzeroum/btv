@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Optional
 
@@ -30,7 +31,10 @@ from btv_squad.memory import AgentMemorySystem
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+try:
+    VERSION = version("btv-squad")
+except PackageNotFoundError:  # pragma: no cover - fora de um ambiente instalado
+    VERSION = "0.1.0"
 
 
 def _summarize_by_agent(records: list[dict[str, Any]]) -> list[memory_pb2.MemorySummary]:
@@ -112,7 +116,7 @@ def main() -> None:
         "--memory-dir", default=None, help="diretório de armazenamento (default: .btv/squad-memory)"
     )
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=os.environ.get("BTV_LOG_LEVEL", "INFO").upper())
     asyncio.run(serve(args.socket, args.memory_dir))
 
 

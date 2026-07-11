@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import logging
 import os
+from importlib.metadata import PackageNotFoundError, version
 
 import grpc
 
@@ -25,7 +26,10 @@ from btv_promptforge.lint import lint_prompt
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+try:
+    VERSION = version("btv-promptforge")
+except PackageNotFoundError:  # pragma: no cover - fora de um ambiente instalado
+    VERSION = "0.1.0"
 
 
 class PromptForgeServicer(promptforge_pb2_grpc.PromptForgeServiceServicer):
@@ -94,7 +98,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sidecar gRPC do PromptForge")
     parser.add_argument("--socket", required=True, help="caminho do Unix Domain Socket")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=os.environ.get("BTV_LOG_LEVEL", "INFO").upper())
     asyncio.run(serve(args.socket))
 
 

@@ -519,7 +519,13 @@ fn registrar_entregas(
             return;
         }
     };
-    let papeis: Vec<String> = serde_json::from_str(&run.papeis_json).unwrap_or_default();
+    let papeis: Vec<String> = serde_json::from_str(&run.papeis_json).unwrap_or_else(|e| {
+        eprintln!(
+            "btv: papeis_json malformado no run {} ({e}) — trilha de procedência degradada",
+            run.task_id
+        );
+        Vec::new()
+    });
     let trilha = format!(
         "{} · {} gate(s) aprovado(s) por você",
         papeis.join(" → "),

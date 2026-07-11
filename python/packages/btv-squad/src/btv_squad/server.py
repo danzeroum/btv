@@ -25,6 +25,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Optional
 
@@ -41,7 +42,10 @@ from btv_squad.verification import VerificationEvidence
 
 logger = logging.getLogger(__name__)
 
-VERSION = "0.1.0"
+try:
+    VERSION = version("btv-squad")
+except PackageNotFoundError:  # pragma: no cover - fora de um ambiente instalado
+    VERSION = "0.1.0"
 
 _PHASE = {
     "start": squad_pb2.Handoff.Phase.START,
@@ -253,7 +257,7 @@ def main() -> None:
     parser.add_argument("--core-socket", required=True, help="caminho do UDS do CoreService (Rust)")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=os.environ.get("BTV_LOG_LEVEL", "INFO").upper())
     asyncio.run(serve(args.socket, args.core_socket, args.model))
 
 
