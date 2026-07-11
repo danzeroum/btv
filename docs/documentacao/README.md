@@ -28,6 +28,11 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 07 | [Atividades](diagramas/07-atividades.md) | Orquestração do squad (consenso/HITL/fallback) e ciclo de ferramenta |
 | 08 | [Implantação](diagramas/08-implantacao.md) | Local-first + SaaS opcional + esqueleto de infra e CI |
 | 09 | [Análise crítica](diagramas/09-analise-critica.md) | Coesão, acoplamento, oportunidades de refatoramento |
+| 10 | [Modelo C4](diagramas/10-c4-modelo.md) | Contexto → Contêiner → Componente (Rust, Python, SPA) |
+| 11 | [Modelo de dados (ER)](diagramas/11-modelo-de-dados.md) | Esquema de persistência: produto, ledger, event store, telemetria, sessões PG |
+| 12 | [Máquinas de estado](diagramas/12-maquinas-de-estado.md) | RunStatus, permissão, handoff, verdict, degradação, sidecar, sessão web |
+| 13 | [Módulos por crate (Rust)](diagramas/13-modulos-rust.md) | Estrutura interna dos 14 crates |
+| 14 | [Módulos Python e frontend](diagramas/14-modulos-python-e-frontend.md) | Estrutura interna dos 5 pacotes Python e das 2 SPAs |
 
 ### Parte II — Referência detalhada (`referencia/`)
 
