@@ -2,7 +2,7 @@
 
 Mapa exaustivo dos dados que circulam nos DOIS SPAs em `/home/user/btv`:
 
-- **`web/`** — console dev, servido pelo `btv dashboard` sob `/dev` (`base: './'`, sem roteamento por URL). ~22 módulos `api/*`.
+- **`web/`** — console dev, servido pelo `btv dashboard` sob `/dev` (`base: './'`, sem roteamento por URL). 21 módulos `api/*`.
 - **`btv-web/`** — produto BuildToValue, SPA raiz `/`. 5 módulos `api/*`; Designer sobre a lib agnóstica `@bpmn-react/*` (submodule `vendor/bpmn`).
 
 Ambos falam com o MESMO backend real via proxy `/api → http://127.0.0.1:7878`. Nenhuma API key vive no navegador (fronteira ADR 0001: keys só no processo Rust).
@@ -714,7 +714,7 @@ Fluxo: grafo desenhado → etapas da esteira e descrição executável.
 | `components/wizard/Wizard.tsx` (U2) | `template` (do TemplatesContext via `wizardTemplateId`); estado local `step`/`papeisOff`/`refs:RefItem[]`/`answers[]`/`ativando`/`erroAtivacao` | `ativar(template,{briefing:[{label,resposta}],refs:string[],papeis_off:number[]})` → ativação real; `PAPEL_DESCS` const exportada |
 | `screens/user/Vivo.tsx` (U3) | SquadRunContext (run/view/feed/chat), `atividadeAtual(events)`, `listDeliverables` (conta `artefatosDaTask` por task); `filaHint` (timeout 5s, capacidade 1) | `aprovar()`, `ajustar(txt)`, `enviarChat(v)`, `encerrar()`; render esteira/gate/cockpit/feed; aviso "sem artefato real" se done+0 |
 | `screens/user/Biblioteca.tsx` (U4) | `listDeliverables` → `items`; `useTemplates.byId` (cor/formatos); agrupa por `template_id` | href `deliverableDownloadUrl(id)`; `emBreve` = binário sem conversor (png/midi) desabilita export |
-| `screens/user/Minhas.tsx` (U6) | `listRuns` → `runs`, `listDeliverables` → `entregas`; SquadRunContext (liveRun/view); derivados `status`/`pct`/`isGate`/`numEntregas`/`semArtefato` | ações por status: SET_SCREEN vivo/biblioteca, `abrirRun(r,template)` (reconectar), OPEN_WIZARD (reativar) |
+| `screens/user/Minhas.tsx` (U6) | `carregarMinhas` (`Promise.all[listRuns, listDeliverables]`) via `useAsyncAction` → `AsyncStatus` (idle/loading/error/success unificados, F1); SquadRunContext (liveRun/view); derivados `status`/`pct`/`isGate`/`numEntregas`/`semArtefato` | ações por status: SET_SCREEN vivo/biblioteca, `abrirRun(r,template)` (reconectar), OPEN_WIZARD (reativar); tokens de feedback (`--ok-bg`/`--err-bg`) no lugar de hexes |
 | `screens/user/Personas.tsx` (U7) | `fetchPersonas(templateId)` → `data{personas,proprias}`; `useTemplates`; estado `templateId` | `setPersonaOverride`(onBlur), `restorePersona`/`restoreAllPersonas`, `createCustomPersona`/`updateCustomPersona`/`deleteCustomPersona`; recarrega após cada |
 | `screens/user/Designer.tsx` (U5) | `useTemplates`, estado `diagram:BpmnDiagram`/`nome`/`base`/`audit:AuditItem[]`/`salvo`/`erro`; memos `etapas`/`ordem`; `AuditLedger`+`VersionRegistry` (refs da lib) | `POST /api/btv/designer/flows` body `{nome,diagram,versao_semantica,snapshot_hash,audit_head,audit_len}` → `{seq,diagram_sha256}` (salvar+ledger `btv.flow_saved`); `ativarTeste(nome,etapas,descricao)` (▶ Testar); `registrar()` alimenta AuditLedger hash-encadeado |
 
@@ -727,8 +727,8 @@ Fluxo: grafo desenhado → etapas da esteira e descrição executável.
 | `screens/admin/Providers.tsx` (A3) | `fetchProviders`+`fetchRateLimits` | — (read-only; uso ao vivo não fabricado, NotaHonesta) |
 | `screens/admin/Permissoes.tsx` (A4) | `fetchMatrix`+`fetchRules`; `confirmar` (mudança pendente); `TOOL_DESC` | `setRule(profile,tool,decision)` (allow→deny→ask→allow), `revokeRule(id)`; vale imediatamente |
 | `screens/admin/Modelos.tsx` (A5) | `fetchPublicacao`+`fetchLedger(100)` (filtra `btv.flow_saved`); `useTemplates` | `setPublicacao(id,!publicado)`; fluxos do Designer como rascunhos no topo |
-| `screens/admin/Usuarios.tsx` (A6) | `fetchUsers` → users; refs de inputs; estado `ativo`/`desafio`/`pinErro` | `createUser`, `setUserAtivo`, `deleteUser`, `verifyUserPin`; PIN opcional (1º user = admin) |
-| `screens/admin/comum.tsx` | props locais | `StatCard`/`Pill`/`Toggle`/`ErroBox`/`NotaHonesta` (primitivos de render, sem dados) |
+| `screens/admin/Usuarios.tsx` (A6) | `fetchUsers` → users; refs de inputs; estado `ativo`/`desafio`/`pinErro`/`removendo` | `createUser`, `setUserAtivo`, `deleteUser`, `verifyUserPin`; remoção via `ConfirmModal` (substitui `window.confirm` — F4); PIN opcional (1º user = admin) |
+| `screens/admin/comum.tsx` | props locais | `StatCard`/`Pill`/`Toggle`/`ErroBox`/`NotaHonesta` (primitivos de render, sem dados; `Pill`/`ErroBox` usam tokens `--ok-bg`/`--warn-bg`/`--err-bg`) |
 
 ### btv-web/src/components/shell/{Shell,Topbar,Sidebar,GearDrawer}.tsx
 Layout; consomem AppState + squad ativa.
@@ -742,15 +742,24 @@ Layout; consomem AppState + squad ativa.
 
 Fluxo: Shell roteia por `screen`; Topbar/Sidebar refletem squad ativa; GearDrawer muda marca.
 
+### btv-web/src/components/primitives/{AsyncStatus,Modal,Toast}.tsx
+Primitivas de feedback e estado assíncrono do produto (espelham as do console `web/`, nos tokens do btv-web). Sem terracota — feedback nunca usa a cor de decisão.
+
+| Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
+|---|---|---|---|---|
+| `AsyncStatus{state,onRetry?,erroPrefixo?,children}` | componente | entrada→saída | `AsyncState<T>` (do `useAsyncAction`) → render | idle/loading/error/success unificados; erro usa `--err-bg`/`--err-line`/`--err-ink` + retry |
+| `ConfirmModal{aberto,titulo?,mensagem,confirmarLabel?,onConfirmar,onCancelar}` | componente | entrada→saída | estado da tela → diálogo | confirmação destrutiva (`--err`, não terracota); substitui `window.confirm` |
+| `ToastProvider` / `useToast().push(kind,msg)` | contexto | entrada→saída | qualquer componente → pilha fixed bottom-right | `kind` = success/error/warn; auto-dismiss 4.5s; substitui `window.alert` |
+
 ### btv-web/src/main.tsx · App.tsx
 Bootstrap e árvore de providers.
 
 | Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
 |---|---|---|---|---|
 | `createRoot(#root).render(<App/>)` | — | config | main → DOM | StrictMode |
-| `<AppProvider><TemplatesProvider><SquadRunProvider><Shell/>` | árvore | config | App → contexts | templates e squad ativa acima da troca de tela |
+| `<AppProvider><ToastProvider><TemplatesProvider><SquadRunProvider><Shell/>` | árvore | config | App → contexts | `ToastProvider` no topo (feedback global, usado pelo `SquadRunContext` via `useToast` — sem `window.alert`); templates e squad ativa acima da troca de tela |
 
-Fluxo: providers aninhados garantem templates+squad viva sobrevivendo à navegação.
+Fluxo: providers aninhados garantem toast global + templates + squad viva sobrevivendo à navegação.
 
 ---
 

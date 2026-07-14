@@ -8,13 +8,24 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const vendorRoot = resolve(__dirname, '..', '..', 'vendor', 'bpmn')
+const repoRoot = resolve(__dirname, '..', '..')
+const vendorRoot = resolve(repoRoot, 'vendor', 'bpmn')
 
 if (!existsSync(resolve(vendorRoot, 'package.json'))) {
-  console.error(
-    'vendor/bpmn vazio — rode `git submodule update --init` na raiz do repo (o Designer depende da lib).',
-  )
-  process.exit(1)
+  // F3 — clone fresco sem `--init` deixava o submodule vazio e o build do
+  // Designer falhava. Tentamos inicializá-lo automaticamente antes de desistir;
+  // só erramos (fail-closed com mensagem clara) se o git não resolver.
+  console.error('vendor/bpmn vazio — inicializando o submodule (git submodule update --init)…')
+  const init = spawnSync('git', ['submodule', 'update', '--init', 'vendor/bpmn'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  })
+  if (init.status !== 0 || !existsSync(resolve(vendorRoot, 'package.json'))) {
+    console.error(
+      'não consegui inicializar vendor/bpmn — rode `git submodule update --init` na raiz do repo (o Designer depende da lib).',
+    )
+    process.exit(1)
+  }
 }
 
 const marker = resolve(vendorRoot, 'packages', 'registry', 'dist', 'esm', 'index.js')

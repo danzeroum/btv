@@ -1,65 +1,58 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, type CSSProperties } from 'react'
 import { listDeliverables, listRuns, type BtvDeliverable, type BtvRun } from '../../../api/btv'
 import { useTemplates } from '../../../state/TemplatesContext'
 import { useSquadRun } from '../../../state/SquadRunContext'
 import { useAppDispatch } from '../../../state/AppContext'
+import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { AsyncStatus } from '../../../components/primitives'
 import { runSemArtefatoReal } from '../../../lib/entregas'
 
 // "aguardando você" NÃO está aqui de propósito: gate é decisão humana, sempre
 // terracota (renderizado com .status-gate abaixo). Âmbar seria erro semântico.
 const PILL: Record<string, CSSProperties> = {
   'em produção': { background: 'var(--paper)', color: 'var(--muted)' },
-  concluída: { background: '#e7efe9', color: '#2d6a50' },
+  concluída: { background: 'var(--ok-bg)', color: 'var(--ok-ink)' },
   encerrada: { background: 'var(--paper)', color: 'var(--faint)' },
-  erro: { background: '#f7e7e3', color: '#a54334' },
+  erro: { background: 'var(--err-bg)', color: 'var(--err-ink)' },
+}
+
+// Carrega runs + entregas juntos: as entregas são secundárias (só avisam
+// quando uma run concluiu sem artefato), então uma falha nelas degrada para
+// lista vazia sem derrubar a tela.
+async function carregarMinhas(): Promise<{ runs: BtvRun[]; entregas: BtvDeliverable[] }> {
+  const [runs, entregas] = await Promise.all([listRuns(), listDeliverables().catch(() => [] as BtvDeliverable[])])
+  return { runs, entregas }
 }
 
 /** U6 · Minhas squads — runs persistidos (backend real), a execução viva no
  *  topo com ação de abrir ao vivo; concluídas apontam para as entregas;
  *  encerradas reabrem o wizard do modelo. */
 export function Minhas() {
-  const [runs, setRuns] = useState<BtvRun[] | null>(null)
-  const [entregas, setEntregas] = useState<BtvDeliverable[]>([])
-  const [erro, setErro] = useState<string | null>(null)
   const templates = useTemplates()
   const { run: liveRun, view, abrirRun } = useSquadRun()
   const dispatch = useAppDispatch()
-
+  // Estado assíncrono unificado (F1): idle→loading→success|error pelo
+  // AsyncStatus, sem re-implementar os três estados à mão.
+  const { state, run: carregar } = useAsyncAction(carregarMinhas)
   useEffect(() => {
-    listRuns()
-      .then(setRuns)
-      .catch((e: Error) => setErro(e.message))
-    // Conta entregas REAIS por run (arquivo gravado por ferramenta) para
-    // avisar quando uma run concluiu sem nenhum artefato. Falha aqui não
-    // derruba a lista — só omite o aviso.
-    listDeliverables()
-      .then(setEntregas)
-      .catch(() => setEntregas([]))
-  }, [])
-
-  if (erro) {
-    return (
-      <div style={{ background: '#f7e7e3', border: '1px solid #e0b8ad', borderRadius: 12, padding: '16px 20px', color: '#a54334', fontSize: 13 }}>
-        Não consegui carregar as squads ({erro}).
-      </div>
-    )
-  }
-  if (!runs) {
-    return <div className="mono" style={{ color: 'var(--faint)', fontSize: 11.5 }}>carregando…</div>
-  }
-  if (runs.length === 0) {
-    return (
-      <div style={{ background: 'var(--white)', border: '1px dashed var(--line2)', borderRadius: 14, padding: '28px 30px', color: 'var(--muted)', fontSize: 13.5 }}>
-        Nenhuma squad ainda — ative a primeira pela galeria.
-      </div>
-    )
-  }
+    void carregar()
+  }, [carregar])
 
   const byId = templates.status === 'ready' ? templates.byId : null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {runs.map((r) => {
+    <AsyncStatus state={state} onRetry={() => void carregar()} erroPrefixo="Não consegui carregar as squads">
+      {({ runs, entregas }) => {
+        if (runs.length === 0) {
+          return (
+            <div style={{ background: 'var(--white)', border: '1px dashed var(--line2)', borderRadius: 14, padding: '28px 30px', color: 'var(--muted)', fontSize: 13.5 }}>
+              Nenhuma squad ainda — ative a primeira pela galeria.
+            </div>
+          )
+        }
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {runs.map((r) => {
         const template = byId?.get(r.template_id)
         const cor = template?.cor ?? 'var(--brand)'
         const isLive = liveRun?.taskId === r.task_id && r.status === 'ativa'
@@ -147,7 +140,10 @@ export function Minhas() {
             </button>
           </div>
         )
-      })}
-    </div>
+            })}
+          </div>
+        )
+      }}
+    </AsyncStatus>
   )
 }

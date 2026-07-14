@@ -307,7 +307,7 @@ Contrato de provider: ids + `LlmRequest` com chave de cache (`prompt-cache-key.v
 | `LlmRequest.max_tokens` | `Option<u32>` | estado/wire | chamador → request | `skip_serializing_if="Option::is_none"` |
 | `cache_key()` retorno | `Result<String, CacheKeyError>` | saída | `btv_schemas::request_hash` | `Err` se v1 violado (ex.: `temperature 1.0`) |
 | `temperature` (em cache_key) | `Value` | intermediário | `map(json!)` ou `Value::Null` | normaliza p/ o hash |
-| (removido) `FallbackChain` | — | — | — | código morto; ordem real em `Gateway::from_env` |
+| (removido) `FallbackChain` | — | — | — | era código morto, removida; ordem real em `Gateway::from_env` |
 
 **Fluxo:** `LlmRequest{messages, temperature}` → `cache_key` normaliza temperature → `btv_schemas::request_hash` → hash `prompt-cache-key.v1` (Err ⇒ chamador pula o cache).
 

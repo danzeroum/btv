@@ -27,6 +27,18 @@
   --warn: #b3893b;
   --err: #c0392b;
 
+  /* Superfícies de feedback (tints) — usadas por banners, badges e pelo
+     AsyncStatus. Substituem os hexes de feedback antes hardcoded nas telas
+     (#e7efe9/#2d6a50, #f7e7e3/#e0b8ad/#a54334, #fdf3e3/#9a6b14). NÃO são
+     terracota (--decision) — feedback nunca usa a cor de decisão humana. */
+  --ok-bg: #e7efe9;
+  --ok-ink: #2d6a50;
+  --err-bg: #f7e7e3;
+  --err-line: #e0b8ad;
+  --err-ink: #a54334;
+  --warn-bg: #fdf3e3;
+  --warn-ink: #9a6b14;
+
   /* variante institucional da marca — NÃO usar na UI do produto */
   --inst-navy: #1e2a44;
   --inst-brass: #b98a2f;

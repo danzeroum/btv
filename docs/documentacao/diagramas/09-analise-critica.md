@@ -22,7 +22,8 @@ leitura estática de todo o código.
   sandbox Docker fail-closed, vetter de skills.
 - **Honestidade "Nada Fake" codificada:** `fake_marker` no ledger, veredito "sem
   significância" no experiment, posições `inferida` na esteira, custo `None` quando não
-  tabelado, código morto (`forgetting.py`, `btv-eval`) explicitamente descopado.
+  tabelado, código morto tratado sem fingimento — `forgetting.py` foi removido (código
+  morto eliminado) e `btv-eval` permanece placeholder vazio explicitamente descopado.
 - **Dualidade de storage sem fork:** SQLite e Postgres+RLS atrás dos **mesmos traits**,
   com a suíte `btv-contract` provando paridade (inclusive determinismo de hash).
 

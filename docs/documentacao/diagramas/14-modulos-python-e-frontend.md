@@ -80,11 +80,14 @@ flowchart LR
 ```mermaid
 flowchart TB
     main --> App
-    App --> AppProvider --> TemplatesProvider --> SquadRunProvider --> Shell
+    App --> AppProvider --> ToastProvider --> TemplatesProvider --> SquadRunProvider --> Shell
     Shell --> screens_user & screens_admin & Wizard
     screens_user --> Designer
     Designer --> btvPlugin
     btvPlugin -.->|alias| bpmn[(vendor/bpmn)]
+    screens_user & screens_admin --> primitives["components/primitives\nAsyncStatus/Modal/Toast"]
+    primitives --> useAsync["hooks/useAsyncAction"]
+    SquadRunProvider -->|useToast| ToastProvider
     SquadRunProvider --> esteira["lib/esteira.ts\nesteiraFromEvents"]
     SquadRunProvider --> api_squad["api/squad"] & api_btv["api/btv"]
     TemplatesProvider --> api_templates["api/templates"]
@@ -103,7 +106,7 @@ flowchart TB
     Shell2 --> admin["screens/admin\n(Telemetria/Ledger/Verify/Mcp/Lsp/...)"]
     user --> Designer2["Designer/ (hand-rolled)\nreducer + geometry"]
     SessionProvider --> stream["api/stream\nconnectSessionEvents (SSE)"]
-    user & admin --> api22["api/* (22 módulos)"]
+    user & admin --> api22["api/* (21 módulos)"]
     api22 --> client2["api/client\nfetchJson"]
     stream & client2 -.->|HTTP/SSE| rust2[(Rust edge)]
 ```

@@ -191,7 +191,7 @@ flowchart TB
 ```
 
 **Nota.** O contêiner `web` (console `/dev`) tem estrutura análoga, trocando
-`SquadRunContext`+bpmn por `SessionContext`+Designer hand-rolled e ~22 módulos `api/*`.
+`SquadRunContext`+bpmn por `SessionContext`+Designer hand-rolled e ~21 módulos `api/*`.
 
 ---
 

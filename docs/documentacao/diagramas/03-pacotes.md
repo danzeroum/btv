@@ -120,7 +120,7 @@ flowchart LR
     subgraph WEB["web/ (console dev, /dev)"]
         W_APP["App + Shell"]:::ui
         W_CTX["state/*: AppContext,\nSessionContext"]:::ctx
-        W_API["api/* (22 módulos)"]:::api
+        W_API["api/* (21 módulos)"]:::api
         W_DES["Designer/ (reducer + geometry,\nhand-rolled)"]:::ui
         W_APP --> W_CTX --> W_API
         W_APP --> W_DES
