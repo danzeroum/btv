@@ -103,7 +103,7 @@ flowchart TB
     Shell2 --> admin["screens/admin\n(Telemetria/Ledger/Verify/Mcp/Lsp/...)"]
     user --> Designer2["Designer/ (hand-rolled)\nreducer + geometry"]
     SessionProvider --> stream["api/stream\nconnectSessionEvents (SSE)"]
-    user & admin --> api22["api/* (22 módulos)"]
+    user & admin --> api22["api/* (21 módulos)"]
     api22 --> client2["api/client\nfetchJson"]
     stream & client2 -.->|HTTP/SSE| rust2[(Rust edge)]
 ```

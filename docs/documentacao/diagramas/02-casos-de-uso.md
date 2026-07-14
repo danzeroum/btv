@@ -70,7 +70,7 @@ flowchart TB
 
 - **UC1 `«include»` UC10 e UC9** — a ativação da galeria roda `/verify` *antes* de
   disparar (anexa a evidência tipada ao `SquadTask`) e usa o **motor real de squad**
-  (`btv_agent::start_squad_task`, compartilhado com `POST /api/squad/run`).
+  (`squad_agent::start_squad_task`, compartilhado com `POST /api/squad/run`).
 - **UC2 `«extend»` UC3** — o "pedir ajuste" estende o acompanhamento ao vivo: aprovar
   *com* uma instrução injeta contexto no cockpit (negar abortaria a tarefa).
 - **UC9 e UC7 `«include»` UC8** — toda execução de ferramenta por um agente inclui o
