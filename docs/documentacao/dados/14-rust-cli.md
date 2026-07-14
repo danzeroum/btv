@@ -179,7 +179,7 @@ Papel: fundação do agente web (Fase 7) — `SessionEvent` (DTO/SSE), `SessionH
 | `SessionEvent::PermissionRequested{request_id,tool,scope}` | variante (server-only) | wire | `request_permission` → SSE | front resolve via POST |
 | `SessionEvent::Done{ledger_verified:u64}` | variante | wire | `finish_task_ok` | contagem real `Session::verify()` |
 | `SessionEvent::Error{message}` | variante | wire | | |
-| `ErrorBody{error,code}` | struct | saída/wire | contrato de erro único de toda a fase | |
+| `ErrorBody{error,code}` | struct | saída/wire | contrato de erro único de toda a fase | reexportado de `btv_server::ErrorBody` (fonte única, B6) — não mais cópia local |
 | `PendingPermission{request_id,responder:mpsc::Sender<bool>}` | struct | estado | | canal de resposta de permissão |
 | `SessionState{log:Vec<SessionEvent>,tx:broadcast::Sender<SessionEvent>(256),pending,busy}` | struct | estado | por sessão | `busy`=ator único (409) |
 | `SessionHub.sessions` | `Arc<Mutex<HashMap<String,SessionState>>>` | estado | todas as sessões vivas | |

@@ -29,17 +29,19 @@ use serde::Serialize;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-/// Corpo de erro uniforme das rotas mutáveis — mesma forma que `btv-cli`'s
-/// `web_agent::ErrorBody` (duplicado, não importado: a direção de
-/// dependência entre os dois crates é a oposta).
+/// Corpo de erro uniforme `{error, code}` das rotas mutáveis. É a **fonte
+/// única** do contrato de erro: o agente web do `btv-cli` (`web_agent`)
+/// reexporta este tipo (`pub use btv_server::ErrorBody`) em vez de manter uma
+/// cópia — a dependência vai `btv-cli → btv-server` (B6 do roadmap). Campos
+/// privados; construir só por `ErrorBody::new`.
 #[derive(Debug, Serialize)]
-pub(crate) struct ErrorBody {
+pub struct ErrorBody {
     error: String,
     code: String,
 }
 
 impl ErrorBody {
-    pub(crate) fn new(code: &str, message: impl Into<String>) -> Self {
+    pub fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             error: message.into(),
             code: code.to_string(),

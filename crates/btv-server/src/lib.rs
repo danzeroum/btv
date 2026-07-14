@@ -25,7 +25,10 @@ pub mod lsp_console;
 pub mod sandbox_console;
 
 pub use guard::{origin_allowed, trusted_origin_hosts};
-pub(crate) use handlers::{db_error, now_rfc3339, ErrorBody};
+// `ErrorBody` é público: fonte única do contrato de erro `{error, code}`,
+// reexportada pelo `btv-cli::web_agent` (B6 do roadmap).
+pub use handlers::ErrorBody;
+pub(crate) use handlers::{db_error, now_rfc3339};
 
 use axum::extract::Request;
 use axum::http::StatusCode;

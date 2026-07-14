@@ -125,21 +125,11 @@ impl From<LoopEvent<'_>> for SessionEvent {
     }
 }
 
-/// Contrato de erro único `{error, code}` para toda rota nova desta fase.
-#[derive(Debug, Serialize)]
-pub struct ErrorBody {
-    pub error: String,
-    pub code: String,
-}
-
-impl ErrorBody {
-    pub fn new(code: &str, message: impl Into<String>) -> Self {
-        Self {
-            error: message.into(),
-            code: code.to_string(),
-        }
-    }
-}
+/// Contrato de erro único `{error, code}` de toda rota mutável — a fonte única
+/// vive no `btv-server` (`btv_server::ErrorBody`); aqui só reexportamos, para
+/// os módulos do btv-cli seguirem usando `crate::web_agent::ErrorBody` (B6 do
+/// roadmap: fim da cópia duplicada, a dep é btv-cli → btv-server).
+pub use btv_server::ErrorBody;
 
 struct PendingPermission {
     request_id: String,

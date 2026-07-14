@@ -65,7 +65,7 @@ Fluxo: params (telemetria/library/ledger/root/web_dir) → `AppState` clonável 
 
 ## crates/btv-server/src/handlers/mod.rs
 
-Papel: vocabulário compartilhado dos handlers — `ErrorBody`, helpers `now_rfc3339()`, `db_error()`, e declaração dos submódulos por área.
+Papel: vocabulário compartilhado dos handlers — `ErrorBody` (agora `pub`: **fonte única** do contrato de erro, reexportada pelo `btv-cli::web_agent`, B6), helpers `now_rfc3339()`, `db_error()`, e declaração dos submódulos por área.
 
 | Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
 |------|------|---------|------------------|----------------------------|
