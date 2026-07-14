@@ -1043,7 +1043,7 @@ Servidor gRPC `MemoryService` (ADR 0022) — Python serve leitura de memória ao
 | `records` | `list[dict]` | entrada | param (de list_memories, ordenado) | |
 | `by_agent` | `dict[str,list]` | intermediário | agrupamento | |
 | `latest/top` | `dict` | intermediário | `recs[0]` (mais recente), `max(confidence)` | |
-| `MemorySummary` (wire) | proto | saída | {agent,count,latest_decision_json,latest_timestamp,top_confidence} | sem tendência de esquecimento (forgetting.py morto) |
+| `MemorySummary` (wire) | proto | saída | {agent,count,latest_decision_json,latest_timestamp,top_confidence} | sem tendência de esquecimento (forgetting.py removido) |
 | `MemoryServicer.memory` | AgentMemorySystem | estado | ctor | opcional memory_dir |
 | **Recall(request, context)** | RecallResponse | entrada→saída | | |
 | `request.query/request.k` | wire | entrada | `recall_similar(query, k or 5)` | |

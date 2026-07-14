@@ -442,7 +442,7 @@ Papel: `MemoryService` — direção OPOSTA de CoreService: o Python serve (dono
 | `MemoryMatch.id` / `.agent` / `.decision_json` / `.timestamp` / `.score` | string 1/2/3/4 / double=5 | wire | Python → Rust | `decision_json` = mesmo formato de `remember_decision` |
 | `RecallResponse.matches` | repeated MemoryMatch=1 | wire | | |
 | `ListRequest.agent` / `.limit` | optional string=1 / uint32=2 | wire | | |
-| `MemorySummary.agent` / `.count` / `.latest_decision_json` / `.latest_timestamp` / `.top_confidence` | string=1 / uint32=2 / string=3 / string=4 / double=5 | wire | | NUNCA inclui tendência de esquecimento (forgetting.py é código morto) |
+| `MemorySummary.agent` / `.count` / `.latest_decision_json` / `.latest_timestamp` / `.top_confidence` | string=1 / uint32=2 / string=3 / string=4 / double=5 | wire | | NUNCA inclui tendência de esquecimento (forgetting.py foi removido) |
 | `ListResponse.agents` | repeated MemorySummary=1 | wire | | |
 
 Fluxo: Rust chama `Recall`(query,k)→`MemoryMatch`s pontuados e `List`(agent,limit)→`MemorySummary`s; o Python é o único dono do corpus.

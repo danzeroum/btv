@@ -2,7 +2,7 @@
 
 Mapa exaustivo dos dados que circulam nos DOIS SPAs em `/home/user/btv`:
 
-- **`web/`** — console dev, servido pelo `btv dashboard` sob `/dev` (`base: './'`, sem roteamento por URL). ~22 módulos `api/*`.
+- **`web/`** — console dev, servido pelo `btv dashboard` sob `/dev` (`base: './'`, sem roteamento por URL). 21 módulos `api/*`.
 - **`btv-web/`** — produto BuildToValue, SPA raiz `/`. 5 módulos `api/*`; Designer sobre a lib agnóstica `@bpmn-react/*` (submodule `vendor/bpmn`).
 
 Ambos falam com o MESMO backend real via proxy `/api → http://127.0.0.1:7878`. Nenhuma API key vive no navegador (fronteira ADR 0001: keys só no processo Rust).
