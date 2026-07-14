@@ -1,6 +1,6 @@
 # 15 — Referência: ADRs (Architecture Decision Records)
 
-Resumo das 32 decisões de arquitetura (`docs/adr/`), na maioria com status "aceita". São a
+Resumo das 33 decisões de arquitetura (`docs/adr/`), na maioria com status "aceita". São a
 justificativa das escolhas refletidas nos diagramas.
 
 | ADR | Tema |
@@ -37,6 +37,7 @@ justificativa das escolhas refletidas nos diagramas.
 | 0030 | Evidência de verificação TIPADA no wire (o breaking assinado da janela G3) — *proposta* |
 | 0031 | A fronteira real é console/dashboard vs engine (redefinição T4, fechamento C4) |
 | 0032 | Restrição numérica do `prompt-cache-key.v1` ENFORÇADA (rejeita floats de fração zero) — *proposto* |
+| 0033 | Remoção do campo `max_autonomy_level` do `SquadTask` (quebra de wire assinada; supersede o débito do 0021) — *proposto* |
 
 ---
 
@@ -47,6 +48,6 @@ justificativa das escolhas refletidas nos diagramas.
 - **Segurança e contenção:** 0009, 0011, 0012, 0015, 0016, 0017, 0018, 0020.
 - **Verificação e review:** 0008, 0010, 0014.
 - **DDD multitenant e storage:** 0024, 0025, 0026, 0027, 0028, 0029, 0031.
-- **Contratos:** 0030, 0032 (o wire tipado e a restrição de hash).
+- **Contratos:** 0030, 0032, 0033 (o wire tipado, a restrição de hash e a remoção do `max_autonomy_level`).
 - **Ecossistema:** 0011 (sandbox), 0012 (MCP), 0013 (RAG/LSP embutido no espírito zero-dep),
   0014 (A/B).

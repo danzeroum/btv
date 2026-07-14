@@ -184,7 +184,7 @@ Tipos do gateway LLM compartilhados entre CoreService/SquadService. Gerado (sem 
 | Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
 | --- | --- | --- | --- | --- |
 | **serviço** `SquadService` | gRPC | wire | Python serve, Rust chama | `ExecuteTask(SquadTask)→stream SquadEvent`; `Health` |
-| `SquadTask{task_id,description,decision_type,max_autonomy_level,verification_evidence,model,roster[],tenant_id,actor}` | msg | wire | Rust→Python | `max_autonomy_level` ignorado ponta-a-ponta (ADR 0021); `verification_evidence` tipada (D3t) |
+| `SquadTask{task_id,description,decision_type,verification_evidence,model,roster[],tenant_id,actor}` | msg | wire | Rust→Python | tag 4 `max_autonomy_level` REMOVIDA (ADR 0033; era ignorada, ADR 0021); `verification_evidence` tipada (D3t) |
 | `PersonaSpec{papel,prompt,funcao,ordem,custom}` | msg | wire | Rust→Python | roster de personas U7 |
 | `SquadEvent{task_id,ts,tenant_id,actor, oneof: proposal\|consensus\|handoff\|hitl\|step\|error\|chat}` | msg | wire | Python→Rust (stream) | tenant/actor ecoados VERBATIM |
 | `ChatMessage{author,author_role,text,in_reply_to}` | msg | wire | Python→Rust | author_role AGENT/HUMAN/SYSTEM |

@@ -52,11 +52,11 @@ export function Modelo() {
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8 }}>NÍVEL DE AUTONOMIA</div>
-        {/* Fase 7 Onda 13: informativo, não um seletor — `max_autonomy_level`
-            (SquadTask) é ignorado ponta-a-ponta pelo orquestrador hoje (ADR
-            0021); wire-lo até aqui seria fabricar um efeito que não existe.
-            A autonomia real é decidida por agente via `agent_trust_scores`
-            (`ProgressiveAutonomyManager`, hitl.py), não por um teto de tarefa. */}
+        {/* Informativo, não um seletor: o campo `max_autonomy_level` do
+            `SquadTask` foi REMOVIDO do wire (ADR 0033) — era ignorado
+            ponta-a-ponta (ADR 0021). A autonomia real é decidida por agente via
+            `agent_trust_scores` (`ProgressiveAutonomyManager`, hitl.py), não por
+            um teto de tarefa. Esta lista é só didática, nunca foi enviada. */}
         <div className="stack">
           {AUTONOMY_LEVELS.map((lvl) => (
             <div

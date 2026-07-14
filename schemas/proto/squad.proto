@@ -16,8 +16,14 @@ message SquadTask {
   string description = 2;
   // Tipo de decisão dominante (ex.: "architecture", "implementation").
   string decision_type = 3;
-  // Nível máximo de autonomia permitido (autonomia progressiva).
-  uint32 max_autonomy_level = 4;
+  // Campo 4 (`max_autonomy_level`) REMOVIDO na Onda 4 do roadmap (ADR 0033):
+  // trafegava no wire mas era ignorado ponta-a-ponta (ADR 0021) — a autonomia
+  // real é decidida por agente (`ProgressiveAutonomyManager`), nunca por um teto
+  // de tarefa. `reserved` impede reuso da tag/nome. Quebra de wire ASSINADA
+  // (o `buf breaking` acusa por design, como o ADR 0030); Rust e Python sobem
+  // juntos no mesmo repo (janela de deploy coordenada).
+  reserved 4;
+  reserved "max_autonomy_level";
   // `verification-evidence.v1` (btv-verify::run_pipeline), rodada pelo `btv
   // squad` antes de disparar a tarefa — Fase 5 Onda 3. D3t (G3): antes
   // `string verification_evidence_json` (JSON opaco), agora mensagem TIPADA

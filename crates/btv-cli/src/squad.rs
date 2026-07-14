@@ -443,20 +443,15 @@ async fn try_squad(
     // D3t: evidência TIPADA no wire (antes `serde_json::to_string`).
     let verification_evidence = Some(evidence_to_proto(&evidence));
 
-    // `max_autonomy_level` hardcoded (não uma flag de CLI, nem lido do
-    // request web): confirmado nesta onda que o campo é ignorado
-    // ponta-a-ponta hoje — `btv_squad/server.py::ExecuteTask` nunca lê
-    // `request.max_autonomy_level`; a autonomia real vem de
-    // `ProgressiveAutonomyManager`/`agent_trust_scores` (`hitl.py`),
-    // desconectado deste campo do proto. Wire-lo até a UI seria só "o campo
-    // viajou" sem efeito nenhum — descope explícito (ADR 0021), não
-    // esquecimento. Ver `pendencias.md` (Onda 13).
+    // `max_autonomy_level` foi REMOVIDO do `SquadTask` (ADR 0033): era ignorado
+    // ponta-a-ponta (ADR 0021) — a autonomia real vem de
+    // `ProgressiveAutonomyManager`/`agent_trust_scores` (`hitl.py`), desconectada
+    // de qualquer teto de tarefa. Removê-lo do wire tira a mentira do contrato.
     let stream = client
         .execute_task(SquadTask {
             task_id: format!("s{pid:x}", pid = std::process::id()),
             description: task.to_string(),
             decision_type: "architecture".into(),
-            max_autonomy_level: 3,
             verification_evidence,
             // `--model` da CLI também vale por-tarefa (além de ir no `--model`
             // do sidecar): o Python o sobrepõe ao default do orquestrador.
@@ -778,7 +773,6 @@ mod tests {
                 task_id: "t-consenso".into(),
                 description: "tarefa roteirizada".into(),
                 decision_type: "architecture".into(),
-                max_autonomy_level: 3,
                 verification_evidence: None,
                 model: String::new(),
                 roster: Vec::new(),

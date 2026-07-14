@@ -656,15 +656,14 @@ where
         .map_err(|e: SidecarError| e.to_string())?;
     let mut client = lease.client().clone();
 
-    // `max_autonomy_level` segue hardcoded/ignorado ponta-a-ponta pelo Python
-    // (descope da Onda 13, ADR 0021). `model`, ao contrário, agora É lido pelo
+    // `max_autonomy_level` foi REMOVIDO do `SquadTask` (ADR 0033; era ignorado
+    // ponta-a-ponta, ADR 0021). `model`, ao contrário, É lido pelo
     // `server.py::ExecuteTask` e sobrepõe o default do pool por tarefa.
     let mut stream = client
         .execute_task(SquadTask {
             task_id: task_id.clone(),
             description,
             decision_type: "architecture".into(),
-            max_autonomy_level: 3,
             verification_evidence,
             model,
             // Roster de personas (U7): o Python usa `prompt` de cada uma como
