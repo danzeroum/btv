@@ -197,7 +197,7 @@ Consts de tier/autonomia (sem backend — seletores locais).
 |---|---|---|---|---|
 | `MODEL_TIERS: ModelTier[]` | const | config | → Modelo | small/medium/large + nomes de modelo |
 | `primaryModelName(tier)` → string | função | intermediário | tier → nome (split `·`) | vai como `model` ao enviar mensagem |
-| `AUTONOMY_LEVELS[]` | const | config | → Modelo | só informativo: `max_autonomy_level` ignorado ponta-a-ponta (ADR 0021) |
+| `AUTONOMY_LEVELS[]` | const | config | → Modelo | só informativo (didático): o campo `max_autonomy_level` foi REMOVIDO do wire (ADR 0033); nunca foi enviado |
 
 Fluxo: escolha em Modelo → AppContext → corpo de mensagem.
 

@@ -22,11 +22,11 @@ export function primaryModelName(tier: ModelTierId): string {
  * (`SessionContext::sendMessage`'s `model`/`agent`, que já chegam a
  * `SendMessageBody` real no Rust).
  *
- * `AUTONOMY_LEVELS` continua só informativo: `max_autonomy_level`
- * (`SquadTask`) é ignorado ponta-a-ponta pelo orquestrador Python hoje
- * (`ProgressiveAutonomyManager`/`agent_trust_scores` decide de verdade,
- * `hitl.py`) — descope explícito registrado na ADR 0021, não wireable sem
- * fabricar um efeito que não existe.
+ * `AUTONOMY_LEVELS` é só informativo (didático): o campo `max_autonomy_level`
+ * do `SquadTask` foi REMOVIDO do wire (ADR 0033) — era ignorado ponta-a-ponta
+ * (ADR 0021). A autonomia real é decidida por agente
+ * (`ProgressiveAutonomyManager`/`agent_trust_scores`, `hitl.py`); esta lista
+ * nunca foi enviada.
  */
 export const AUTONOMY_LEVELS: { id: 'interativo' | 'automatico' | 'somente_leitura'; label: string; detail: string }[] = [
   {

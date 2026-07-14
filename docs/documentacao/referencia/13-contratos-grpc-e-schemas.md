@@ -49,9 +49,10 @@ gera texto de LLM (exclusivo do gateway Rust).
 | `ExecuteTask` | `SquadTask` | `SquadEvent` | **server-stream** |
 | `Health` | `HealthRequest` | `HealthResponse` | unário |
 
-- `SquadTask{task_id, description, decision_type, max_autonomy_level (IGNORADO, ADR 0021),
-  verification_evidence (TIPADA — o único breaking assinado, ADR 0030), model, roster:
-  PersonaSpec[] (U7), tenant_id, actor}`.
+- `SquadTask{task_id, description, decision_type, verification_evidence (TIPADA — breaking
+  assinado, ADR 0030), model, roster: PersonaSpec[] (U7), tenant_id, actor}`. A tag 4
+  (`max_autonomy_level`) foi REMOVIDA e reservada (ADR 0033 — 2ª quebra de wire assinada;
+  era ignorada ponta-a-ponta, ADR 0021).
 - `PersonaSpec{papel, prompt, funcao(plan|produce|review|validate|deliver), ordem, custom}`.
 - `SquadEvent{task_id, ts, tenant_id, actor, oneof: Proposal|Consensus|Handoff|HitlEscalation|
   StepResult|error|ChatMessage}`.

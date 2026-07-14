@@ -19,11 +19,10 @@ VERDICT_FAIL: Verdict
 VERDICT_SKIPPED: Verdict
 
 class SquadTask(_message.Message):
-    __slots__ = ("task_id", "description", "decision_type", "max_autonomy_level", "verification_evidence", "model", "roster", "tenant_id", "actor")
+    __slots__ = ("task_id", "description", "decision_type", "verification_evidence", "model", "roster", "tenant_id", "actor")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     DECISION_TYPE_FIELD_NUMBER: _ClassVar[int]
-    MAX_AUTONOMY_LEVEL_FIELD_NUMBER: _ClassVar[int]
     VERIFICATION_EVIDENCE_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     ROSTER_FIELD_NUMBER: _ClassVar[int]
@@ -32,13 +31,12 @@ class SquadTask(_message.Message):
     task_id: str
     description: str
     decision_type: str
-    max_autonomy_level: int
     verification_evidence: VerificationEvidence
     model: str
     roster: _containers.RepeatedCompositeFieldContainer[PersonaSpec]
     tenant_id: str
     actor: str
-    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., max_autonomy_level: _Optional[int] = ..., verification_evidence: _Optional[_Union[VerificationEvidence, _Mapping]] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., description: _Optional[str] = ..., decision_type: _Optional[str] = ..., verification_evidence: _Optional[_Union[VerificationEvidence, _Mapping]] = ..., model: _Optional[str] = ..., roster: _Optional[_Iterable[_Union[PersonaSpec, _Mapping]]] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ...) -> None: ...
 
 class PersonaSpec(_message.Message):
     __slots__ = ("papel", "prompt", "funcao", "ordem", "custom")

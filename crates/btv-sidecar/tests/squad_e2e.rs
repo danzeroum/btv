@@ -118,7 +118,6 @@ async fn squad_python_real_streama_eventos_pelo_laco_bidirecional() {
             task_id: "t1".into(),
             description: "publicar serviço de pagamentos".into(),
             decision_type: "architecture".into(),
-            max_autonomy_level: 3,
             // Sem evidência (Fase 5 Onda 3) — este teste é do laço 4d, não
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
@@ -284,7 +283,6 @@ async fn kill_do_sidecar_dispara_fallback() {
             task_id: "t-kill".into(),
             description: "tarefa interrompida".into(),
             decision_type: "architecture".into(),
-            max_autonomy_level: 3,
             // Sem evidência (Fase 5 Onda 3) — este teste é do laço 4d, não
             // exercita validate_results; o auditor cai em fail-closed sem
             // afetar as asserções deste teste (proposals/consensus/steps).
@@ -578,7 +576,6 @@ async fn squad_cria_arquivo_real_via_run_tool_ledger_e_auditor_veem_evidencia() 
             task_id: "t-fechamento".into(),
             description: format!("crie {filename} com uma função de soma"),
             decision_type: "architecture".into(),
-            max_autonomy_level: 3,
             // Evidência PRESENTE (Fase 5 Onda 3) — ao contrário dos outros
             // dois testes deste arquivo, este PRECISA exercitar
             // validate_results() de verdade (é o veredito final que a

@@ -407,7 +407,7 @@ Papel: `SquadService` — serviço que o sidecar Python expõe ao Rust; `Execute
 | `ExecuteTask(SquadTask) → stream SquadEvent` | rpc | wire | Rust → Python | eventos ao vivo (propostas/votos/consenso/handoff/HITL/chat) |
 | `Health(HealthRequest) → HealthResponse` | rpc | wire | | |
 | `SquadTask.task_id` / `.description` / `.decision_type` | string 1/2/3 | wire | Rust → Python | |
-| `SquadTask.max_autonomy_level` | uint32=4 | wire | | autonomia progressiva (deliberadamente NÃO wireada ponta-a-ponta, ADR 0021) |
+| `SquadTask` tag 4 (`max_autonomy_level`) | `reserved` | wire | | REMOVIDO (ADR 0033) — era ignorado ponta-a-ponta (ADR 0021); tag/nome reservados p/ não reusar |
 | `SquadTask.verification_evidence` | VerificationEvidence=5 | wire | | tipado (D3t); ausente ⇒ fail-closed no Python |
 | `SquadTask.model` | string=6 | wire | | vazio = herda default do pool/`--model` |
 | `SquadTask.roster` | repeated PersonaSpec=7 | wire | | personas reais (U7); vazio = elenco fixo |
