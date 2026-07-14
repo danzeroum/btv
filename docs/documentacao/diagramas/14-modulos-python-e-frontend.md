@@ -1,6 +1,6 @@
 # 14 — Diagramas de módulo: Python e frontend
 
-Estrutura interna dos 5 pacotes Python e das 2 SPAs. Inventário textual:
+Estrutura interna dos 4 pacotes Python e das 2 SPAs. Inventário textual:
 [referência 11 (Python)](../referencia/11-python-pacotes.md) e
 [referência 12 (TypeScript)](../referencia/12-typescript-frontend.md).
 
@@ -49,7 +49,7 @@ flowchart TB
 `server.py` é o ponto onde Python-serve-gRPC encontra Python-chama-Rust: injeta os
 `Grpc*Client` no `UnifiedOrchestrator`, que compõe os subsistemas e os 5 agentes.
 
-### btv-promptforge · btv-review · btv-proto-py · btv-eval
+### btv-promptforge · btv-review · btv-proto-py
 
 ```mermaid
 flowchart LR
@@ -64,12 +64,12 @@ flowchart LR
         reviewers -.->|derivam de| evidence[(VerificationEvidence)]
     end
     protopy["btv-proto-py\nstubs gerados de schemas/proto"]
-    eval["btv-eval\n(placeholder vazio)"]
     pf_server --> protopy
 ```
 
-`hashing.py` é reusado por `btv-review.certification` (mesmo esquema canônico). `btv-eval`
-é placeholder; a avaliação A/B real vive no Rust.
+`hashing.py` é reusado por `btv-review.certification` (mesmo esquema canônico). A avaliação
+A/B real vive no Rust (`btv-schemas::experiment`); o antigo `btv-eval` (placeholder vazio)
+foi removido (Onda 5 do roadmap, item B4).
 
 ---
 

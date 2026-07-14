@@ -1,12 +1,12 @@
 # Documentação de Arquitetura — BuildToValue (`mix_btv_code`)
 
 Documentação completa gerada por **análise estática de todo o código-fonte** do
-repositório — Rust (14 crates), Python (5 pacotes), TypeScript (2 SPAs React) — e dos
+repositório — Rust (14 crates), Python (4 pacotes), TypeScript (2 SPAs React) — e dos
 contratos compartilhados em `schemas/`. O objetivo é mapear **como cada
 script/módulo/crate/pacote se conecta ao todo**: dependências, fronteiras de linguagem,
 fluxos de dados e responsabilidades — base para estudo de arquitetura e refatoramentos.
 
-**Cobertura:** 137 arquivos `.rs` · 87 arquivos `.py` · 160 arquivos `.ts/.tsx`.
+**Cobertura:** 137 arquivos `.rs` · 86 arquivos `.py` · 160 arquivos `.ts/.tsx`.
 
 ---
 
@@ -32,14 +32,14 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 11 | [Modelo de dados (ER)](diagramas/11-modelo-de-dados.md) | Esquema de persistência: produto, ledger, event store, telemetria, sessões PG |
 | 12 | [Máquinas de estado](diagramas/12-maquinas-de-estado.md) | RunStatus, permissão, handoff, verdict, degradação, sidecar, sessão web |
 | 13 | [Módulos por crate (Rust)](diagramas/13-modulos-rust.md) | Estrutura interna dos 14 crates |
-| 14 | [Módulos Python e frontend](diagramas/14-modulos-python-e-frontend.md) | Estrutura interna dos 5 pacotes Python e das 2 SPAs |
+| 14 | [Módulos Python e frontend](diagramas/14-modulos-python-e-frontend.md) | Estrutura interna dos 4 pacotes Python e das 2 SPAs |
 
 ### Parte II — Referência detalhada (`referencia/`)
 
 | # | Documento | Conteúdo |
 |---|---|---|
 | 10 | [Inventário Rust](referencia/10-rust-crates.md) | Os 14 crates: propósito, deps, tipos-chave, trait impls, concorrência — com caminhos de arquivo |
-| 11 | [Inventário Python](referencia/11-python-pacotes.md) | Os 5 pacotes: classes, ABCs/Protocols, servers gRPC, os 5 agentes |
+| 11 | [Inventário Python](referencia/11-python-pacotes.md) | Os 4 pacotes: classes, ABCs/Protocols, servers gRPC, os 5 agentes |
 | 12 | [Inventário TypeScript](referencia/12-typescript-frontend.md) | As 2 SPAs: estrutura, contexts, camada `api/`, DTOs, Designer bpmn |
 | 13 | [Contratos gRPC e JSON Schemas](referencia/13-contratos-grpc-e-schemas.md) | 4 serviços gRPC (direções), 11 schemas `*.v1`, os 12 templates, hash dual |
 | 14 | [Endpoints HTTP](referencia/14-endpoints-http.md) | Tabela completa REST + SSE, com o handler Rust e o consumidor TS |
@@ -60,7 +60,7 @@ intermediário** de cada módulo (leitura linha-a-linha), incluindo dados locais
 | 13 | [Store, proto e sidecar Rust](dados/13-rust-store-proto-sidecar.md) | btv-store, btv-proto, btv-sidecar |
 | 14 | [CLI Rust](dados/14-rust-cli.md) | btv-cli (composition root) |
 | 15 | [Server e demais Rust](dados/15-rust-server-e-outros.md) | btv-server, btv-tui, btv-golden, btv-contract |
-| 16 | [Python](dados/16-python.md) | os 5 pacotes |
+| 16 | [Python](dados/16-python.md) | os 4 pacotes |
 | 17 | [TypeScript e HTML](dados/17-typescript-e-html.md) | web/, btv-web/ |
 
 ### Parte IV — Mapeamentos operacionais (`mapeamentos/`)

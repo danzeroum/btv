@@ -1,24 +1,10 @@
 # Dicionário de dados — pacotes Python (`python/packages/`)
 
-Mapa de fluxo de dados exaustivo dos 5 pacotes Python do repositório: **btv-eval**,
+Mapa de fluxo de dados exaustivo dos 4 pacotes Python do repositório:
 **btv-promptforge**, **btv-proto-py**, **btv-review**, **btv-squad**. Cada seção `##`
 cobre um arquivo `.py` (os `*_pb2.py`/`*_pb2_grpc.py` gerados só têm os tipos de
 mensagem registrados, a partir do proto-fonte). Direções: `entrada`, `saída`,
 `intermediário`, `estado`, `config`, `wire`.
-
----
-
-# Pacote btv-eval
-
-## python/packages/btv-eval/src/btv_eval/__init__.py
-
-Placeholder da Fase 6 — avaliação contínua / A/B / RAG tools. Sem código, só docstring.
-
-| Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
-| --- | --- | --- | --- | --- |
-| (nenhum) | — | — | — | Módulo VAZIO. Docstring declara intenção futura: consumir telemetria do `btv-store` para comparar prompts/modelos e alimentar o LearningRouter. Nenhum símbolo exportado. |
-
-Fluxo: nenhum — pacote é placeholder documental, sem entrada/saída/estado.
 
 ---
 
