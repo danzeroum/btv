@@ -25,7 +25,7 @@ Playwright) + análise de código.
 | btv-domain | U | ✅ (agregado, máquina de status, round-trip) | ✅ transições inválidas, tenant vazio | baixo |
 | btv-schemas | U, P, G, B | ✅ | ✅ `NumeroProibido`, paridade de hash, fixtures | baixo |
 | btv-core | U | ✅ loop completo <100ms, negação, desconhecida, truncado | ✅ `MaxSteps`, deny | baixo |
-| btv-llm | U, B | ✅ agregadores, tier, rate-limit | ⚠️ falha de rede real do provedor não é unit-testável (mock) | médio |
+| btv-llm | U, B | ✅ agregadores, tier, rate-limit | ✅ falha REAL de transporte (conexão recusada) e timeout (servidor que pendura, corta rápido) → `AllFailed` | baixo |
 | btv-tools | U, I (`loop_com_ferramentas_reais`, `mcp_integration`, `lsp_integration`) | ✅ tools reais, MCP/LSP contra servidor real | ⚠️ sandbox Docker: testes `#[ignore]` (só no job `sandbox`) | médio |
 | btv-store | U, C (`contract_sqlite`, `contract_pg`), I (migrações, replay) | ✅ | ✅ `BrokenChain`/`ForeignEntry`/`Conflict`, RLS adversarial, retry concorrente | baixo |
 | btv-verify | U, G (`schema_golden`) | ✅ pipeline, vetter, kill de grupo | ✅ timeout, block fail-closed | baixo |
@@ -59,7 +59,7 @@ Playwright) + análise de código.
 |---|---|---|---|---|
 | `btv-cli::web_agent` ramos de erro (permissão timeout, 409 ator único, sessão morta) | e2e parcial | **alto** | unit do `SessionHub` p/ timeout→Deny e single-actor | real |
 | `btv-cli::squad_agent` (cockpit inject, HITL expirado, emergency-stop) | e2e | **médio-alto** | teste do `inject_cockpit_context` e do gate obsoleto | real |
-| `Gateway` falha real de rede/timeout do provedor | mock | médio | teste com servidor HTTP fake lento (timeout) | real |
+| `Gateway` falha real de rede/timeout do provedor | ✅ unit (conexão recusada + servidor que pendura c/ timeout curto) → `AllFailed` | baixo | coberto (`gateway.rs`) | real |
 | `Sandbox` contenção (escape, rede, mem) | `#[ignore]` (job `sandbox` com Docker) | médio | já existe — exige daemon | real |
 | `PgStore` sob contenção extrema (>64 retries) | contract_pg | baixo-médio | teste que force >64 adversários | teórico (defesa) |
 | `BrokenChain` real em produção | unit | baixo | já coberto | teórico (não deve ocorrer) |

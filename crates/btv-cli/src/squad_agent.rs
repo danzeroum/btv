@@ -715,7 +715,9 @@ where
             }
         }
     }
-    let _ = ledger_session.finish(failure.is_none(), 1);
+    if let Err(e) = ledger_session.finish(failure.is_none(), 1) {
+        eprintln!("btv: falha ao finalizar a sessão do squad no ledger: {e}");
+    }
     core_task.abort();
     match failure {
         None => Ok(()),

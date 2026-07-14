@@ -222,4 +222,79 @@ mod tests {
         .unwrap_err();
         assert!(matches!(err, GatewayError::NoProvider));
     }
+
+    fn req_simples() -> GenerateRequest {
+        GenerateRequest {
+            model: "x".into(),
+            system: String::new(),
+            messages: vec![],
+            tools: vec![],
+            max_tokens: 16,
+            temperature: None,
+        }
+    }
+
+    /// T3 — falha REAL de transporte (conexão recusada), não mock: um provider
+    /// apontado a uma porta fechada vira `AllFailed` (a cadeia de fallback tenta
+    /// e reporta), nunca pendura nem entra em pânico.
+    #[tokio::test]
+    async fn conexao_recusada_vira_all_failed() {
+        // Porta livre obtida e liberada na hora → conexão recusada determinística.
+        let porta = {
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let gw = Gateway {
+            client: reqwest::Client::new(),
+            providers: vec![ProviderConfig {
+                id: ProviderId::Anthropic,
+                api_key: "k".into(),
+                base_url: format!("http://127.0.0.1:{porta}"),
+            }],
+        };
+        let err = gw.generate(req_simples(), &mut |_| {}).await.unwrap_err();
+        let GatewayError::AllFailed(msg) = err else {
+            panic!("esperava AllFailed em conexão recusada");
+        };
+        assert!(
+            msg.contains("anthropic"),
+            "mensagem deve nomear o provider: {msg}"
+        );
+    }
+
+    /// T3 — provider que ACEITA a conexão mas nunca responde: o timeout do
+    /// cliente HTTP corta em vez de esperar para sempre (o bug de produção que
+    /// os timeouts do gateway resolveram — squad "ativa" zumbi). Vira `AllFailed`
+    /// rápido, sem pendurar.
+    #[tokio::test]
+    async fn servidor_que_pendura_estoura_timeout_sem_pendurar() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let porta = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            // Aceita e segura o socket sem escrever resposta HTTP.
+            if let Ok((sock, _)) = listener.accept().await {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                drop(sock);
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(400))
+            .build()
+            .unwrap();
+        let gw = Gateway {
+            client,
+            providers: vec![ProviderConfig {
+                id: ProviderId::Anthropic,
+                api_key: "k".into(),
+                base_url: format!("http://127.0.0.1:{porta}"),
+            }],
+        };
+        let inicio = std::time::Instant::now();
+        let err = gw.generate(req_simples(), &mut |_| {}).await.unwrap_err();
+        assert!(
+            inicio.elapsed() < std::time::Duration::from_secs(5),
+            "deveria cortar no timeout curto, não esperar o servidor"
+        );
+        assert!(matches!(err, GatewayError::AllFailed(_)));
+    }
 }
