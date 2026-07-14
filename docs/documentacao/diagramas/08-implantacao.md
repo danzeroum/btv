@@ -40,7 +40,7 @@ flowchart TB
     end
     A1 -.->|"sqlx (só com feature pg)"| PGN
 
-    subgraph CI["⚙️ CI (.github/workflows/ci.yml — 13 jobs)"]
+    subgraph CI["⚙️ CI (.github/workflows/ci.yml — 14 jobs)"]
         direction LR
         CI1["rust · python · pg · deny · security"]:::node
         CI2["verify (self-hosting) · sandbox (Docker real)"]:::node
@@ -60,7 +60,7 @@ flowchart TB
 | Provedores LLM | — | HTTPS de saída (só do Rust) |
 | Postgres (SaaS opcional) | Ledger + sessões por tenant, RLS | TCP (só com `feature pg`) |
 
-## Os 13 jobs de CI (`.github/workflows/ci.yml`)
+## Os 14 jobs de CI (`.github/workflows/ci.yml`)
 
 | Job | O que faz |
 |---|---|
@@ -77,6 +77,7 @@ flowchart TB
 | `k6` | Sobe o `loadgen` (ScriptedGenerator, sem key) e valida P95 (`p(95)<100`) |
 | `web` | Console `/dev`: `pnpm test` + build + Playwright e2e-integration (dashboard real + sidecar Python via uv) |
 | `btv-web` | SPA-produto (checkout com **submódulos** para `vendor/bpmn`): vitest + build + Playwright e2e + e2e-integration |
+| `coverage` (PR) | **NÃO bloqueante** (`continue-on-error`): `cargo tarpaulin` (Rust) + `pytest --cov` (Python) → relatórios como artefato. Informa a %; não é gate (T1 do roadmap) |
 
 ## `infra/` — esqueleto honesto
 
