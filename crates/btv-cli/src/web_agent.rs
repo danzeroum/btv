@@ -362,7 +362,9 @@ fn finish_task_ok(
     ledger_session: &mut crate::session::Session,
     steps: usize,
 ) {
-    let _ = ledger_session.finish(true, steps);
+    if let Err(e) = ledger_session.finish(true, steps) {
+        eprintln!("btv: falha ao finalizar a sessão no ledger ({session_id}): {e}");
+    }
     let verified = ledger_session.verify().unwrap_or(0);
     // Libera ANTES de anunciar: `Done` é o sinal de "pode mandar a próxima"
     // — publicá-lo com a sessão ainda `busy` abria uma janela de 409 para o

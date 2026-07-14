@@ -456,7 +456,9 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String, ctx: btv_domain::
         let now = crate::session::now_rfc3339();
         {
             let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
-            let _ = store.set_status(&task_id, status, &now);
+            if let Err(e) = store.set_status(&task_id, status, &now) {
+                eprintln!("btv: falha ao persistir status final do run ({task_id}): {e}");
+            }
         }
         // Entregas (U4): só em conclusão limpa — run com erro/encerrado não
         // "entrega". A escrituração vive em `registrar_entregas`, extraída para
