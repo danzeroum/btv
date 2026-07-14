@@ -225,11 +225,11 @@ export function Vivo() {
           {view.erro && (
             <div
               style={{
-                background: '#f7e7e3',
-                border: '1px solid #e0b8ad',
+                background: 'var(--err-bg)',
+                border: '1px solid var(--err-line)',
                 borderRadius: 16,
                 padding: '18px 22px',
-                color: '#a54334',
+                color: 'var(--err-ink)',
                 fontSize: 13,
                 lineHeight: 1.6,
               }}
@@ -355,7 +355,7 @@ export function Vivo() {
             ) : (
               <div
                 data-testid="squad-done"
-                style={{ background: '#e7efe9', border: '1px solid #bcd4c8', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 14 }}
+                style={{ background: 'var(--ok-bg)', border: '1px solid var(--ok-line)', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'center', gap: 14 }}
               >
                 <span style={{ fontSize: 22 }}>◈</span>
                 <div>

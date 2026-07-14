@@ -1,52 +1,43 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { listDeliverables, deliverableDownloadUrl, type BtvDeliverable } from '../../../api/btv'
 import { useTemplates } from '../../../state/TemplatesContext'
+import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { AsyncStatus } from '../../../components/primitives'
 
 /** U4 · Biblioteca de entregas — artefatos REAIS gravados pelas ferramentas
  *  do squad, agrupados por modelo, com trilha de procedência e export
  *  honesto (formato binário desabilitado até existir conversor). */
 export function Biblioteca() {
-  const [items, setItems] = useState<BtvDeliverable[] | null>(null)
-  const [erro, setErro] = useState<string | null>(null)
   const templates = useTemplates()
-
+  // Estado assíncrono unificado (F1) pelo AsyncStatus.
+  const { state, run: carregar } = useAsyncAction(listDeliverables)
   useEffect(() => {
-    listDeliverables()
-      .then(setItems)
-      .catch((e: Error) => setErro(e.message))
-  }, [])
-
-  if (erro) {
-    return (
-      <div style={{ background: '#f7e7e3', border: '1px solid #e0b8ad', borderRadius: 12, padding: '16px 20px', color: '#a54334', fontSize: 13 }}>
-        Não consegui carregar as entregas ({erro}).
-      </div>
-    )
-  }
-  if (!items) {
-    return <div className="mono" style={{ color: 'var(--faint)', fontSize: 11.5 }}>carregando entregas…</div>
-  }
-  if (items.length === 0) {
-    return (
-      <div style={{ background: 'var(--white)', border: '1px dashed var(--line2)', borderRadius: 14, padding: '28px 30px', color: 'var(--muted)', fontSize: 13.5, lineHeight: 1.6 }}>
-        Nenhuma entrega ainda. Quando uma squad concluir com artefatos gravados de verdade
-        (ferramenta <span className="mono">edit</span> do squad), eles aparecem aqui com a trilha
-        completa de procedência.
-      </div>
-    )
-  }
+    void carregar()
+  }, [carregar])
 
   const byId = templates.status === 'ready' ? templates.byId : null
-  const grupos = new Map<string, BtvDeliverable[]>()
-  for (const d of items) {
-    const list = grupos.get(d.template_id) ?? []
-    list.push(d)
-    grupos.set(d.template_id, list)
-  }
 
   return (
-    <>
-      {[...grupos.entries()].map(([templateId, artefatos]) => {
+    <AsyncStatus state={state} onRetry={() => void carregar()} erroPrefixo="Não consegui carregar as entregas">
+      {(items) => {
+        if (items.length === 0) {
+          return (
+            <div style={{ background: 'var(--white)', border: '1px dashed var(--line2)', borderRadius: 14, padding: '28px 30px', color: 'var(--muted)', fontSize: 13.5, lineHeight: 1.6 }}>
+              Nenhuma entrega ainda. Quando uma squad concluir com artefatos gravados de verdade
+              (ferramenta <span className="mono">edit</span> do squad), eles aparecem aqui com a trilha
+              completa de procedência.
+            </div>
+          )
+        }
+        const grupos = new Map<string, BtvDeliverable[]>()
+        for (const d of items) {
+          const list = grupos.get(d.template_id) ?? []
+          list.push(d)
+          grupos.set(d.template_id, list)
+        }
+        return (
+          <>
+            {[...grupos.entries()].map(([templateId, artefatos]) => {
         const template = byId?.get(templateId)
         const cor = template?.cor ?? 'var(--brand)'
         const binarioDe = (formato: string) =>
@@ -110,6 +101,9 @@ export function Biblioteca() {
           </div>
         )
       })}
-    </>
+          </>
+        )
+      }}
+    </AsyncStatus>
   )
 }
