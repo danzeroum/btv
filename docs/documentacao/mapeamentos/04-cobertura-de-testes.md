@@ -4,11 +4,12 @@
 **Entrada:** arquivos de teste presentes (unit `#[cfg(test)]`, `tests/`, pytest, vitest,
 Playwright) + análise de código.
 
-> **Honestidade sobre "%":** **nenhum relatório de cobertura foi executado** (não há
-> `tarpaulin`/`pytest-cov`/`lcov` no CI). Portanto **não há percentuais inventados** aqui.
-> Este mapa cobre **presença e tipo de teste** por módulo (fato estático) e sinaliza risco
-> **qualitativo** nos ramos de erro. Para o % real: `cargo tarpaulin --workspace` e
-> `cd python && uv run pytest --cov`.
+> **Honestidade sobre "%":** este mapa **não inventa percentuais** — cobre **presença e
+> tipo de teste** por módulo (fato estático) e sinaliza risco **qualitativo** nos ramos de
+> erro. Os números REAIS de cobertura são produzidos pelo job **`coverage` do CI** (T1 do
+> roadmap, **não bloqueante**): `cargo tarpaulin --workspace` (Rust) + `pytest --cov`
+> (Python), com os relatórios como artefato do run (`coverage-reports`). Localmente:
+> `cargo tarpaulin --workspace` e `cd python && uv run --with pytest-cov pytest --cov=packages`.
 
 ---
 
@@ -65,8 +66,9 @@ Playwright) + análise de código.
 
 ## 4.6 Nota sobre o gate de qualidade
 
-O CI **não** roda cobertura, mas roda o job **`verify`** (self-hosting: `btv verify` sobre o
-próprio workspace, falha em veredito `Fail`) e o job **`sandbox`** (contenção Docker real +
-rust-analyzer LSP real). Isso dá garantia de **comportamento** onde a % de linha não é
-medida. Adicionar `tarpaulin`/`pytest-cov` ao CI é a forma de trocar os `⟨medir⟩` desta
-página por números reais.
+O CI agora roda o job **`coverage`** (T1 do roadmap, **não bloqueante**: `tarpaulin` +
+`pytest-cov`, relatórios como artefato) para produzir os números REAIS de cobertura — mas
+o **gate de qualidade** continua sendo comportamental, não a % de linha: o job **`verify`**
+(self-hosting: `btv verify` sobre o próprio workspace, falha em veredito `Fail`) e o job
+**`sandbox`** (contenção Docker real + rust-analyzer LSP real). A cobertura informa; `verify`
+e `sandbox` é que reprovam.

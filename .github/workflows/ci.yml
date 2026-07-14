@@ -289,3 +289,38 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       - run: pnpm test:e2e:integration
+
+  # Cobertura de testes (T1 do roadmap) — NÃO bloqueante (`continue-on-error`):
+  # relatório informativo, nunca reprova o PR. Troca os ⟨medir⟩ da doc de
+  # cobertura por números REAIS (artefato do run). O gate de comportamento
+  # continua sendo `rust`/`verify`/`sandbox`, não a % de linha. Só em PR.
+  coverage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
+      # `--exclude btv-proto` (stubs gerados); sem uv aqui, os testes
+      # cross-process do sidecar pulam graciosamente (como no job `rust`).
+      - name: Cobertura Rust (tarpaulin)
+        continue-on-error: true
+        run: cargo tarpaulin --workspace --exclude btv-proto --out Xml --timeout 300 --skip-clean
+      - uses: astral-sh/setup-uv@v5
+      # `uv run --with pytest-cov` adiciona a dep de forma efêmera — sem tocar
+      # o pyproject nem o `uv.lock` (o job `python` segue idêntico).
+      - name: Cobertura Python (pytest-cov)
+        continue-on-error: true
+        working-directory: python
+        run: uv run --with pytest-cov pytest --cov=packages --cov-report=xml --cov-report=term
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            cobertura.xml
+            python/coverage.xml
+          if-no-files-found: ignore

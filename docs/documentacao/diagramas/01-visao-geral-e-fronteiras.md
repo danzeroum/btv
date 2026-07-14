@@ -15,7 +15,7 @@ a arquitetura e enumerar os mecanismos de comunicação entre as três linguagen
 | `web/` | **TS/React 19** | Console dev/admin (montado em `/dev`, `base: './'`). |
 | `schemas/` | **proto + JSON Schema** | Fonte única de contratos (gRPC, `*.v1.schema.json`, 12 templates, fixtures). |
 | `vendor/bpmn` | **TS (submódulo)** | Lib agnóstica `@bpmn-react/*` consumida pelo Squad Designer de `btv-web`. |
-| `infra/`, `.github/` | Docker/k6/TF/Ansible + CI | Esqueleto local-first + 13 jobs de CI. |
+| `infra/`, `.github/` | Docker/k6/TF/Ansible + CI | Esqueleto local-first + 14 jobs de CI. |
 
 Os 14 crates: `btv-cli`, `btv-contract`, `btv-core`, `btv-domain`, `btv-golden`,
 `btv-llm`, `btv-proto`, `btv-schemas`, `btv-server`, `btv-sidecar`, `btv-store`,
