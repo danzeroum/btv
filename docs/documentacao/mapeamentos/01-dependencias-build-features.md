@@ -101,7 +101,6 @@ Pontos exatos que dependem de `pg` (`#[cfg(feature = "pg")]`): `btv-store/src/li
 | **btv-promptforge** | `pydantic>=2`, `grpcio>=1.60`, btv-proto-py | sim (grpcio; pydantic v2 tem core em Rust) |
 | **btv-squad** | `pydantic>=2`, `grpcio>=1.60`, btv-proto-py | sim (grpcio) — mas o núcleo de raciocínio (orquestrador/consenso/recall) só usa `pydantic`; `docker` é import **opcional** |
 | **btv-review** | `pydantic>=2`, btv-promptforge | **não** (só pydantic; puro) |
-| **btv-eval** | (nenhuma) | não (placeholder vazio) |
 
 **Impacto cruzado Python:** mexer em `btv-proto-py` afeta `btv-promptforge` e `btv-squad`
 (consumidores dos stubs). Mexer em `btv-promptforge.hashing` afeta `btv-review`

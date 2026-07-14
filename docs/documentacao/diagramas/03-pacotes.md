@@ -83,7 +83,6 @@ flowchart TB
     SQUAD["btv-squad\n«orquestrador + 5 agentes + servers»"]:::pkg
     PF["btv-promptforge\n«generators, lint, hashing»"]:::pkg
     REVIEW["btv-review\n«4 reviewers, gates, cert»"]:::pkg
-    EVAL["btv-eval\n«placeholder (vazio)»"]:::pkg
     PROTOPY["btv-proto-py\n«stubs gRPC gerados»"]:::gen
 
     SQUAD --> PROTOPY
@@ -94,8 +93,8 @@ flowchart TB
 
 **Notas.** `btv-proto-py` é o contrato de fio comum (gerado de `schemas/proto/*`, nunca
 editado à mão). `btv-review.certification` reusa `btv_promptforge.hashing` (mesmo esquema
-canônico do cache-key para `evidence_hash`). `btv-eval` é placeholder honesto (vazio) — a
-avaliação A/B real vive em Rust (`btv-schemas::experiment`).
+canônico do cache-key para `evidence_hash`). A avaliação A/B real vive em Rust
+(`btv-schemas::experiment`); o antigo `btv-eval` (placeholder vazio) foi removido (Onda 5, B4).
 
 ---
 

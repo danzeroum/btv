@@ -10,7 +10,7 @@ a arquitetura e enumerar os mecanismos de comunicação entre as três linguagen
 | Área | Linguagem | Papel |
 |---|---|---|
 | `crates/` (14 crates, workspace Cargo) | **Rust** | Núcleo: CLI/TUI, gateway LLM, ferramentas, permissões, verify, storage, HTTP, ponte gRPC. **Dono das API keys, disco, rede, processos.** |
-| `python/packages/` (5 pacotes, workspace uv) | **Python** | Sidecar de raciocínio: squad multi-agente, PromptForge, review, memória. **Nunca chama LLM direto; nunca toca disco/keys.** |
+| `python/packages/` (4 pacotes, workspace uv) | **Python** | Sidecar de raciocínio: squad multi-agente, PromptForge, review, memória. **Nunca chama LLM direto; nunca toca disco/keys.** |
 | `btv-web/` | **TS/React 19** | SPA-produto BuildToValue (raiz `/`) — para profissionais não técnicos. |
 | `web/` | **TS/React 19** | Console dev/admin (montado em `/dev`, `base: './'`). |
 | `schemas/` | **proto + JSON Schema** | Fonte única de contratos (gRPC, `*.v1.schema.json`, 12 templates, fixtures). |
@@ -21,8 +21,7 @@ Os 14 crates: `btv-cli`, `btv-contract`, `btv-core`, `btv-domain`, `btv-golden`,
 `btv-llm`, `btv-proto`, `btv-schemas`, `btv-server`, `btv-sidecar`, `btv-store`,
 `btv-tools`, `btv-tui`, `btv-verify`.
 
-Os 5 pacotes Python: `btv-eval`, `btv-promptforge`, `btv-proto-py`, `btv-review`,
-`btv-squad`.
+Os 4 pacotes Python: `btv-promptforge`, `btv-proto-py`, `btv-review`, `btv-squad`.
 
 ---
 

@@ -44,7 +44,6 @@ Playwright) + análise de código.
 | btv-promptforge | pytest | hashing (paridade), lint, generators |
 | btv-review | pytest | gates duros, score, certification |
 | btv-proto-py | — | gerado; exercitado indiretamente pelos cross-process do sidecar |
-| btv-eval | — | placeholder vazio |
 
 ## 4.4 Frontend (SPA × teste)
 

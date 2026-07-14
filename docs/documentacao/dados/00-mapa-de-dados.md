@@ -157,5 +157,5 @@ Config de tenant SaaS (feature `pg`): variáveis de conexão do pool Postgres (A
 | 13 | [Store, proto e sidecar Rust](13-rust-store-proto-sidecar.md) | btv-store, btv-proto, btv-sidecar |
 | 14 | [CLI Rust](14-rust-cli.md) | btv-cli (composition root) |
 | 15 | [Server e demais Rust](15-rust-server-e-outros.md) | btv-server, btv-tui, btv-golden, btv-contract |
-| 16 | [Python](16-python.md) | os 5 pacotes |
+| 16 | [Python](16-python.md) | os 4 pacotes |
 | 17 | [TypeScript e HTML](17-typescript-e-html.md) | web/, btv-web/ |

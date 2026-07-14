@@ -22,8 +22,8 @@ leitura estática de todo o código.
   sandbox Docker fail-closed, vetter de skills.
 - **Honestidade "Nada Fake" codificada:** `fake_marker` no ledger, veredito "sem
   significância" no experiment, posições `inferida` na esteira, custo `None` quando não
-  tabelado, código morto tratado sem fingimento — `forgetting.py` foi removido (código
-  morto eliminado) e `btv-eval` permanece placeholder vazio explicitamente descopado.
+  tabelado, código morto tratado sem fingimento — `forgetting.py` e o placeholder vazio
+  `btv-eval` foram removidos (código morto eliminado, Onda 5 do roadmap).
 - **Dualidade de storage sem fork:** SQLite e Postgres+RLS atrás dos **mesmos traits**,
   com a suíte `btv-contract` provando paridade (inclusive determinismo de hash).
 
@@ -38,7 +38,7 @@ leitura estática de todo o código.
 | **`max_autonomy_level` não-wireado** | ~~Campo trafega em `SquadTask` mas é ignorado ponta-a-ponta (ADR 0021).~~ **RESOLVIDO (ADR 0033):** o campo foi REMOVIDO do wire (quebra assinada) — tira a mentira do contrato; a autonomia real segue por agente. | — |
 | **Duplicação deliberada do guard de Origin** | `require_local_origin`/`ErrorBody` duplicados entre `btv-server` e `btv-cli::web_agent` (para evitar `server→cli`). | Extrair um crate `btv-web-edge` mínimo com o guard e os DTOs de erro, consumido por ambos. |
 | **Ponte async→sync repetida** | Três estratégias em `btv-tools` (thread+runtime, thread de sessão, `std::thread`+condvar) e `rt.block_on` por operação em `PgStore`. | Documentar um ADR de "padrão de ponte" e considerar um helper compartilhado para Sandbox/MCP. |
-| **`btv-eval` vazio** | Placeholder que pode enganar quem procura a avaliação. | Implementar o feeder do `LearningRouter` prometido, ou remover e apontar para `btv-schemas::experiment`. |
+| **`btv-eval` vazio** | ~~Placeholder que pode enganar quem procura a avaliação.~~ **RESOLVIDO (Onda 5, B4):** pacote removido; a avaliação A/B real é `btv-schemas::experiment`. | — |
 | **Designer não aplica ao orquestrador** | `squad.workflow.v1` é "salvo e validado", mas o squad real ainda usa 5 agentes fixos. | Fechar o loop: mapear o grafo salvo para um roster de `PersonaSpec` executável (a infra de roster já existe em `SquadTask`). |
 | **Dois frontends com padrão duplicado** | `web/` e `btv-web/` têm `api/client.ts` idêntico e o mesmo padrão Context+reducer. | Considerar um pacote compartilhado de client HTTP/SSE + tipos de DTO (hoje os DTOs são espelhados manualmente em cada SPA). |
 

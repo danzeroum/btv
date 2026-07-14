@@ -1,4 +1,4 @@
-# 11 — Referência: os 5 pacotes Python
+# 11 — Referência: os 4 pacotes Python
 
 Workspace uv em `python/` (`pyproject.toml`, membros `packages/*`; dev deps `pytest`,
 `grpcio-tools`). Diagrama de classes: ver
@@ -56,14 +56,6 @@ mão). Dep externa: `grpcio`. Módulos `{core,llm,memory,promptforge,squad}_pb2[
   **É o "regras duras sobrepõem a média".**
 - **`certification.py`** — `Certification`, `certify(...)`, `evidence_hash` (via
   `btv_promptforge.hashing`). Python só **produz**; o Rust registra no ledger.
-
----
-
-## btv-eval — placeholder (vazio)
-
-`python/packages/btv-eval/src/btv_eval/__init__.py` — só docstring, sem código. A avaliação
-A/B real vive em Rust (`btv-schemas::experiment`); a avaliação runtime do squad é
-`btv_squad/evaluation.py::ContinuousEvaluator`.
 
 ---
 
