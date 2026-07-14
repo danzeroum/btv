@@ -17,10 +17,10 @@ export function StatCard({ k, v, delta, deltaCor }: { k: string; v: string; delt
 
 export function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'muted' | 'erro'; children: ReactNode }) {
   const css: Record<string, CSSProperties> = {
-    ok: { background: '#e7efe9', color: '#2d6a50' },
-    warn: { background: '#fdf3e3', color: '#9a6b14' },
+    ok: { background: 'var(--ok-bg)', color: 'var(--ok-ink)' },
+    warn: { background: 'var(--warn-bg)', color: 'var(--warn-ink)' },
     muted: { background: 'var(--paper)', color: 'var(--muted)' },
-    erro: { background: '#f7e7e3', color: '#a54334' },
+    erro: { background: 'var(--err-bg)', color: 'var(--err-ink)' },
   }
   return (
     <span className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', borderRadius: 999, padding: '5px 12px', textAlign: 'center', ...css[tone] }}>
@@ -44,7 +44,7 @@ export function Toggle({ on, onClick, label }: { on: boolean; onClick: () => voi
 
 export function ErroBox({ msg }: { msg: string }) {
   return (
-    <div style={{ background: '#f7e7e3', border: '1px solid #e0b8ad', borderRadius: 12, padding: '14px 18px', color: '#a54334', fontSize: 13 }}>
+    <div style={{ background: 'var(--err-bg)', border: '1px solid var(--err-line)', borderRadius: 12, padding: '14px 18px', color: 'var(--err-ink)', fontSize: 13 }}>
       {msg}
     </div>
   )

@@ -29,6 +29,7 @@ import {
   type FeedItem,
 } from '../lib/esteira'
 import type { SquadTemplate } from '../api/templates'
+import { useToast } from '../components/primitives'
 
 interface RunState {
   template: SquadTemplate
@@ -65,6 +66,7 @@ const SquadRunContext = createContext<SquadRunApi | null>(null)
 export function SquadRunProvider({ children }: { children: ReactNode }) {
   const [run, setRun] = useState<RunState | null>(null)
   const dispatch = useAppDispatch()
+  const toast = useToast()
   const disconnectRef = useRef<(() => void) | null>(null)
 
   const conectar = useCallback((taskId: string) => {
@@ -206,9 +208,9 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
       disconnectRef.current?.()
       setRun(null)
       dispatch({ type: 'SET_SQUAD', squad: null })
-      if (typeof window !== 'undefined') window.alert(mensagem)
+      toast.push('warn', mensagem)
     },
-    [dispatch],
+    [dispatch, toast],
   )
   const GATE_ENCERRADO =
     'Esta sessão do squad já foi encerrada — o gate espera no máximo ~5 min por sua decisão (e some se o servidor reiniciar). Não há mais o que aprovar aqui; inicie uma nova squad.'

@@ -59,8 +59,9 @@ garante que a lib nunca menciona "BTV".
 `vendor/bpmn/.../dist/esm/index.js` (+ `styles.css`).
 
 **Estrutura `src/`.**
-- `main.tsx` → `App.tsx` (providers: `AppProvider` → `TemplatesProvider` → `SquadRunProvider` → `Shell`)
+- `main.tsx` → `App.tsx` (providers: `AppProvider` → `ToastProvider` → `TemplatesProvider` → `SquadRunProvider` → `Shell`)
 - `api/` — `client.ts`, `btv.ts`, `squad.ts`, `templates.ts`, `admin.ts`
+- `components/primitives/` — `AsyncStatus`, `Modal`/`ConfirmModal`, `Toast`/`ToastProvider`/`useToast` (feedback e estado assíncrono, espelham as do console `web/` nos tokens do produto)
 - `components/screens/user/` — `Inicio`(U1)/`Vivo`(U3)/`Biblioteca`(U4)/`Designer`(U5)/`Minhas`(U6)/`Personas`(U7)
 - `components/screens/admin/` — `Telemetria/Ledger/Providers/Permissoes/Modelos/Usuarios`
 - `components/wizard/Wizard.tsx` — "Montar squad" (U2)
@@ -68,7 +69,7 @@ garante que a lib nunca menciona "BTV".
 - `lib/` — `esteira.ts` (**`esteiraFromEvents`** + feed), `entregas.ts`, `nav.ts`, `time.ts`,
   `screenComponents.tsx`/`screenMeta.ts` (mapa de telas)
 - `state/` — `AppContext.tsx`, `SquadRunContext.tsx`, `TemplatesContext.tsx`, `useBrand.ts`
-- `hooks/` — só `useAsyncAction.ts` (existe mas **sem adoção** — nenhuma tela o consome ainda)
+- `hooks/` — `useAsyncAction.ts` (`{state,run,reset}`, `AsyncState<T>`), consumido via `AsyncStatus` (adotado em `Minhas`; padrão a expandir às demais telas)
 
 **Contexts.**
 - `TemplatesContext` — carrega os 12 templates de `GET /api/btv/templates`, compartilha

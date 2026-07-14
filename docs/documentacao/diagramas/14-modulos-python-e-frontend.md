@@ -80,11 +80,14 @@ flowchart LR
 ```mermaid
 flowchart TB
     main --> App
-    App --> AppProvider --> TemplatesProvider --> SquadRunProvider --> Shell
+    App --> AppProvider --> ToastProvider --> TemplatesProvider --> SquadRunProvider --> Shell
     Shell --> screens_user & screens_admin & Wizard
     screens_user --> Designer
     Designer --> btvPlugin
     btvPlugin -.->|alias| bpmn[(vendor/bpmn)]
+    screens_user & screens_admin --> primitives["components/primitives\nAsyncStatus/Modal/Toast"]
+    primitives --> useAsync["hooks/useAsyncAction"]
+    SquadRunProvider -->|useToast| ToastProvider
     SquadRunProvider --> esteira["lib/esteira.ts\nesteiraFromEvents"]
     SquadRunProvider --> api_squad["api/squad"] & api_btv["api/btv"]
     TemplatesProvider --> api_templates["api/templates"]

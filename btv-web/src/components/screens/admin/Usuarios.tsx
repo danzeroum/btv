@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createUser, deleteUser, fetchUsers, setUserAtivo, verifyUserPin, type BtvUser } from '../../../api/admin'
+import { ConfirmModal } from '../../../components/primitives'
 import { ErroBox, NotaHonesta, Pill, Toggle } from './comum'
 
 // Avatares em família grafite/taupe — iniciais discretas, sem cores funcionais
@@ -16,6 +17,7 @@ export function Usuarios() {
   const [ativo, setAtivo] = useState<{ id: number; nome: string } | null>(null)
   const [desafio, setDesafio] = useState<number | null>(null)
   const [pinErro, setPinErro] = useState<string | null>(null)
+  const [removendo, setRemovendo] = useState<BtvUser | null>(null)
   const nomeRef = useRef<HTMLInputElement | null>(null)
   const emailRef = useRef<HTMLInputElement | null>(null)
   const pinRef = useRef<HTMLInputElement | null>(null)
@@ -71,8 +73,12 @@ export function Usuarios() {
       .catch(() => setPinErro('Não consegui verificar o PIN. Tente de novo.'))
   }
 
-  const remover = (u: BtvUser) => {
-    if (!window.confirm(`Remover o perfil "${u.nome}"? Esta ação não pode ser desfeita.`)) return
+  // Abre o modal de confirmação (substitui o window.confirm nativo — F4).
+  const remover = (u: BtvUser) => setRemovendo(u)
+  const confirmarRemocao = () => {
+    const u = removendo
+    if (!u) return
+    setRemovendo(null)
     void deleteUser(u.id)
       .then(() => {
         if (ativo?.id === u.id) setAtivo(null)
@@ -180,6 +186,14 @@ export function Usuarios() {
         sha256, nunca em claro) para ser assumido. Não é uma barreira de rede — o dashboard roda em
         127.0.0.1 sob a guarda de Origin; o PIN protege a atribuição do perfil, não uma sessão HTTP.
       </NotaHonesta>
+      <ConfirmModal
+        aberto={removendo !== null}
+        titulo="Remover perfil"
+        mensagem={`Remover o perfil "${removendo?.nome ?? ''}"? Esta ação não pode ser desfeita.`}
+        confirmarLabel="Remover"
+        onConfirmar={confirmarRemocao}
+        onCancelar={() => setRemovendo(null)}
+      />
     </>
   )
 }
