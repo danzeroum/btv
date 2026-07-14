@@ -69,7 +69,7 @@ garante que a lib nunca menciona "BTV".
 - `lib/` — `esteira.ts` (**`esteiraFromEvents`** + feed), `entregas.ts`, `nav.ts`, `time.ts`,
   `screenComponents.tsx`/`screenMeta.ts` (mapa de telas)
 - `state/` — `AppContext.tsx`, `SquadRunContext.tsx`, `TemplatesContext.tsx`, `useBrand.ts`
-- `hooks/` — `useAsyncAction.ts` (`{state,run,reset}`, `AsyncState<T>`), consumido via `AsyncStatus` (adotado em `Minhas`; padrão a expandir às demais telas)
+- `hooks/` — `useAsyncAction.ts` (`{state,run,reset}`, `AsyncState<T>`), consumido via `AsyncStatus` (adotado em `Minhas` e `Biblioteca`; padrão a expandir às demais telas)
 
 **Contexts.**
 - `TemplatesContext` — carrega os 12 templates de `GET /api/btv/templates`, compartilha

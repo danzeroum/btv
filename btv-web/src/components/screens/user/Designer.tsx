@@ -164,7 +164,7 @@ export function Designer() {
           </button>
         ))}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {erro && <span style={{ fontSize: 11, color: '#a54334', maxWidth: 260 }}>{erro}</span>}
+          {erro && <span style={{ fontSize: 11, color: 'var(--err-ink)', maxWidth: 260 }}>{erro}</span>}
           <button onClick={() => void salvar()} style={{ ...ghost, color: 'var(--brand)', fontWeight: 600 }}>
             {salvo ?? 'salvar como modelo'}
           </button>

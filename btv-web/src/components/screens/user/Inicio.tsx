@@ -13,8 +13,8 @@ const CATS: Array<[CategoriaSquad | 'todas', string]> = [
 
 const ONDA_LABEL: Record<number, string> = { 1: 'onda 1', 2: 'onda 2', 3: 'onda 3' }
 const ONDA_CSS: Record<number, CSSProperties> = {
-  1: { background: '#e7efe9', color: '#2d6a50' },
-  2: { background: '#fdf3e3', color: '#9a6b14' },
+  1: { background: 'var(--ok-bg)', color: 'var(--ok-ink)' },
+  2: { background: 'var(--warn-bg)', color: 'var(--warn-ink)' },
   3: { background: '#f4e9ef', color: '#8d3f6a' },
 }
 
@@ -134,11 +134,11 @@ export function Inicio() {
     return (
       <div
         style={{
-          background: '#f7e7e3',
-          border: '1px solid #e0b8ad',
+          background: 'var(--err-bg)',
+          border: '1px solid var(--err-line)',
           borderRadius: 12,
           padding: '16px 20px',
-          color: '#a54334',
+          color: 'var(--err-ink)',
           fontSize: 13,
           lineHeight: 1.6,
         }}

@@ -33,6 +33,7 @@
      terracota (--decision) — feedback nunca usa a cor de decisão humana. */
   --ok-bg: #e7efe9;
   --ok-ink: #2d6a50;
+  --ok-line: #bcd4c8;
   --err-bg: #f7e7e3;
   --err-line: #e0b8ad;
   --err-ink: #a54334;

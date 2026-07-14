@@ -81,7 +81,7 @@ export function Personas() {
       </div>
 
       {erro && (
-        <div style={{ background: '#f7e7e3', border: '1px solid #e0b8ad', borderRadius: 12, padding: '14px 18px', color: '#a54334', fontSize: 13 }}>
+        <div style={{ background: 'var(--err-bg)', border: '1px solid var(--err-line)', borderRadius: 12, padding: '14px 18px', color: 'var(--err-ink)', fontSize: 13 }}>
           {erro}
         </div>
       )}
@@ -130,7 +130,7 @@ export function Personas() {
                     style={{
                       ...badgeBase,
                       ...(p.editado
-                        ? { background: '#fdf3e3', color: '#9a6b14' }
+                        ? { background: 'var(--warn-bg)', color: 'var(--warn-ink)' }
                         : { background: 'var(--paper)', color: 'var(--faint)' }),
                     }}
                   >
@@ -177,7 +177,7 @@ export function Personas() {
                     />
                     <span style={{ fontSize: 11, color: 'var(--faint)' }}>criada por você · trabalha na produção da squad</span>
                   </span>
-                  <span style={{ ...badgeBase, background: '#e7efe9', color: '#2d6a50' }}>própria</span>
+                  <span style={{ ...badgeBase, background: 'var(--ok-bg)', color: 'var(--ok-ink)' }}>própria</span>
                 </div>
                 <textarea
                   defaultValue={c.prompt}

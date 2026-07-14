@@ -404,7 +404,7 @@ function WizardInner({ template, onClose }: { template: SquadTemplate; onClose: 
             </button>
           )}
           {erroAtivacao && (
-            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#a54334', maxWidth: 280, lineHeight: 1.4 }}>
+            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--err-ink)', maxWidth: 280, lineHeight: 1.4 }}>
               {erroAtivacao}
             </span>
           )}
