@@ -22,7 +22,7 @@ em `/dev` (`base: './'`). Personas: `user` (8 telas) e `admin` (12 telas).
 
 **Estrutura `src/`.**
 - `main.tsx` → `App.tsx` (providers: `AppProvider` → `ToastProvider` → `SessionProvider` → `Shell`)
-- `api/` — 22 módulos client (ver §endpoints)
+- `api/` — 21 módulos client (ver §endpoints)
 - `components/primitives/` — `AsyncStatus/Badge/Button/Card/Gauge/Modal/ProgressBar/StatTile/Table/Toast`
 - `components/screens/user/` — `Onboarding/Sessao/Permissao/Modelo/Prompts/Squad/Sugestoes` +
   `Designer/` (hand-rolled: `Board/EdgesOverlay/NodeView/Palette/PropertiesPanel/geometry.ts/reducer.ts`)
@@ -65,8 +65,10 @@ garante que a lib nunca menciona "BTV".
 - `components/screens/admin/` — `Telemetria/Ledger/Providers/Permissoes/Modelos/Usuarios`
 - `components/wizard/Wizard.tsx` — "Montar squad" (U2)
 - `designer/` — `btvPlugin.tsx` (plugin de domínio para bpmn), `bases.ts`, `flow.ts`
-- `lib/` — `esteira.ts` (**`esteiraFromEvents`** + feed), `entregas.ts`, `nav.ts`, `time.ts`
-- `state/` — `AppContext.tsx`, `SquadRunContext.tsx`, `TemplatesContext.tsx`
+- `lib/` — `esteira.ts` (**`esteiraFromEvents`** + feed), `entregas.ts`, `nav.ts`, `time.ts`,
+  `screenComponents.tsx`/`screenMeta.ts` (mapa de telas)
+- `state/` — `AppContext.tsx`, `SquadRunContext.tsx`, `TemplatesContext.tsx`, `useBrand.ts`
+- `hooks/` — só `useAsyncAction.ts` (existe mas **sem adoção** — nenhuma tela o consome ainda)
 
 **Contexts.**
 - `TemplatesContext` — carrega os 12 templates de `GET /api/btv/templates`, compartilha
