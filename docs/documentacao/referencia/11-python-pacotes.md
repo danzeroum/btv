@@ -17,8 +17,8 @@ Workspace uv em `python/` (`pyproject.toml`, membros `packages/*`; dev deps `pyt
 `python/packages/btv-proto-py/src/btv_proto/`. Gerado de `schemas/proto/*` (nunca editado à
 mão). Dep externa: `grpcio`. Módulos `{core,llm,memory,promptforge,squad}_pb2[_grpc].py`.
 
-- `core_pb2_grpc` — **CoreService** (Rust-served): `Generate`, `RunTool`, `AppendLedger`,
-  `Recall`, `Remember`, `RequestPermission`.
+- `core_pb2_grpc` — **CoreService** (Rust-served): `Generate`, `RunTool`,
+  `RequestPermission` (os antigos `AppendLedger`/`Recall`/`Remember` foram removidos — ADR 0034).
 - `squad_pb2_grpc` — **SquadService** (Python-served): `ExecuteTask` (server-stream), `Health`.
 - `promptforge_pb2_grpc` — **PromptForgeService** (Python-served): `Health/Lint/Render/ListGenerators`.
 - `memory_pb2_grpc` — **MemoryService** (Python-served): `Health/Recall/List`.

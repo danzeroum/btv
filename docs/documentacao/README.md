@@ -43,7 +43,7 @@ A documentação está dividida em **diagramas UML** (a espinha visual) e **refe
 | 12 | [Inventário TypeScript](referencia/12-typescript-frontend.md) | As 2 SPAs: estrutura, contexts, camada `api/`, DTOs, Designer bpmn |
 | 13 | [Contratos gRPC e JSON Schemas](referencia/13-contratos-grpc-e-schemas.md) | 4 serviços gRPC (direções), 11 schemas `*.v1`, os 12 templates, hash dual |
 | 14 | [Endpoints HTTP](referencia/14-endpoints-http.md) | Tabela completa REST + SSE, com o handler Rust e o consumidor TS |
-| 15 | [ADRs](referencia/15-adrs.md) | Resumo das 33 decisões de arquitetura |
+| 15 | [ADRs](referencia/15-adrs.md) | Resumo das 34 decisões de arquitetura |
 | 16 | [Glossário](referencia/16-glossario.md) | Termos do domínio e da plataforma |
 
 ### Parte III — Mapeamento de dados (`dados/`)

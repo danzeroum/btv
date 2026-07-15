@@ -19,10 +19,11 @@ Keys, permissões, disco, ledger só no Rust. Importa `llm.proto`.
 |---|---|---|---|
 | `Generate` | `LlmRequest` | `LlmChunk` | **server-stream** |
 | `RunTool` | `ToolCall` | `ToolResult` | unário |
-| `AppendLedger` | `LedgerAppend` | `LedgerAck` | unário — **stub Unimplemented** |
-| `Recall` | `RecallRequest` | `RecallResponse` | unário — **stub Unimplemented** |
-| `Remember` | `RememberRequest` | `RememberAck` | unário — **stub Unimplemented** |
 | `RequestPermission` | `PermissionRequest` | `PermissionDecision` | unário (HITL) |
+
+> Os RPCs `AppendLedger`/`Recall`/`Remember` (e suas mensagens) foram REMOVIDOS do
+> `CoreService` (ADR 0034 — 2ª quebra de wire assinada): eram stubs `Unimplemented` na
+> direção errada, superados pelo `MemoryService` (ADR 0022).
 
 - `ToolCall{tool, args_json, scope}` — o Rust **sempre recalcula** o scope real de `args_json`
   via `Tool::scope`; o campo `scope` nunca é fonte de verdade para Allow/Ask/Deny.
@@ -68,8 +69,8 @@ gera texto de LLM (exclusivo do gateway Rust).
 Python é dono do corpus JSONL + índice TF-IDF (`btv_squad`). `Health`, `Recall(RecallRequest
 {query, k})→RecallResponse{MemoryMatch[]}` (TF-IDF **léxico, não semântico**),
 `List(ListRequest{agent?, limit})→ListResponse{MemorySummary[]}`. Escrita de memória só em
-processo (`AgentMemorySystem.remember_decision`), nunca pela rede — por isso `CoreService.
-Recall/Remember` ficam Unimplemented.
+processo (`AgentMemorySystem.remember_decision`), nunca pela rede — por isso os antigos
+`CoreService.Recall/Remember` (direção errada) foram REMOVIDOS (ADR 0034).
 
 ---
 

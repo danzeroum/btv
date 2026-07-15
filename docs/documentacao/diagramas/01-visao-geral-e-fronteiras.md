@@ -72,13 +72,14 @@ Um único socket carrega **4 serviços em duas direções**:
 
 | Serviço | Quem serve | Quem chama | RPCs principais |
 |---|---|---|---|
-| `CoreService` | **Rust** (`btv-sidecar::CoreServer`) | Python (agentes) | `Generate` (stream), `RunTool`, `RequestPermission`, `AppendLedger`¹, `Recall`¹, `Remember`¹ |
+| `CoreService` | **Rust** (`btv-sidecar::CoreServer`) | Python (agentes) | `Generate` (stream), `RunTool`, `RequestPermission` |
 | `SquadService` | **Python** (`SquadServicer`) | Rust (`btv-sidecar`) | `ExecuteTask` → **stream** `SquadEvent`, `Health` |
 | `PromptForgeService` | **Python** (`PromptForgeServicer`) | Rust | `Lint`, `Render`, `ListGenerators`, `Health` |
 | `MemoryService` | **Python** (`MemoryServicer`) | Rust | `Recall` (TF-IDF), `List`, `Health` |
 
-¹ `AppendLedger`/`Recall`/`Remember` de `CoreService` são stubs `Unimplemented` (direção
-errada — superados pelo `MemoryService`). Ver [contratos](../referencia/13-contratos-grpc-e-schemas.md).
+Os antigos `AppendLedger`/`Recall`/`Remember` de `CoreService` (stubs `Unimplemented`,
+direção errada) foram REMOVIDOS (ADR 0034) — a memória correta é o `MemoryService`. Ver
+[contratos](../referencia/13-contratos-grpc-e-schemas.md).
 
 **O ponto sutil:** um `SquadService.ExecuteTask` (Rust→Python) roda o orquestrador que,
 na MESMA execução, abre o canal de volta `CoreService` (Python→Rust) para gerar texto,

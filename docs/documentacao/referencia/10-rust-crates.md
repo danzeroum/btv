@@ -202,8 +202,8 @@ vendorizado (`protoc-bin-vendored`). `lib.rs` re-exporta os módulos gerados (`c
   {Completed|Failed}`), `MemoryClient` (`memory_client.rs`).
 - **Servidor (Python→Rust):** `CoreServer<B: CoreBackend>` (`core_server.rs`) serve
   `CoreService` — `generate` (stream via `mpsc`+`ReceiverStream`), `request_permission`,
-  `run_tool`; `append_ledger`/`recall`/`remember` = `Status::unimplemented`. `serve_core`
-  liga um `UnixListener`.
+  `run_tool` (os antigos `append_ledger`/`recall`/`remember` `Status::unimplemented` foram
+  REMOVIDOS — ADR 0034). `serve_core` liga um `UnixListener`.
 - **Supervisores:** `SidecarSupervisor`/`SquadSupervisor`/`MemorySupervisor` (`spawn` de
   `uv run -m ...`; `wait_ready`; **kill de grupo de processos** no `Drop`).
 - **Serviço de longa duração (ADR 0019):** `SidecarService`/`MemoryService` (singletons,

@@ -12,13 +12,16 @@ service CoreService {
   rpc Generate(btv.llm.v1.LlmRequest) returns (stream btv.llm.v1.LlmChunk);
   // Execução de ferramenta sujeita ao motor de permissões.
   rpc RunTool(ToolCall) returns (ToolResult);
-  // Anexa entrada ao ledger append-only.
-  rpc AppendLedger(LedgerAppend) returns (LedgerAck);
-  // Memória do squad persistida no btv-store.
-  rpc Recall(RecallRequest) returns (RecallResponse);
-  rpc Remember(RememberRequest) returns (RememberAck);
   // Pedido de permissão/escalonamento HITL (decisão vem da TUI).
   rpc RequestPermission(PermissionRequest) returns (PermissionDecision);
+
+  // REMOVIDOS (ADR 0034 — 2ª quebra de wire assinada; `buf breaking` acusa por
+  // design): `AppendLedger`, `Recall`, `Remember` e suas mensagens
+  // (`LedgerAppend`/`LedgerAck`/`RecallRequest`/`RecallResponse`/
+  // `RememberRequest`/`RememberAck`). Eram stubs `Unimplemented` da Fase 4 na
+  // direção ERRADA (Rust servindo memória/ledger ao Python) — superados pelo
+  // `MemoryService` (Python serve, Rust chama; ADR 0022). Protobuf não reserva
+  // RPC; a memória correta vive em `memory.proto`.
 }
 
 message ToolCall {
@@ -37,37 +40,6 @@ message ToolResult {
   // (nunca chegou a rodar, ou rodou e falhou); -1 = negado pelo motor de
   // permissões ou por um humano (nunca chegou a executar).
   int32 exit_code = 3;
-}
-
-message LedgerAppend {
-  string kind = 1;
-  string actor = 2;
-  string payload_json = 3;
-  optional string fake_marker = 4;
-}
-
-message LedgerAck {
-  uint64 seq = 1;
-  string entry_hash = 2;
-}
-
-message RecallRequest {
-  string agent = 1;
-  string query = 2;
-  uint32 limit = 3;
-}
-
-message RecallResponse {
-  repeated string memories_json = 1;
-}
-
-message RememberRequest {
-  string agent = 1;
-  string memory_json = 2;
-}
-
-message RememberAck {
-  bool stored = 1;
 }
 
 message PermissionRequest {

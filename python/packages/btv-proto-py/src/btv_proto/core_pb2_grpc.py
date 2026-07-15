@@ -45,21 +45,6 @@ class CoreServiceStub:
                 request_serializer=core__pb2.ToolCall.SerializeToString,
                 response_deserializer=core__pb2.ToolResult.FromString,
                 _registered_method=True)
-        self.AppendLedger = channel.unary_unary(
-                '/btv.core.v1.CoreService/AppendLedger',
-                request_serializer=core__pb2.LedgerAppend.SerializeToString,
-                response_deserializer=core__pb2.LedgerAck.FromString,
-                _registered_method=True)
-        self.Recall = channel.unary_unary(
-                '/btv.core.v1.CoreService/Recall',
-                request_serializer=core__pb2.RecallRequest.SerializeToString,
-                response_deserializer=core__pb2.RecallResponse.FromString,
-                _registered_method=True)
-        self.Remember = channel.unary_unary(
-                '/btv.core.v1.CoreService/Remember',
-                request_serializer=core__pb2.RememberRequest.SerializeToString,
-                response_deserializer=core__pb2.RememberAck.FromString,
-                _registered_method=True)
         self.RequestPermission = channel.unary_unary(
                 '/btv.core.v1.CoreService/RequestPermission',
                 request_serializer=core__pb2.PermissionRequest.SerializeToString,
@@ -84,26 +69,6 @@ class CoreServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AppendLedger(self, request, context):
-        """Anexa entrada ao ledger append-only.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Recall(self, request, context):
-        """Memória do squad persistida no btv-store.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Remember(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def RequestPermission(self, request, context):
         """Pedido de permissão/escalonamento HITL (decisão vem da TUI).
         """
@@ -123,21 +88,6 @@ def add_CoreServiceServicer_to_server(servicer, server):
                     servicer.RunTool,
                     request_deserializer=core__pb2.ToolCall.FromString,
                     response_serializer=core__pb2.ToolResult.SerializeToString,
-            ),
-            'AppendLedger': grpc.unary_unary_rpc_method_handler(
-                    servicer.AppendLedger,
-                    request_deserializer=core__pb2.LedgerAppend.FromString,
-                    response_serializer=core__pb2.LedgerAck.SerializeToString,
-            ),
-            'Recall': grpc.unary_unary_rpc_method_handler(
-                    servicer.Recall,
-                    request_deserializer=core__pb2.RecallRequest.FromString,
-                    response_serializer=core__pb2.RecallResponse.SerializeToString,
-            ),
-            'Remember': grpc.unary_unary_rpc_method_handler(
-                    servicer.Remember,
-                    request_deserializer=core__pb2.RememberRequest.FromString,
-                    response_serializer=core__pb2.RememberAck.SerializeToString,
             ),
             'RequestPermission': grpc.unary_unary_rpc_method_handler(
                     servicer.RequestPermission,
@@ -199,87 +149,6 @@ class CoreService:
             '/btv.core.v1.CoreService/RunTool',
             core__pb2.ToolCall.SerializeToString,
             core__pb2.ToolResult.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def AppendLedger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/btv.core.v1.CoreService/AppendLedger',
-            core__pb2.LedgerAppend.SerializeToString,
-            core__pb2.LedgerAck.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Recall(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/btv.core.v1.CoreService/Recall',
-            core__pb2.RecallRequest.SerializeToString,
-            core__pb2.RecallResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Remember(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/btv.core.v1.CoreService/Remember',
-            core__pb2.RememberRequest.SerializeToString,
-            core__pb2.RememberAck.FromString,
             options,
             channel_credentials,
             insecure,

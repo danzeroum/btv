@@ -44,7 +44,7 @@
 | ID | O quê | Evidência | Esforço | Status |
 |---|---|---|---|---|
 | **B1** | Decompor `btv-cli` (composition root inchado) | `web_agent.rs` 2022 LOC, `btv_agent.rs` 1825 LOC; acoplamento eferente ~12 crates | Alto | 🔒 |
-| **B2** | Remover RPCs mortos do `CoreService` | `AppendLedger`/`recall`/`remember` = `Unimplemented` em `crates/btv-sidecar/src/core_server.rs:116-128`; superados pelo `MemoryService` (ADR 0022) | Médio | 🟡 |
+| **B2** | Remover RPCs mortos do `CoreService` | ✅ **FEITO (ADR 0034):** `AppendLedger`/`Recall`/`Remember` + 6 mensagens removidos do `core.proto`; `core_server.rs` limpo. Quebra assinada (buf vermelho por design). | Médio | ✅ |
 | **B4** | Resolver `btv-eval` vazio | `python/packages/btv-eval/src/btv_eval/__init__.py` (5 linhas, placeholder) | Médio | 🟡 |
 | **B6** | Extrair guard de `Origin` duplicado | `require_local_origin` em `crates/btv-cli/src/web_agent.rs`, `crates/btv-server/src/lib.rs` e `crates/btv-server/src/guard.rs` | Médio | 🟡 |
 | **B7** | Padronizar ponte async→sync | 3 estratégias em `btv-tools` + `rt.block_on` por op em `crates/btv-store/src/pg.rs` | Médio | 🟡 |
