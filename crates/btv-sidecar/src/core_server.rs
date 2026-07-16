@@ -7,17 +7,15 @@
 //! `Generate`/`RequestPermission`/`RunTool` são atendidos por um
 //! [`CoreBackend`] injetável: em produção, o `Gateway` real (btv-cli) +
 //! um `ToolRegistry`/`PermissionEngine` + um resolver de permissão; em
-//! teste, um backend roteirizado. `AppendLedger` devolve `Unimplemented`
-//! honestamente — não usado pelo orquestrador atual. `Recall`/`Remember`
-//! continuam dormentes de propósito, mas não por falta de tempo: são a
-//! direção errada para memória (`CoreService` é servido pelo Rust, chamado
-//! pelo Python; memória mora no Python) — superados pelo `MemoryService`
-//! novo, servido pelo Python (ADR 0022).
+//! teste, um backend roteirizado. Expõe só `Generate`/`RunTool`/
+//! `RequestPermission`. Os antigos `AppendLedger`/`Recall`/`Remember` foram
+//! REMOVIDOS (ADR 0034): eram a direção errada para memória (`CoreService` é
+//! servido pelo Rust; memória mora no Python) — superados pelo `MemoryService`
+//! (servido pelo Python, ADR 0022).
 
 use btv_proto::core::core_service_server::{CoreService, CoreServiceServer};
 use btv_proto::core::{
-    permission_decision, LedgerAck, LedgerAppend, PermissionDecision, PermissionRequest,
-    RecallRequest, RecallResponse, RememberAck, RememberRequest, ToolCall, ToolResult,
+    permission_decision, PermissionDecision, PermissionRequest, ToolCall, ToolResult,
 };
 use btv_proto::llm::{llm_chunk, LlmChunk, LlmRequest, Usage};
 use std::path::PathBuf;
@@ -109,24 +107,6 @@ impl<B: CoreBackend> CoreService for CoreServer<B> {
     async fn run_tool(&self, request: Request<ToolCall>) -> Result<Response<ToolResult>, Status> {
         Ok(Response::new(
             self.backend.run_tool(&request.into_inner()).await,
-        ))
-    }
-
-    async fn append_ledger(&self, _: Request<LedgerAppend>) -> Result<Response<LedgerAck>, Status> {
-        Err(Status::unimplemented(
-            "AppendLedger não usado pelo orquestrador atual",
-        ))
-    }
-
-    async fn recall(&self, _: Request<RecallRequest>) -> Result<Response<RecallResponse>, Status> {
-        Err(Status::unimplemented(
-            "Recall não usado — memória é local ao Python no orquestrador atual",
-        ))
-    }
-
-    async fn remember(&self, _: Request<RememberRequest>) -> Result<Response<RememberAck>, Status> {
-        Err(Status::unimplemented(
-            "Remember não usado — memória é local ao Python no orquestrador atual",
         ))
     }
 }

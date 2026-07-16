@@ -379,22 +379,13 @@ Papel: `CoreService` — RPCs que o núcleo Rust expõe ao sidecar Python (keys/
 |---|---|---|---|---|
 | `Generate(LlmRequest) → stream LlmChunk` | rpc | wire | Python → Rust | geração via gateway |
 | `RunTool(ToolCall) → ToolResult` | rpc | wire | Python → Rust | execução sujeita a permissões |
-| `AppendLedger(LedgerAppend) → LedgerAck` | rpc | wire | Python → Rust | (Unimplemented no server atual) |
-| `Recall(RecallRequest) → RecallResponse` | rpc | wire | Python → Rust | dormente (direção errada; ver memory.proto) |
-| `Remember(RememberRequest) → RememberAck` | rpc | wire | Python → Rust | dormente |
 | `RequestPermission(PermissionRequest) → PermissionDecision` | rpc | wire | Python → Rust | HITL, decisão vem da TUI |
 | `ToolCall.tool` / `.args_json` / `.scope` | string 1/2/3 | wire | | `scope` é informativo — Rust SEMPRE recalcula `Tool::scope` de `args_json` (nunca fonte de verdade p/ Allow/Ask/Deny) |
 | `ToolResult.content` / `.truncated` / `.exit_code` | string=1 / bool=2 / int32=3 | wire | Rust → Python | `exit_code`: 0=ok, 1=erro/args inválidos/tool desconhecida, -1=negado por permissão/humano |
-| `LedgerAppend.kind` / `.actor` / `.payload_json` / `.fake_marker` | string 1/2/3 / optional string=4 | wire | | |
-| `LedgerAck.seq` / `.entry_hash` | uint64=1 / string=2 | wire | | |
-| `RecallRequest.agent` / `.query` / `.limit` | string 1/2 / uint32=3 | wire | | |
-| `RecallResponse.memories_json` | repeated string=1 | wire | | |
-| `RememberRequest.agent` / `.memory_json` | string 1/2 | wire | | |
-| `RememberAck.stored` | bool=1 | wire | | |
 | `PermissionRequest.tool` / `.scope` / `.reason` / `.confidence` | string 1/2/3 / double=4 | wire | | `confidence` gatilho HITL (< 0.3/0.5) |
 | `PermissionDecision.decision` (enum UNSPECIFIED/ALLOW/DENY) / `.operator_note` | enum=1 / optional string=2 | wire | Rust → Python | |
 
-Fluxo: o Python chama de volta o Rust por `Generate` (LLM streaming), `RunTool` (execução real — scope recalculado no Rust), `RequestPermission` (HITL); `AppendLedger`/`Recall`/`Remember` existem no contrato mas o server responde `Unimplemented`.
+Fluxo: o Python chama de volta o Rust por `Generate` (LLM streaming), `RunTool` (execução real — scope recalculado no Rust), `RequestPermission` (HITL). Os antigos `AppendLedger`/`Recall`/`Remember` (stubs `Unimplemented`, direção errada) foram REMOVIDOS do contrato (ADR 0034) — a memória correta é o `MemoryService` (ADR 0022).
 
 ---
 
@@ -514,10 +505,10 @@ Papel: servidor `CoreService` — lado Rust do laço bidirecional; o squad Pytho
 | `send` closure | fn | intermediário | payload → `LlmChunk{payload:Some}` | inline p/ evitar `result_large_err` |
 | `request_permission` `approved` | `bool` | intermediário | backend → `Decision::Allow/Deny` | `operator_note: None` |
 | `run_tool` | `ToolResult` | wire/saída | backend | erro de domínio vira payload, não `Status` |
-| `append_ledger`/`recall`/`remember` | `Status::unimplemented` | saída | | honestamente não usados |
+| `append_ledger`/`recall`/`remember` | (removidos) | — | | RPCs mortos removidos do `CoreService` (ADR 0034) |
 | `serve_core(backend, socket_path)` | fn | entrada | `UnixListener::bind` → `UnixListenerStream` → tonic Server | remove socket antigo antes do bind |
 
-Fluxo: `serve_core` sobe o `CoreService` num UDS; `Generate` roda o backend numa task e empurra `LlmChunk`s por um `mpsc(8)`/`ReceiverStream`; `RequestPermission`/`RunTool` traduzem o retorno do backend em decisão/resultado; RPCs não usados respondem `Unimplemented`.
+Fluxo: `serve_core` sobe o `CoreService` num UDS; `Generate` roda o backend numa task e empurra `LlmChunk`s por um `mpsc(8)`/`ReceiverStream`; `RequestPermission`/`RunTool` traduzem o retorno do backend em decisão/resultado. O serviço expõe só esses 3 RPCs (os antigos `AppendLedger`/`Recall`/`Remember` foram removidos — ADR 0034).
 
 ---
 

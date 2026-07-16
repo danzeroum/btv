@@ -139,19 +139,13 @@ Placeholder/docstring do pacote de stubs.
 | **serviço** `CoreService` | gRPC | wire | Rust serve, Python chama | RPCs abaixo |
 | `Generate(LlmRequest)→stream LlmChunk` | rpc | wire | Python→Rust | geração LLM streaming |
 | `RunTool(ToolCall)→ToolResult` | rpc | wire | Python→Rust | execução de ferramenta sob permissões |
-| `AppendLedger(LedgerAppend)→LedgerAck` | rpc | wire | Python→Rust | append-only |
-| `Recall(RecallRequest)→RecallResponse` | rpc | wire | (Unimplemented — direção errada) | memória; não usado |
-| `Remember(RememberRequest)→RememberAck` | rpc | wire | (Unimplemented) | não usado |
 | `RequestPermission(PermissionRequest)→PermissionDecision` | rpc | wire | Python→Rust | HITL |
 | `ToolCall{tool,args_json,scope}` | msg | wire | Python→Rust | `scope` informativo — Rust recalcula escopo real de `args_json` |
 | `ToolResult{content,truncated,exit_code}` | msg | wire | Rust→Python | exit_code: 0 ok, 1 erro, -1 negado |
-| `LedgerAppend{kind,actor,payload_json,fake_marker?}` | msg | wire | Python→Rust | entrada de ledger |
-| `LedgerAck{seq,entry_hash}` | msg | wire | Rust→Python | confirmação hash-chain |
-| `RecallRequest{agent,query,limit}` | msg | wire | — | não usado |
-| `RecallResponse{memories_json[]}` | msg | wire | — | não usado |
-| `RememberRequest{agent,memory_json}` / `RememberAck{stored}` | msg | wire | — | não usado |
 | `PermissionRequest{tool,scope,reason,confidence}` | msg | wire | Python→Rust | `confidence` gatilho HITL |
 | `PermissionDecision{decision(ALLOW/DENY/UNSPECIFIED),operator_note?}` | msg | wire | Rust→Python | UNSPECIFIED(0) = fail-closed |
+
+> Os RPCs `AppendLedger`/`Recall`/`Remember` do `CoreService` e suas mensagens (`LedgerAppend`/`LedgerAck`/`RecallRequest`/`RecallResponse`/`RememberRequest`/`RememberAck`) foram REMOVIDOS (ADR 0034): eram stubs `Unimplemented` na direção errada, superados pelo `MemoryService` (ADR 0022).
 
 ## python/packages/btv-proto-py/src/btv_proto/llm_pb2.py + llm_pb2_grpc.py
 
