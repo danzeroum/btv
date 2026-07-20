@@ -651,8 +651,8 @@ Mapeamento de `esteiraFromEvents` (idx inicial = 1 após briefing; nunca regride
 
 Fluxo: eventos reais do orquestrador → posição+feed+atividade, com o que é inferido rotulado.
 
-### btv-web/src/lib/entregas.ts · time.ts · nav.ts · screenMeta.ts
-Utilitários puros.
+### btv-web/src/lib/entregas.ts · time.ts · nav.ts · screenMeta.ts · screenComponents.tsx · hooks/useAsyncAction.ts
+Utilitários puros e máquina de estado assíncrono.
 
 | Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
 |---|---|---|---|---|
@@ -660,8 +660,10 @@ Utilitários puros.
 | `hhmm(ts)` → `HH:MM` | função | intermediário | ISO → feed/chat | regex `T(dd):(dd)` |
 | `USER_NAV`(5)/`ADMIN_NAV`(6)/`NAV_BY_PERSONA`/`DEFAULT_SCREEN` | const | config | → Sidebar/AppContext | `screenBelongsToPersona`: `vivo` é do user mas sem item |
 | `SCREEN_META: Record<ScreenId,{kicker,title,note,accent}>` | const | config | → Shell | `vivo` usa cor da squad em runtime |
+| `SCREEN_COMPONENTS: Record<ScreenId,ComponentType>` (`lib/screenComponents.tsx`) | const | config | → Shell | mapa tela→componente (6 user + 6 admin) |
+| `AsyncState<T>` (`idle`/`loading`/`success{data}`/`error{error}`) / `useAsyncAction(fn)` → `{state,run,reset}` (`hooks/useAsyncAction.ts`) | union / hook | intermediário | chamada → estado | rethrow no erro; alimenta `AsyncStatus` (F1). Sem `usePolling` (só o console tem) |
 
-Fluxo: helpers de formatação, navegação e cabeçalho.
+Fluxo: helpers de formatação, navegação, mapa de componentes e envelope de estado assíncrono das telas.
 
 ### btv-web/src/state/useBrand.ts
 Aplica `--brand`/`--brandink` no root.

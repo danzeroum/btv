@@ -6,7 +6,7 @@ contratos compartilhados em `schemas/`. O objetivo é mapear **como cada
 script/módulo/crate/pacote se conecta ao todo**: dependências, fronteiras de linguagem,
 fluxos de dados e responsabilidades — base para estudo de arquitetura e refatoramentos.
 
-**Cobertura:** 137 arquivos `.rs` · 86 arquivos `.py` · 160 arquivos `.ts/.tsx`.
+**Cobertura:** 137 arquivos `.rs` · 86 arquivos `.py` · 165 arquivos `.ts/.tsx`.
 
 ---
 

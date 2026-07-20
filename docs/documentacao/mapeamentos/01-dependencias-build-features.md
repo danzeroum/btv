@@ -30,6 +30,7 @@ graph TD
     SCH --> DOM
     CORE --> DOM
     LLM --> DOM
+    LLM --> SCH
     TOOLS --> DOM
     STORE --> DOM
     STORE --> SCH
@@ -52,8 +53,9 @@ graph TD
     CLI --> SCH
     CLI --> DOM
     CONTRACT -. dev-dep .-> DOM
-    GOLD -. dev-dep .-> SERVER
-    GOLD -. dev-dep .-> CLI
+    STORE -. dev-dep .-> CONTRACT
+    SERVER -. dev-dep .-> GOLD
+    CLI -. dev-dep .-> GOLD
     PROTO -. build.rs compila .-> PROTOFILES[schemas/proto/*.proto]
 ```
 
@@ -62,9 +64,9 @@ graph TD
 | Crate | Depende de (internos) | Afeta se removido/movido | Deps externas notáveis |
 |---|---|---|---|
 | **btv-domain** | (nenhum) | **TODOS** (é a raiz de ports/agregados) | serde, thiserror, uuid |
-| **btv-schemas** | btv-domain | btv-store, btv-verify, btv-server, btv-cli | schemars, sha2, hex |
+| **btv-schemas** | btv-domain | btv-llm, btv-store, btv-verify, btv-server, btv-cli | schemars, sha2, hex |
 | **btv-core** | btv-domain | btv-cli | thiserror |
-| **btv-llm** | btv-domain | btv-server, btv-cli | reqwest, futures-util |
+| **btv-llm** | btv-domain, btv-schemas | btv-server, btv-cli | reqwest, futures-util, regex |
 | **btv-tools** | btv-domain | btv-server, btv-cli | bollard, rmcp, ignore, grep, libc |
 | **btv-store** | btv-domain, btv-schemas | btv-server, btv-cli | rusqlite, sqlx (feature `pg`) |
 | **btv-verify** | btv-schemas | btv-server, btv-cli | toml, libc |
@@ -72,9 +74,9 @@ graph TD
 | **btv-sidecar** | btv-proto | btv-cli | tonic, hyper-util, tower, tokio |
 | **btv-server** | btv-store, btv-schemas, btv-llm, btv-verify, btv-tools | btv-cli | axum, tower-http |
 | **btv-tui** | (nenhum) | btv-cli | ratatui, crossterm |
-| **btv-cli** | ~12 crates (composition root) | **binário `btv`** (topo — nada depende dele) | clap, tokio |
-| **btv-golden** | (dev) btv-server, btv-cli | testes de golden HTTP | — |
-| **btv-contract** | (dev) btv-domain | testes dual-adapter | — |
+| **btv-cli** | 11 crates (composition root) | **binário `btv`** (topo — nada depende dele) | clap, tokio |
+| **btv-golden** | (nenhum interno; só serde) | é **dev-dep de** btv-server/btv-cli → seus testes golden HTTP | — |
+| **btv-contract** | btv-domain | é **dev-dep de** btv-store → seus testes dual-adapter (SQLite/PG) | — |
 
 **Regra de leitura:** o impacto de remover um crate é a **coluna "Afeta se removido"**
 (seus dependentes transitivos). Remover `btv-domain` quebra tudo; remover `btv-cli` não
