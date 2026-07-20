@@ -59,7 +59,25 @@ Rotas montadas em `router()` (método → handler):
 | `/api/btv/templates` | GET | `btv::list_templates` | wire | 12 modelos embutidos |
 | `/dev` (nested) | * | `ServeDir(web/dist)` | wire | console dev, só se build existe |
 
-Fluxo: params (telemetria/library/ledger/root/web_dir) → `AppState` clonável + `ServeDir` da SPA → `Router` com 17 rotas de API, fallback esperto (`/api/*`→404 JSON, resto→SPA), `/dev` opcional aninhado, e camada de guarda de Origin sobre tudo.
+Fluxo: params (telemetria/library/ledger/root/web_dir) → `AppState` clonável + `ServeDir` da SPA → `Router` com 16 rotas de API, fallback esperto (`/api/*`→404 JSON, resto→SPA), `/dev` opcional aninhado, e camada de guarda de Origin sobre tudo.
+
+---
+
+## crates/btv-server/src/guard.rs
+
+Papel: guarda de `Origin`/`Host` do dashboard (ADR 0015) — middleware `require_local_origin` (CSRF/DNS-rebinding local) + núcleo testável `origin_allowed`/`trusted_origin_hosts` (`pub`, reusados VERBATIM pela cópia do `btv-cli::web_agent`). Movida de `lib.rs` na C2, código intacto.
+
+| Dado | Tipo | Direção | Origem → Destino | Transformação / observação |
+|------|------|---------|------------------|----------------------------|
+| `require_local_origin(req, next)` | middleware | intermediário | camada de `router()` → 403 ou `next.run` | só método ≠ GET com `Origin` presente é checado; sem `Origin` (curl/CLI) passa |
+| resposta 403 | `FORBIDDEN` + `Json(ErrorBody)` | saída / wire | `Origin` não permitida → `ErrorBody{code:"forbidden_origin"}` | `ErrorBody` de `crate::ErrorBody` (fonte única, B6) |
+| `origin_host(origin)` | `Option<&str>` | intermediário | strip `http(s)://` + corta `/path` + corta `:port` → host | `None` só p/ string vazia |
+| `is_local_origin(origin)` | `bool` | intermediário | exige esquema explícito + host loopback | `127.0.0.1`/`localhost`/`::1`/`[::1]` |
+| `origin_allowed(origin, extra)` | `bool` | saída | loopback OU host (lowercase) na allowlist `extra` | `pub`; regra idêntica compartilhada com o agente web |
+| `trusted_origin_hosts()` | `Vec<String>` | config / saída | `BTV_TRUSTED_ORIGINS` (CSV de host/origin) → hosts lowercase | VAZIO por padrão → só localhost (comportamento ADR 0015) |
+| `BTV_TRUSTED_ORIGINS` | env var | config | ambiente → `trusted_origin_hosts` | opt-in p/ hospedagem atrás de proxy COM auth na borda |
+
+Fluxo: `require_local_origin` deixa passar todo GET e toda requisição sem `Origin`; para mutações de navegador, extrai o host via `origin_host` e aceita só loopback ou os hosts de `BTV_TRUSTED_ORIGINS` (`origin_allowed`), senão 403 `forbidden_origin`. As duas funções `pub` são a fonte única da regra, reaplicada pela guarda do agente web.
 
 ---
 

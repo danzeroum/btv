@@ -50,8 +50,8 @@ onde está o custo e onde está o dado sensível.
 
 | Número | Comando / fonte |
 |---|---|
-| Cobertura Rust (%) | `cargo tarpaulin --workspace` (não está no CI hoje) |
-| Cobertura Python (%) | `cd python && uv run pytest --cov` |
+| Cobertura Rust (%) | `cargo tarpaulin --workspace` (também no job `coverage` do CI — não bloqueante, relatório como artefato) |
+| Cobertura Python (%) | `cd python && uv run --with pytest-cov pytest --cov=packages` (idem, job `coverage` do CI) |
 | P95/P99 do gateway | job `k6` do CI (`infra/k6/gateway_load.js`, `ScriptedGenerator`) — P95≈3.5ms documentado |
 | Benches de hot path | `cargo bench -p btv-schemas` / `-p btv-core` / `-p btv-llm` (job `bench` do CI) |
 | Custo por modelo / uso | `GET /api/models/usage` (telemetria real: `estimate_cost_usd` × tokens) |

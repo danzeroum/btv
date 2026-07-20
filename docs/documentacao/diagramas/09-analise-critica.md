@@ -48,8 +48,8 @@ leitura estática de todo o código.
 
 - **Núcleo de domínio (`btv-domain`, `btv-schemas`):** acoplamento *aferente* alto (muitos
   dependem dele), *eferente* mínimo — exatamente o desejado para um núcleo estável.
-- **`btv-cli`:** acoplamento eferente altíssimo (~12 crates) — esperado num composition
-  root, mas é o candidato nº 1 a decomposição.
+- **`btv-cli`:** acoplamento eferente altíssimo (11 crates internos + `btv-golden` em dev)
+  — esperado num composition root, mas é o candidato nº 1 a decomposição.
 - **Fronteira gRPC:** acoplamento reduzido ao contrato `.proto` — Rust e Python evoluem
   independentes desde que o wire seja aditivo (garantido por `buf`).
 - **Frontend:** acoplamento ao backend concentrado nas camadas `api/*` (tabelas de

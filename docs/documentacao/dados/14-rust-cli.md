@@ -40,6 +40,7 @@ Papel: entrada do binário `btv` — parsing clap, `prepare()` (env→Gateway→
 | `Commands::Dashboard.no_web_agent` | `bool` (`--no-web-agent`, default false) | config | CLI → `run_dashboard(web_agent=!no_web_agent)` | agente web ligado por padrão |
 | `Commands::Experiment.experiment` | `String` | entrada | CLI → `Telemetry::experiment_variants` | `props.experiment` |
 | `Commands::Experiment.db` | `Option<PathBuf>` (`--db`) | config | CLI → `Telemetry::open` | default `.btv/telemetry.db` |
+| `Commands::Experiment.format` | `VerifyFormat` (`--format`, default human) | config | CLI → `run_experiment` impressão | Human (resumo) vs Json (`ExperimentReport` cru) |
 | `SessionCmd::Issue.{tenant,user,db_url}` | `String`/`Option<String>` (feature `pg`) | entrada/config | CLI → `PgStore::issue_session` | emite sessão; imprime token 1×; env `BTV_PG_URL` fallback |
 | `emitido.token` | token opaco | saída | `PgStore` → stdout | banco guarda só o hash; aviso no stderr |
 | `ANTHROPIC_API_KEY`/`DEEPSEEK_API_KEY`/`OPENAI_API_KEY` | env | config/entrada | ambiente → `Gateway::from_env` | keys só no processo Rust (ADR 0001) |

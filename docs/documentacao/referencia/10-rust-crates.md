@@ -235,7 +235,7 @@ conexão lazy. `grpc.default_authority` ajustado no lado Python (achado ADR 0005
 
 ## btv-cli — o binário `btv` (composition root)
 
-`crates/btv-cli/src/`. Depende de ~12 crates. É onde tudo se amarra.
+`crates/btv-cli/src/`. Depende de 11 crates internos (+ `btv-golden` em dev). É onde tudo se amarra.
 
 - **`main.rs`** — `Cli`/`Commands` (`Run`/`Chat`/`Tui`/`Verify`/`Squad`/`Dashboard`/
   `Experiment`/`Session`). `prepare()` constrói o generator (`Gateway` → `RateLimitedGenerator`
