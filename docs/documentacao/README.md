@@ -65,8 +65,9 @@ intermediário** de cada módulo (leitura linha-a-linha), incluindo dados locais
 
 ### Parte IV — Mapeamentos operacionais (`mapeamentos/`)
 
-Oito mapas para operação, evolução e risco. **Números de runtime não medidos aparecem
-marcados `⟨medir⟩`, nunca fabricados** (regra "Nada Fake").
+Nove mapas para operação, evolução e risco. **Números de runtime não medidos aparecem
+marcados `⟨medir⟩`, nunca fabricados** (regra "Nada Fake") — e, no mapa 09, a mesma regra
+aplicada à conformidade: ausência de controle é escrita como ausência, nunca maquiada.
 
 | # | Documento | Pergunta que responde |
 |---|---|---|
@@ -79,6 +80,18 @@ marcados `⟨medir⟩`, nunca fabricados** (regra "Nada Fake").
 | 06 | [Migração de schema (DB + protobuf)](mapeamentos/06-migracao-de-schema.md) | O que quebra se eu alterar o schema? |
 | 07 | [Custos por operação](mapeamentos/07-custos-por-operacao.md) | Quanto custa cada ação? |
 | 08 | [Dados sensíveis e segurança](mapeamentos/08-dados-sensiveis-e-seguranca.md) | Onde entram/saem/repousam PII e keys? |
+| 09 | [Auditoria LGPD e Privacy by Design](mapeamentos/09-auditoria-lgpd.md) | Quais riscos de privacidade existem, onde, e como corrigir? |
+
+### Parte V — Conformidade (`RIPD.md`)
+
+| Documento | Pergunta que responde |
+|---|---|
+| [RIPD — Relatório de Impacto à Proteção de Dados](RIPD.md) | O tratamento de dado pessoal está inventariado, fundamentado e aceito? |
+
+O RIPD (Art. 5º, XVII e Art. 38 da Lei 13.709/2018) consome os IDs `Risco-NNN` do
+mapeamento 09 e acrescenta o que nenhum outro documento tem: **finalidade, base legal,
+retenção, direitos do titular e bloco de aprovação**. Entra no repositório com a
+aprovação **em branco** — assinar por antecipação seria conformidade fabricada.
 
 ---
 

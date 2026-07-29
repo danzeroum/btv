@@ -67,20 +67,33 @@ flowchart TB
 
 ## 8.4 Endpoints — público vs local
 
-Todos os `/api/*` bind em `127.0.0.1`. **Não há endpoint na internet pública** no modo
-local (o `infra/` é esqueleto sem alvo de deploy real). Rotas mutáveis (não-GET) passam pelo
-guard de Origin. No SaaS, a borda de identidade (ADR 0029) resolve tenant/sessão — mas o
-dashboard ainda bind local; expor exige proxy/ingress com auth (e `BTV_TRUSTED_ORIGINS`).
+No modo local (default), todos os `/api/*` bind em `127.0.0.1`. Rotas mutáveis (não-GET)
+com header `Origin` passam pelo guard; **rotas GET não são checadas, e requisição sem
+`Origin` passa** (`guard.rs:22-36`). No SaaS, a borda de identidade (ADR 0029) resolve
+tenant/sessão — mas o resolver não está wired (`main.rs:414`) e não há rota de login, então
+o modo saas não é operável hoje.
 
-## 8.5 Lacunas honestas (GDPR / segurança)
+> **Correção de uma afirmação anterior deste documento.** A versão anterior dizia "Não há
+> endpoint na internet pública … o `infra/` é esqueleto sem alvo de deploy real". Isso vale
+> para `terraform/` e `ansible/`, mas **não** para `infra/docker/docker-compose.prod.yml`,
+> que roda `btv dashboard --host 0.0.0.0` com `BTV_TRUSTED_ORIGINS` atrás de um nginx com
+> basic auth — um alvo de hospedagem real e documentado. Esse é o **cenário B** da
+> [auditoria LGPD](09-auditoria-lgpd.md), e é onde quase todo risco de privacidade morde.
+> O compose não define `BTV_MODE`, então nele todos os titulares compartilham o tenant
+> `{local}` e o ator `web:btv` (Risco-027).
 
-- **Sem criptografia em repouso:** `.btv/*.db` e o JSONL são texto/SQLite em claro. Num
-  contexto com PII, isso é o item nº 1 a endereçar (ex.: SQLCipher, disco cifrado).
-- **PIN com sha256 puro** (documentado como não-KDF): adequado como sinal, fraco contra
-  brute-force de PIN curto — um KDF (argon2/bcrypt) seria o correto se o PIN virar credencial real.
-- **Sem retenção/expurgo automático:** o ledger é append-only por design (não deleta) — um
-  "direito ao esquecimento" GDPR exigiria estratégia explícita (o override marcado registra,
-  não apaga).
-- **Sem redaction de logs:** revisar se algum `log`/stderr imprime payload de usuário.
-- **Sem auth no modo local** (por design): qualquer processo local que alcance `127.0.0.1:7878`
-  fala com o dashboard — o guard protege contra CSRF de navegador, não contra processo local.
+## 8.5 Lacunas honestas (privacidade / segurança)
+
+As lacunas abaixo são **fatos técnicos**. A qualificação jurídica de cada uma — artigo da
+Lei 13.709/2018 violado, princípio PbD, severidade, cenário e correção concreta — está em
+[09 — Auditoria LGPD](09-auditoria-lgpd.md), e a decisão de tratamento e aceite no
+[RIPD](../RIPD.md). Este documento continua sendo a fonte dos fatos: **não duplique a §8.2
+lá, e não duplique a qualificação legal aqui.**
+
+| Lacuna | Fato | Onde está qualificada |
+|---|---|---|
+| Sem criptografia em repouso | `.btv/*.db` e o JSONL são texto/SQLite em claro. Agrava: nenhum `set_permissions`/`0o700` existe no repo — o diretório herda o umask e costuma ficar legível por qualquer conta do host. | Risco-008 |
+| PIN com sha256 puro | Documentado como não-KDF. Dois dos três componentes do salt (`email`, `nome`) vêm da rota de listagem, que não tem autenticação; e o `verify-pin` não tem throttle. | Risco-009 |
+| Sem retenção/expurgo | Não há TTL, job, cap nem `retencao_ate` em nenhum reservatório. O ledger é append-only por design, e o hash cobre o payload — onde há texto livre do titular. | Risco-005, Risco-006 |
+| Sem redaction de logs | Confirmado: não há framework de log em Rust (~135 `println!`/`eprintln!`), e há saída de prompt, completion, tarefa e token de sessão. No Python, `agents/base.py:72` anexa o dict de decisão inteiro ao log. | Risco-015 |
+| Sem auth no modo local | Por design. Duas precisões que o texto anterior não trazia: o guard **não checa GET algum**, e requisição sem header `Origin` passa. No modo hospedado, todos os titulares compartilham o tenant `{local}` e o ator `web:btv`. | Risco-001, Risco-027 |
