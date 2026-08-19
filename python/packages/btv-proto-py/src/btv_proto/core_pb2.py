@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from . import llm_pb2 as llm__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ncore.proto\x12\x0b\x62tv.core.v1\x1a\tllm.proto\":\n\x08ToolCall\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x11\n\targs_json\x18\x02 \x01(\t\x12\r\n\x05scope\x18\x03 \x01(\t\"C\n\nToolResult\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x11\n\ttruncated\x18\x02 \x01(\x08\x12\x11\n\texit_code\x18\x03 \x01(\x05\"T\n\x11PermissionRequest\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\r\n\x05scope\x18\x02 \x01(\t\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12\x12\n\nconfidence\x18\x04 \x01(\x01\"\xb9\x01\n\x12PermissionDecision\x12:\n\x08\x64\x65\x63ision\x18\x01 \x01(\x0e\x32(.btv.core.v1.PermissionDecision.Decision\x12\x1a\n\roperator_note\x18\x02 \x01(\tH\x00\x88\x01\x01\"9\n\x08\x44\x65\x63ision\x12\x18\n\x14\x44\x45\x43ISION_UNSPECIFIED\x10\x00\x12\t\n\x05\x41LLOW\x10\x01\x12\x08\n\x04\x44\x45NY\x10\x02\x42\x10\n\x0e_operator_note2\xda\x01\n\x0b\x43oreService\x12:\n\x08Generate\x12\x16.btv.llm.v1.LlmRequest\x1a\x14.btv.llm.v1.LlmChunk0\x01\x12\x39\n\x07RunTool\x12\x15.btv.core.v1.ToolCall\x1a\x17.btv.core.v1.ToolResult\x12T\n\x11RequestPermission\x12\x1e.btv.core.v1.PermissionRequest\x1a\x1f.btv.core.v1.PermissionDecisionb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\ncore.proto\x12\x0b\x62tv.core.v1\x1a\tllm.proto\":\n\x08ToolCall\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x11\n\targs_json\x18\x02 \x01(\t\x12\r\n\x05scope\x18\x03 \x01(\t\"Z\n\nToolResult\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x11\n\ttruncated\x18\x02 \x01(\x08\x12\x11\n\texit_code\x18\x03 \x01(\x05\x12\x15\n\rrecovery_hint\x18\x04 \x01(\t\"T\n\x11PermissionRequest\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\r\n\x05scope\x18\x02 \x01(\t\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12\x12\n\nconfidence\x18\x04 \x01(\x01\"\xb9\x01\n\x12PermissionDecision\x12:\n\x08\x64\x65\x63ision\x18\x01 \x01(\x0e\x32(.btv.core.v1.PermissionDecision.Decision\x12\x1a\n\roperator_note\x18\x02 \x01(\tH\x00\x88\x01\x01\"9\n\x08\x44\x65\x63ision\x12\x18\n\x14\x44\x45\x43ISION_UNSPECIFIED\x10\x00\x12\t\n\x05\x41LLOW\x10\x01\x12\x08\n\x04\x44\x45NY\x10\x02\x42\x10\n\x0e_operator_note2\xda\x01\n\x0b\x43oreService\x12:\n\x08Generate\x12\x16.btv.llm.v1.LlmRequest\x1a\x14.btv.llm.v1.LlmChunk0\x01\x12\x39\n\x07RunTool\x12\x15.btv.core.v1.ToolCall\x1a\x17.btv.core.v1.ToolResult\x12T\n\x11RequestPermission\x12\x1e.btv.core.v1.PermissionRequest\x1a\x1f.btv.core.v1.PermissionDecisionb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,13 +35,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TOOLCALL']._serialized_start=38
   _globals['_TOOLCALL']._serialized_end=96
   _globals['_TOOLRESULT']._serialized_start=98
-  _globals['_TOOLRESULT']._serialized_end=165
-  _globals['_PERMISSIONREQUEST']._serialized_start=167
-  _globals['_PERMISSIONREQUEST']._serialized_end=251
-  _globals['_PERMISSIONDECISION']._serialized_start=254
-  _globals['_PERMISSIONDECISION']._serialized_end=439
-  _globals['_PERMISSIONDECISION_DECISION']._serialized_start=364
-  _globals['_PERMISSIONDECISION_DECISION']._serialized_end=421
-  _globals['_CORESERVICE']._serialized_start=442
-  _globals['_CORESERVICE']._serialized_end=660
+  _globals['_TOOLRESULT']._serialized_end=188
+  _globals['_PERMISSIONREQUEST']._serialized_start=190
+  _globals['_PERMISSIONREQUEST']._serialized_end=274
+  _globals['_PERMISSIONDECISION']._serialized_start=277
+  _globals['_PERMISSIONDECISION']._serialized_end=462
+  _globals['_PERMISSIONDECISION_DECISION']._serialized_start=387
+  _globals['_PERMISSIONDECISION_DECISION']._serialized_end=444
+  _globals['_CORESERVICE']._serialized_start=465
+  _globals['_CORESERVICE']._serialized_end=683
 # @@protoc_insertion_point(module_scope)

@@ -40,6 +40,12 @@ message ToolResult {
   // (nunca chegou a rodar, ou rodou e falhou); -1 = negado pelo motor de
   // permissões ou por um humano (nunca chegou a executar).
   int32 exit_code = 3;
+  // Dica de recuperação para o agente (aditivo, PATCH ciclo completo): o
+  // lado Rust conhece o root real de permissão — uma negação por caminho
+  // fora dele carrega aqui a orientação ("use caminhos relativos ao
+  // workspace"), em vez de o modelo adivinhar no escuro e repetir a
+  // negação até o teto de tempo do loop ReAct.
+  string recovery_hint = 4;
 }
 
 message PermissionRequest {

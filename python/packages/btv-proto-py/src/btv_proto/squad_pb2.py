@@ -24,45 +24,47 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bsquad.proto\x12\x0c\x62tv.squad.v1\"\x81\x02\n\tSquadTask\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x15\n\rdecision_type\x18\x03 \x01(\t\x12\x41\n\x15verification_evidence\x18\x05 \x01(\x0b\x32\".btv.squad.v1.VerificationEvidence\x12\r\n\x05model\x18\x06 \x01(\t\x12)\n\x06roster\x18\x07 \x03(\x0b\x32\x19.btv.squad.v1.PersonaSpec\x12\x11\n\ttenant_id\x18\x08 \x01(\t\x12\r\n\x05\x61\x63tor\x18\t \x01(\tJ\x04\x08\x04\x10\x05R\x12max_autonomy_level\"[\n\x0bPersonaSpec\x12\r\n\x05papel\x18\x01 \x01(\t\x12\x0e\n\x06prompt\x18\x02 \x01(\t\x12\x0e\n\x06\x66uncao\x18\x03 \x01(\t\x12\r\n\x05ordem\x18\x04 \x01(\r\x12\x0e\n\x06\x63ustom\x18\x05 \x01(\x08\"\xee\x02\n\nSquadEvent\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\n\n\x02ts\x18\x02 \x01(\t\x12\x11\n\ttenant_id\x18\n \x01(\t\x12\r\n\x05\x61\x63tor\x18\x0b \x01(\t\x12*\n\x08proposal\x18\x03 \x01(\x0b\x32\x16.btv.squad.v1.ProposalH\x00\x12,\n\tconsensus\x18\x04 \x01(\x0b\x32\x17.btv.squad.v1.ConsensusH\x00\x12(\n\x07handoff\x18\x05 \x01(\x0b\x32\x15.btv.squad.v1.HandoffH\x00\x12,\n\x04hitl\x18\x06 \x01(\x0b\x32\x1c.btv.squad.v1.HitlEscalationH\x00\x12(\n\x04step\x18\x07 \x01(\x0b\x32\x18.btv.squad.v1.StepResultH\x00\x12\x0f\n\x05\x65rror\x18\x08 \x01(\tH\x00\x12)\n\x04\x63hat\x18\t \x01(\x0b\x32\x19.btv.squad.v1.ChatMessageH\x00\x42\t\n\x07payload\"U\n\x0b\x43hatMessage\x12\x0e\n\x06\x61uthor\x18\x01 \x01(\t\x12\x13\n\x0b\x61uthor_role\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\x12\x13\n\x0bin_reply_to\x18\x04 \x01(\t\"C\n\x08Proposal\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x12\n\nconfidence\x18\x02 \x01(\x01\x12\x14\n\x0c\x63ontent_json\x18\x03 \x01(\t\"d\n\tConsensus\x12\x16\n\x0e\x64\x65\x63ision_maker\x18\x01 \x01(\t\x12\x10\n\x08strength\x18\x02 \x01(\x01\x12\x15\n\rdecision_json\x18\x03 \x01(\t\x12\x16\n\x0erequires_human\x18\x04 \x01(\x08\"\xd2\x01\n\x07Handoff\x12*\n\x05phase\x18\x01 \x01(\x0e\x32\x1b.btv.squad.v1.Handoff.Phase\x12\x12\n\nfrom_agent\x18\x02 \x01(\t\x12\x10\n\x08to_agent\x18\x03 \x01(\t\x12\x10\n\x08\x63ontract\x18\x04 \x01(\t\x12\x16\n\x0epayload_digest\x18\x05 \x01(\t\"K\n\x05Phase\x12\x15\n\x11PHASE_UNSPECIFIED\x10\x00\x12\t\n\x05START\x10\x01\x12\x07\n\x03\x41\x43K\x10\x02\x12\x0c\n\x08\x43OMPLETE\x10\x03\x12\t\n\x05\x45RROR\x10\x04\"4\n\x0eHitlEscalation\x12\x0e\n\x06reason\x18\x01 \x01(\t\x12\x12\n\nconfidence\x18\x02 \x01(\x01\"?\n\nStepResult\x12\x0f\n\x07step_id\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x0f\n\x07summary\x18\x03 \x01(\t\"\xa3\x01\n\x14VerificationEvidence\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07git_sha\x18\x02 \x01(\t\x12-\n\x05steps\x18\x03 \x03(\x0b\x32\x1e.btv.squad.v1.VerificationStep\x12&\n\x07verdict\x18\x04 \x01(\x0e\x32\x15.btv.squad.v1.Verdict\x12\x13\n\x0bproduced_at\x18\x05 \x01(\t\"\x8b\x01\n\x10VerificationStep\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04tool\x18\x02 \x01(\t\x12\x11\n\texit_code\x18\x03 \x01(\x05\x12\x13\n\x0b\x64uration_ms\x18\x04 \x01(\x04\x12\x33\n\x08\x66indings\x18\x05 \x03(\x0b\x32!.btv.squad.v1.VerificationFinding\"~\n\x13VerificationFinding\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x10\n\x08severity\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x11\n\x04\x66ile\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x11\n\x04line\x18\x05 \x01(\x04H\x01\x88\x01\x01\x42\x07\n\x05_fileB\x07\n\x05_line\"\x0f\n\rHealthRequest\"0\n\x0eHealthResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x0f\n\x07version\x18\x02 \x01(\t*[\n\x07Verdict\x12\x17\n\x13VERDICT_UNSPECIFIED\x10\x00\x12\x10\n\x0cVERDICT_PASS\x10\x01\x12\x10\n\x0cVERDICT_FAIL\x10\x02\x12\x13\n\x0fVERDICT_SKIPPED\x10\x03\x32\x97\x01\n\x0cSquadService\x12\x42\n\x0b\x45xecuteTask\x12\x17.btv.squad.v1.SquadTask\x1a\x18.btv.squad.v1.SquadEvent0\x01\x12\x43\n\x06Health\x12\x1b.btv.squad.v1.HealthRequest\x1a\x1c.btv.squad.v1.HealthResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bsquad.proto\x12\x0c\x62tv.squad.v1\"\x81\x02\n\tSquadTask\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x02 \x01(\t\x12\x15\n\rdecision_type\x18\x03 \x01(\t\x12\x41\n\x15verification_evidence\x18\x05 \x01(\x0b\x32\".btv.squad.v1.VerificationEvidence\x12\r\n\x05model\x18\x06 \x01(\t\x12)\n\x06roster\x18\x07 \x03(\x0b\x32\x19.btv.squad.v1.PersonaSpec\x12\x11\n\ttenant_id\x18\x08 \x01(\t\x12\r\n\x05\x61\x63tor\x18\t \x01(\tJ\x04\x08\x04\x10\x05R\x12max_autonomy_level\"[\n\x0bPersonaSpec\x12\r\n\x05papel\x18\x01 \x01(\t\x12\x0e\n\x06prompt\x18\x02 \x01(\t\x12\x0e\n\x06\x66uncao\x18\x03 \x01(\t\x12\r\n\x05ordem\x18\x04 \x01(\r\x12\x0e\n\x06\x63ustom\x18\x05 \x01(\x08\"\x9d\x03\n\nSquadEvent\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\n\n\x02ts\x18\x02 \x01(\t\x12\x11\n\ttenant_id\x18\n \x01(\t\x12\r\n\x05\x61\x63tor\x18\x0b \x01(\t\x12*\n\x08proposal\x18\x03 \x01(\x0b\x32\x16.btv.squad.v1.ProposalH\x00\x12,\n\tconsensus\x18\x04 \x01(\x0b\x32\x17.btv.squad.v1.ConsensusH\x00\x12(\n\x07handoff\x18\x05 \x01(\x0b\x32\x15.btv.squad.v1.HandoffH\x00\x12,\n\x04hitl\x18\x06 \x01(\x0b\x32\x1c.btv.squad.v1.HitlEscalationH\x00\x12(\n\x04step\x18\x07 \x01(\x0b\x32\x18.btv.squad.v1.StepResultH\x00\x12\x0f\n\x05\x65rror\x18\x08 \x01(\tH\x00\x12)\n\x04\x63hat\x18\t \x01(\x0b\x32\x19.btv.squad.v1.ChatMessageH\x00\x12-\n\nrun_result\x18\x0c \x01(\x0b\x32\x17.btv.squad.v1.RunResultH\x00\x42\t\n\x07payload\"U\n\x0b\x43hatMessage\x12\x0e\n\x06\x61uthor\x18\x01 \x01(\t\x12\x13\n\x0b\x61uthor_role\x18\x02 \x01(\t\x12\x0c\n\x04text\x18\x03 \x01(\t\x12\x13\n\x0bin_reply_to\x18\x04 \x01(\t\"C\n\x08Proposal\x12\r\n\x05\x61gent\x18\x01 \x01(\t\x12\x12\n\nconfidence\x18\x02 \x01(\x01\x12\x14\n\x0c\x63ontent_json\x18\x03 \x01(\t\"\xd8\x01\n\tConsensus\x12\x16\n\x0e\x64\x65\x63ision_maker\x18\x01 \x01(\t\x12\x10\n\x08strength\x18\x02 \x01(\x01\x12\x15\n\rdecision_json\x18\x03 \x01(\t\x12\x16\n\x0erequires_human\x18\x04 \x01(\x08\x12\x19\n\x11winner_confidence\x18\x05 \x01(\x01\x12\x19\n\x11threshold_applied\x18\x06 \x01(\x01\x12\x19\n\x11metric_definition\x18\x07 \x01(\t\x12!\n\x19proposal_confidences_json\x18\x08 \x01(\t\"\xd2\x01\n\x07Handoff\x12*\n\x05phase\x18\x01 \x01(\x0e\x32\x1b.btv.squad.v1.Handoff.Phase\x12\x12\n\nfrom_agent\x18\x02 \x01(\t\x12\x10\n\x08to_agent\x18\x03 \x01(\t\x12\x10\n\x08\x63ontract\x18\x04 \x01(\t\x12\x16\n\x0epayload_digest\x18\x05 \x01(\t\"K\n\x05Phase\x12\x15\n\x11PHASE_UNSPECIFIED\x10\x00\x12\t\n\x05START\x10\x01\x12\x07\n\x03\x41\x43K\x10\x02\x12\x0c\n\x08\x43OMPLETE\x10\x03\x12\t\n\x05\x45RROR\x10\x04\"\xf7\x01\n\x0eHitlEscalation\x12\x0e\n\x06reason\x18\x01 \x01(\t\x12\x12\n\nconfidence\x18\x02 \x01(\x01\x12\x14\n\x0cwinner_share\x18\x03 \x01(\x01\x12\x19\n\x11threshold_applied\x18\x04 \x01(\x01\x12\x19\n\x11metric_definition\x18\x05 \x01(\t\x12!\n\x19proposal_confidences_json\x18\x06 \x01(\t\x12 \n\x18\x64issenting_opinions_json\x18\x07 \x01(\t\x12\x1c\n\x0f\x61uditor_verdict\x18\x08 \x01(\x08H\x00\x88\x01\x01\x42\x12\n\x10_auditor_verdict\"f\n\tRunResult\x12\x10\n\x08\x61pproved\x18\x01 \x01(\x08\x12\x15\n\rpublic_status\x18\x02 \x01(\t\x12\x15\n\rpublic_reason\x18\x03 \x01(\t\x12\x19\n\x11\x64\x65liverable_count\x18\x04 \x01(\x05\"?\n\nStepResult\x12\x0f\n\x07step_id\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x0f\n\x07summary\x18\x03 \x01(\t\"\xa3\x01\n\x14VerificationEvidence\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07git_sha\x18\x02 \x01(\t\x12-\n\x05steps\x18\x03 \x03(\x0b\x32\x1e.btv.squad.v1.VerificationStep\x12&\n\x07verdict\x18\x04 \x01(\x0e\x32\x15.btv.squad.v1.Verdict\x12\x13\n\x0bproduced_at\x18\x05 \x01(\t\"\x8b\x01\n\x10VerificationStep\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04tool\x18\x02 \x01(\t\x12\x11\n\texit_code\x18\x03 \x01(\x05\x12\x13\n\x0b\x64uration_ms\x18\x04 \x01(\x04\x12\x33\n\x08\x66indings\x18\x05 \x03(\x0b\x32!.btv.squad.v1.VerificationFinding\"~\n\x13VerificationFinding\x12\x0c\n\x04tool\x18\x01 \x01(\t\x12\x10\n\x08severity\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x11\n\x04\x66ile\x18\x04 \x01(\tH\x00\x88\x01\x01\x12\x11\n\x04line\x18\x05 \x01(\x04H\x01\x88\x01\x01\x42\x07\n\x05_fileB\x07\n\x05_line\"\x0f\n\rHealthRequest\"0\n\x0eHealthResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x0f\n\x07version\x18\x02 \x01(\t*[\n\x07Verdict\x12\x17\n\x13VERDICT_UNSPECIFIED\x10\x00\x12\x10\n\x0cVERDICT_PASS\x10\x01\x12\x10\n\x0cVERDICT_FAIL\x10\x02\x12\x13\n\x0fVERDICT_SKIPPED\x10\x03\x32\x97\x01\n\x0cSquadService\x12\x42\n\x0b\x45xecuteTask\x12\x17.btv.squad.v1.SquadTask\x1a\x18.btv.squad.v1.SquadEvent0\x01\x12\x43\n\x06Health\x12\x1b.btv.squad.v1.HealthRequest\x1a\x1c.btv.squad.v1.HealthResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'squad_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_VERDICT']._serialized_start=1844
-  _globals['_VERDICT']._serialized_end=1935
+  _globals['_VERDICT']._serialized_start=2308
+  _globals['_VERDICT']._serialized_end=2399
   _globals['_SQUADTASK']._serialized_start=30
   _globals['_SQUADTASK']._serialized_end=287
   _globals['_PERSONASPEC']._serialized_start=289
   _globals['_PERSONASPEC']._serialized_end=380
   _globals['_SQUADEVENT']._serialized_start=383
-  _globals['_SQUADEVENT']._serialized_end=749
-  _globals['_CHATMESSAGE']._serialized_start=751
-  _globals['_CHATMESSAGE']._serialized_end=836
-  _globals['_PROPOSAL']._serialized_start=838
-  _globals['_PROPOSAL']._serialized_end=905
-  _globals['_CONSENSUS']._serialized_start=907
-  _globals['_CONSENSUS']._serialized_end=1007
-  _globals['_HANDOFF']._serialized_start=1010
-  _globals['_HANDOFF']._serialized_end=1220
-  _globals['_HANDOFF_PHASE']._serialized_start=1145
-  _globals['_HANDOFF_PHASE']._serialized_end=1220
-  _globals['_HITLESCALATION']._serialized_start=1222
-  _globals['_HITLESCALATION']._serialized_end=1274
-  _globals['_STEPRESULT']._serialized_start=1276
-  _globals['_STEPRESULT']._serialized_end=1339
-  _globals['_VERIFICATIONEVIDENCE']._serialized_start=1342
-  _globals['_VERIFICATIONEVIDENCE']._serialized_end=1505
-  _globals['_VERIFICATIONSTEP']._serialized_start=1508
-  _globals['_VERIFICATIONSTEP']._serialized_end=1647
-  _globals['_VERIFICATIONFINDING']._serialized_start=1649
-  _globals['_VERIFICATIONFINDING']._serialized_end=1775
-  _globals['_HEALTHREQUEST']._serialized_start=1777
-  _globals['_HEALTHREQUEST']._serialized_end=1792
-  _globals['_HEALTHRESPONSE']._serialized_start=1794
-  _globals['_HEALTHRESPONSE']._serialized_end=1842
-  _globals['_SQUADSERVICE']._serialized_start=1938
-  _globals['_SQUADSERVICE']._serialized_end=2089
+  _globals['_SQUADEVENT']._serialized_end=796
+  _globals['_CHATMESSAGE']._serialized_start=798
+  _globals['_CHATMESSAGE']._serialized_end=883
+  _globals['_PROPOSAL']._serialized_start=885
+  _globals['_PROPOSAL']._serialized_end=952
+  _globals['_CONSENSUS']._serialized_start=955
+  _globals['_CONSENSUS']._serialized_end=1171
+  _globals['_HANDOFF']._serialized_start=1174
+  _globals['_HANDOFF']._serialized_end=1384
+  _globals['_HANDOFF_PHASE']._serialized_start=1309
+  _globals['_HANDOFF_PHASE']._serialized_end=1384
+  _globals['_HITLESCALATION']._serialized_start=1387
+  _globals['_HITLESCALATION']._serialized_end=1634
+  _globals['_RUNRESULT']._serialized_start=1636
+  _globals['_RUNRESULT']._serialized_end=1738
+  _globals['_STEPRESULT']._serialized_start=1740
+  _globals['_STEPRESULT']._serialized_end=1803
+  _globals['_VERIFICATIONEVIDENCE']._serialized_start=1806
+  _globals['_VERIFICATIONEVIDENCE']._serialized_end=1969
+  _globals['_VERIFICATIONSTEP']._serialized_start=1972
+  _globals['_VERIFICATIONSTEP']._serialized_end=2111
+  _globals['_VERIFICATIONFINDING']._serialized_start=2113
+  _globals['_VERIFICATIONFINDING']._serialized_end=2239
+  _globals['_HEALTHREQUEST']._serialized_start=2241
+  _globals['_HEALTHREQUEST']._serialized_end=2256
+  _globals['_HEALTHRESPONSE']._serialized_start=2258
+  _globals['_HEALTHRESPONSE']._serialized_end=2306
+  _globals['_SQUADSERVICE']._serialized_start=2402
+  _globals['_SQUADSERVICE']._serialized_end=2553
 # @@protoc_insertion_point(module_scope)

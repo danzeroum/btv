@@ -83,6 +83,7 @@ message SquadEvent {
     StepResult step = 7;
     string error = 8;
     ChatMessage chat = 9;
+    RunResult run_result = 12;
   }
 }
 
@@ -105,9 +106,18 @@ message Proposal {
 
 message Consensus {
   string decision_maker = 1;
+  // Participação do vencedor no total ponderado ("winner_share") — NUNCA
+  // confiança média nem confiança do vencedor. `metric_definition` (abaixo)
+  // rotula este número explicitamente para quem consome o evento.
   double strength = 2;
   string decision_json = 3;
   bool requires_human = 4;
+  // Anexo semântico aditivo (PATCH ciclo completo): auditar a decisão sem
+  // adivinhar o que `strength` significa.
+  double winner_confidence = 5;
+  double threshold_applied = 6;
+  string metric_definition = 7;
+  string proposal_confidences_json = 8;
 }
 
 message Handoff {
@@ -127,7 +137,29 @@ message Handoff {
 
 message HitlEscalation {
   string reason = 1;
+  // Confiança REAL do vencedor do consenso (0.0-1.0) — a UI exibia o
+  // `winner_share` aqui sem rótulo; a partir deste PATCH `confidence` é o
+  // que o nome diz e a participação viaja em `winner_share`.
   double confidence = 2;
+  double winner_share = 3;
+  double threshold_applied = 4;
+  string metric_definition = 5;
+  string proposal_confidences_json = 6;
+  string dissenting_opinions_json = 7;
+  // Veto do auditor: `false` escala para humano MESMO com consenso forte.
+  // `optional` (proto3) para distinguir "auditor não propôs" de "aprovou".
+  optional bool auditor_verdict = 8;
+}
+
+// Veredito final da execução (aditivo, PATCH ciclo completo): distingue no
+// stream a run aprovada da reprovada — o watcher Rust persiste
+// `resultado`/`motivo` na run a partir deste evento (sem ele, reprovada e
+// concluída sem artefato eram a mesma linha na UI).
+message RunResult {
+  bool approved = 1;
+  string public_status = 2;
+  string public_reason = 3;
+  int32 deliverable_count = 4;
 }
 
 message StepResult {
