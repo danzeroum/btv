@@ -26,7 +26,7 @@ use btv_domain::ports::{DomainEvent, LedgerRepository, PersonaRepository, RunRep
 use btv_domain::ports::{
     RepositoryError, RunStatus, TemplatePublicationRepository, UserRepository,
 };
-use btv_domain::{ActorId, CustomPersona, Deliverable, PersonaOverride, Run, TaskId};
+use btv_domain::{ActorId, CustomPersona, Deliverable, PersonaOverride, Run, RunOutcome, TaskId};
 use btv_domain::{PinCheck, TenantContext, TenantId, User};
 use btv_schemas::ledger::LedgerEntry;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgRow};
@@ -97,6 +97,11 @@ fn linha_para_run(row: &PgRow) -> Result<Run, RepositoryError> {
         created_ts: row.try_get(9).map_err(storage)?,
         updated_ts: row.try_get(10).map_err(storage)?,
         tenant: TenantId::parse(&tenant_raw).map_err(storage)?,
+        outcome: match row.try_get::<Option<String>, _>(12).map_err(storage)? {
+            Some(raw) => Some(RunOutcome::parse(&raw).map_err(storage)?),
+            None => None,
+        },
+        motivo: row.try_get(13).map_err(storage)?,
     })
 }
 
@@ -1349,6 +1354,8 @@ mod tests {
             created_ts: "2026-07-10T00:00:00Z".into(),
             updated_ts: "2026-07-10T00:00:00Z".into(),
             tenant: ctx.tenant,
+            outcome: None,
+            motivo: None,
         }
     }
 
