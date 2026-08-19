@@ -36,6 +36,7 @@ impl CoreBackend for Backend {
             content: "Backend não executa ferramentas".into(),
             truncated: false,
             exit_code: 1,
+            recovery_hint: String::new(),
         }
     }
 }
@@ -66,6 +67,7 @@ impl CoreBackend for BackendWithTools {
                     content: format!("args_json inválido: {e}"),
                     truncated: false,
                     exit_code: 1,
+                    recovery_hint: String::new(),
                 }
             }
         };
@@ -74,6 +76,7 @@ impl CoreBackend for BackendWithTools {
                 content: format!("ferramenta desconhecida: {}", call.tool),
                 truncated: false,
                 exit_code: 1,
+                recovery_hint: String::new(),
             };
         };
         let scope = tool.scope(&args);
@@ -95,6 +98,7 @@ impl CoreBackend for BackendWithTools {
                 content: format!("permissão negada para {} em {scope:?}", call.tool),
                 truncated: false,
                 exit_code: -1,
+                recovery_hint: String::new(),
             };
         }
         match tool.run(&args) {
@@ -102,11 +106,13 @@ impl CoreBackend for BackendWithTools {
                 content: out.content,
                 truncated: out.truncated,
                 exit_code: 0,
+                recovery_hint: String::new(),
             },
             Err(e) => ToolResult {
                 content: e.to_string(),
                 truncated: false,
                 exit_code: 1,
+                recovery_hint: String::new(),
             },
         }
     }

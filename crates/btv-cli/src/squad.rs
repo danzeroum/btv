@@ -61,6 +61,7 @@ where
                 content: format!("args_json inválido: {e}"),
                 truncated: false,
                 exit_code: TOOL_EXIT_ERROR,
+                recovery_hint: String::new(),
             }
         }
     };
@@ -69,6 +70,7 @@ where
             content: format!("ferramenta desconhecida: {}", call.tool),
             truncated: false,
             exit_code: TOOL_EXIT_ERROR,
+            recovery_hint: String::new(),
         };
     }
     let scope = tools.get(&call.tool).expect("validado acima").scope(&args);
@@ -91,6 +93,17 @@ where
             content: format!("permissão negada para {} em {scope:?}", call.tool),
             truncated: false,
             exit_code: TOOL_EXIT_DENIED,
+            // A causa mais comum de negação em squad é caminho fora do
+            // diretório de trabalho (o modelo alucina /tmp, /workspace, …).
+            // A dica dá ao agente a ÚNICA informação que ele não tem: o
+            // root real de permissão — sem ela ele repete a negação até o
+            // teto de tempo do loop ReAct.
+            recovery_hint: format!(
+                "o escopo foi negado pelo motor de permissões — caminhos fora do \
+                 diretório de trabalho permitido são recusados; use caminhos \
+                 relativos a '{}'",
+                root.display()
+            ),
         };
         log_tool_run(root, call, &scope, &result);
         return result;
@@ -121,17 +134,20 @@ where
                 content,
                 truncated: out.truncated,
                 exit_code: TOOL_EXIT_OK,
+                recovery_hint: String::new(),
             }
         }
         Ok(Err(e)) => ToolResult {
             content: e.to_string(),
             truncated: false,
             exit_code: TOOL_EXIT_ERROR,
+            recovery_hint: String::new(),
         },
         Err(e) => ToolResult {
             content: format!("falha interna ao rodar ferramenta: {e}"),
             truncated: false,
             exit_code: TOOL_EXIT_ERROR,
+            recovery_hint: String::new(),
         },
     };
     log_tool_run(root, call, &scope, &result);
@@ -547,8 +563,8 @@ fn render_event(ev: &btv_proto::squad::SquadEvent, session: &mut Session) {
         }
         Some(squad_event::Payload::Hitl(h)) => {
             eprintln!(
-                "  ⏸ escalonamento HITL: {} (conf {:.2})",
-                h.reason, h.confidence
+                "  ⏸ escalonamento HITL: {} (vencedor com conf {:.2}, participação {:.2}, limiar {:.2})",
+                h.reason, h.confidence, h.winner_share, h.threshold_applied
             );
         }
         Some(squad_event::Payload::Step(s)) => {
@@ -561,6 +577,13 @@ fn render_event(ev: &btv_proto::squad::SquadEvent, session: &mut Session) {
         }
         Some(squad_event::Payload::Error(e)) => eprintln!("  ✗ erro do squad: {e}"),
         Some(squad_event::Payload::Chat(c)) => eprintln!("  💬 {}: {}", c.author, c.text),
+        Some(squad_event::Payload::RunResult(r)) => {
+            eprintln!(
+                "  🏁 veredito final: {} — {}",
+                if r.approved { "aprovada" } else { "reprovada" },
+                r.public_reason
+            );
+        }
         None => {}
     }
 }
@@ -723,6 +746,10 @@ mod tests {
                 strength: 0.87,
                 decision_json: "{}".into(),
                 requires_human: false,
+                winner_confidence: 0.9,
+                threshold_applied: 0.7,
+                metric_definition: "winner_share".into(),
+                proposal_confidences_json: "{}".into(),
             })))
             .unwrap();
             tx.try_send(ev(squad_event::Payload::Step(StepResult {

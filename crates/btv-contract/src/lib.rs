@@ -44,6 +44,8 @@ pub fn run_novo(ctx: &TenantContext, seq: u64, nome: &str) -> Run {
         created_ts: "2026-07-08T10:00:00Z".into(),
         updated_ts: "2026-07-08T10:00:00Z".into(),
         tenant: ctx.tenant,
+        outcome: None,
+        motivo: None,
     }
 }
 

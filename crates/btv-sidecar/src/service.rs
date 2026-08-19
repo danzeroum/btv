@@ -683,6 +683,7 @@ mod tests {
                 content: "NoopCore não executa ferramentas".into(),
                 truncated: false,
                 exit_code: 1,
+                recovery_hint: String::new(),
             }
         }
     }
