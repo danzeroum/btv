@@ -24,11 +24,14 @@ class ToolCallRequest(BaseModel):
 class ToolCallResult(BaseModel):
     """Espelha `btv.core.v1.ToolResult`. `exit_code`: 0 sucesso, 1 erro de
     execução/args inválidos/ferramenta desconhecida, -1 negado pelo motor de
-    permissões ou por um humano (nunca chegou a executar)."""
+    permissões ou por um humano (nunca chegou a executar). `recovery_hint` é
+    a dica do lado Rust para o agente se recuperar (ex.: caminho fora do
+    diretório de trabalho) — nunca substitui o exit_code."""
 
     content: str
     truncated: bool = False
     exit_code: int = 0
+    recovery_hint: str = ""
 
 
 class ToolClient(Protocol):

@@ -45,6 +45,68 @@ pub struct Run {
     /// Dono do run. Fora do wire nesta fase (ver doc do módulo).
     #[serde(skip_serializing)]
     pub tenant: TenantId,
+    /// Veredito final da validação (aditivo, PATCH ciclo completo): `Some`
+    /// só quando o watcher viu a validação final no stream — uma run
+    /// reprovada pela auditoria deixa de parecer "concluída sem artefato".
+    /// Ausente (`None`, fora do wire) para runs legadas/em aberto. Wire
+    /// `resultado` em português (mesmo vocabulário do `RunStatus`).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "resultado")]
+    pub outcome: Option<RunOutcome>,
+    /// Motivo humano legível do veredito (razão da reprovação, ou
+    /// observação de uma conclusão incompleta). Aditivo — ausente no wire
+    /// quando não houver veredito.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub motivo: Option<String>,
+}
+
+/// Veredito final de uma run derivado do evento `run_result`/passo
+/// `final_validation` do stream do squad — complementa `RunStatus`, que é
+/// contrato de banco congelado (`concluida` cobre aprovada E reprovada).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// Validação final aprovou a entrega.
+    Aprovada,
+    /// Validação final reprovou explicitamente (auditor negou).
+    Reprovada,
+    /// A tarefa terminou sem validação final observável (kill-switch,
+    /// erro, ou execução que nunca chegou ao veredito).
+    Incompleta,
+}
+
+impl RunOutcome {
+    /// String de wire em português — mesmo vocabulário do `RunStatus`.
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            RunOutcome::Aprovada => "aprovada",
+            RunOutcome::Reprovada => "reprovada",
+            RunOutcome::Incompleta => "incompleta",
+        }
+    }
+
+    /// Parse fail-closed: vocabulário fora do contrato é erro, não valor
+    /// fabricado (mesma regra do `RunStatus::parse`).
+    pub fn parse(s: &str) -> Result<Self, InvalidRunOutcome> {
+        match s {
+            "aprovada" => Ok(RunOutcome::Aprovada),
+            "reprovada" => Ok(RunOutcome::Reprovada),
+            "incompleta" => Ok(RunOutcome::Incompleta),
+            _ => Err(InvalidRunOutcome(s.to_string())),
+        }
+    }
+}
+
+/// String de `resultado` fora do vocabulário (aprovada/reprovada/incompleta).
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("resultado fora do vocabulário (aprovada/reprovada/incompleta): {0}")]
+pub struct InvalidRunOutcome(pub String);
+
+/// Wire de `RunOutcome` em português — `as_wire()` é a string EXATA do
+/// banco (`runs.resultado`) e da API (`GET /api/btv/squads`), para nunca
+/// divergirem da serialização serde.
+impl serde::Serialize for RunOutcome {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire())
+    }
 }
 
 /// Artefato exportado — linha da Biblioteca de entregas (U4), com trilha de
@@ -89,12 +151,18 @@ mod tests {
             created_ts: "2026-07-08T10:00:00Z".into(),
             updated_ts: "2026-07-08T10:00:00Z".into(),
             tenant: TenantId::LOCAL,
+            outcome: None,
+            motivo: None,
         };
         let json = serde_json::to_value(&run).unwrap();
         assert!(json.get("tenant").is_none(), "tenant não vaza no wire");
         assert_eq!(json["status"], "ativa", "enum serializa a string antiga");
         assert_eq!(json["task_id"], "sq1", "TaskId serializa sq{{hex}}");
-        assert_eq!(json.as_object().unwrap().len(), 11, "11 campos de wire");
+        assert_eq!(
+            json.as_object().unwrap().len(),
+            11,
+            "11 campos de wire (outcome/motivo ausentes não entram)"
+        );
 
         let entrega = Deliverable {
             id: 1,
@@ -112,6 +180,58 @@ mod tests {
         let json = serde_json::to_value(&entrega).unwrap();
         assert!(json.get("tenant").is_none());
         assert_eq!(json.as_object().unwrap().len(), 10, "10 campos de wire");
+    }
+
+    /// PATCH ciclo completo: com veredito, o wire ganha `resultado`/`motivo`
+    /// (aditivo — nunca reescreve o contrato antigo).
+    #[test]
+    fn outcome_entra_no_wire_quando_presente() {
+        let run = Run {
+            id: 2,
+            task_id: TaskId::new(2),
+            template_id: "editorial".into(),
+            template_versao: "v1.4".into(),
+            nome: "Newsletter".into(),
+            briefing_json: "[]".into(),
+            papeis_json: "[]".into(),
+            status: RunStatus::Concluida,
+            gates_aprovados: 1,
+            created_ts: "2026-07-08T10:00:00Z".into(),
+            updated_ts: "2026-07-08T11:00:00Z".into(),
+            tenant: TenantId::LOCAL,
+            outcome: Some(RunOutcome::Reprovada),
+            motivo: Some(
+                "o agente developer não produziu saída (loop de ferramentas excedeu 600s)".into(),
+            ),
+        };
+        let json = serde_json::to_value(&run).unwrap();
+        assert_eq!(
+            json.as_object().unwrap().len(),
+            13,
+            "11 antigos + resultado + motivo"
+        );
+        assert_eq!(json["resultado"], "reprovada", "wire em português");
+        assert_eq!(
+            json["status"], "concluida",
+            "RunStatus congelado segue intacto"
+        );
+    }
+
+    #[test]
+    fn outcome_roundtrip_do_vocabulario() {
+        for (wire, esperado) in [
+            ("aprovada", RunOutcome::Aprovada),
+            ("reprovada", RunOutcome::Reprovada),
+            ("incompleta", RunOutcome::Incompleta),
+        ] {
+            assert_eq!(RunOutcome::parse(wire), Ok(esperado));
+            assert_eq!(esperado.as_wire(), wire);
+        }
+        assert!(
+            RunOutcome::parse("sucesso").is_err(),
+            "fora do vocabulário é erro"
+        );
+        assert!(RunOutcome::parse("").is_err());
     }
 }
 

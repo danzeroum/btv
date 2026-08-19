@@ -17,14 +17,16 @@ class ToolCall(_message.Message):
     def __init__(self, tool: _Optional[str] = ..., args_json: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class ToolResult(_message.Message):
-    __slots__ = ("content", "truncated", "exit_code")
+    __slots__ = ("content", "truncated", "exit_code", "recovery_hint")
     CONTENT_FIELD_NUMBER: _ClassVar[int]
     TRUNCATED_FIELD_NUMBER: _ClassVar[int]
     EXIT_CODE_FIELD_NUMBER: _ClassVar[int]
+    RECOVERY_HINT_FIELD_NUMBER: _ClassVar[int]
     content: str
     truncated: bool
     exit_code: int
-    def __init__(self, content: _Optional[str] = ..., truncated: _Optional[bool] = ..., exit_code: _Optional[int] = ...) -> None: ...
+    recovery_hint: str
+    def __init__(self, content: _Optional[str] = ..., truncated: _Optional[bool] = ..., exit_code: _Optional[int] = ..., recovery_hint: _Optional[str] = ...) -> None: ...
 
 class PermissionRequest(_message.Message):
     __slots__ = ("tool", "scope", "reason", "confidence")

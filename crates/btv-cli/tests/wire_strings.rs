@@ -273,6 +273,11 @@ fn fontes_de_producao() -> String {
 /// `#[cfg(test)] mod test_support;` aparecem no TOPO de main.rs e o corte
 /// descartaria o arquivo inteiro (bug real pego por este próprio teste ao
 /// nascer: `skill.vetting`, emitido em main.rs, sumia da varredura).
+///
+/// Tolerância a `\r\n` (checkout Windows com `core.autocrlf=true`): sem
+/// ela, o corte falha e módulos de teste vazam para a varredura — caso
+/// real que fez `certification` (só em `mod tests`) parecer emissor de
+/// produção.
 fn coleta_fontes_de_producao(dir: &Path, out: &mut String) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -286,7 +291,10 @@ fn coleta_fontes_de_producao(dir: &Path, out: &mut String) {
             }
         } else if path.extension().is_some_and(|e| e == "rs") {
             if let Ok(conteudo) = std::fs::read_to_string(&path) {
-                let producao = match conteudo.find("#[cfg(test)]\nmod tests") {
+                let corte_teste = conteudo
+                    .find("#[cfg(test)]\nmod tests")
+                    .or_else(|| conteudo.find("#[cfg(test)]\r\nmod tests"));
+                let producao = match corte_teste {
                     Some(idx) => &conteudo[..idx],
                     None => &conteudo,
                 };

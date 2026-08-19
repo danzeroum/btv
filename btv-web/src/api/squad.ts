@@ -20,9 +20,19 @@ export interface SquadProposal {
 
 export interface SquadConsensus {
   decision_maker: string
+  /** Participação ponderada do vencedor no total — o número exposto. */
   strength: number
   decision_json: string
   requires_human: boolean
+  /** Confiança REAL do vencedor (0-1), distinta da participação (strength).
+   *  Opcionais: só eventos emitidos após o patch carregam os rótulos. */
+  winner_confidence?: number
+  /** Limiar efetivamente aplicado (calibrado pelo teto estrutural dos pesos). */
+  threshold_applied?: number
+  /** Rótulo explícito do número exposto — sempre "winner_share". */
+  metric_definition?: string
+  /** JSON: confianças individuais por agente. */
+  proposal_confidences_json?: string
 }
 
 /** Espelha `btv.squad.v1.Handoff.Phase` — `phase` chega como i32 cru (enum proto3, sem rename). */
@@ -38,7 +48,29 @@ export interface SquadHandoff {
 
 export interface SquadHitl {
   reason: string
+  /** Confiança REAL do vencedor (0-1) — nunca a participação ponderada. */
   confidence: number
+  /** Participação do vencedor no total ponderado (a métrica exibida).
+   *  Opcionais: só eventos emitidos após o patch carregam os rótulos. */
+  winner_share?: number
+  /** Limiar calibrado desta decisão. */
+  threshold_applied?: number
+  metric_definition?: string
+  /** JSON: confianças individuais por agente. */
+  proposal_confidences_json?: string
+  /** JSON: dissidentes [{agent, score}]. */
+  dissenting_opinions_json?: string
+  /** Veredito da proposta do auditor (true/false; ausente se não propôs). */
+  auditor_verdict?: boolean
+}
+
+/** Veredito final da execução (evento `run_result` — watcher Rust usa para
+ *  marcar a run aprovada/reprovada; uma run reprovada NÃO é "concluída"). */
+export interface SquadRunResult {
+  approved: boolean
+  public_status: 'aprovada' | 'reprovada'
+  public_reason: string
+  deliverable_count: number
 }
 
 export interface SquadStep {
@@ -64,6 +96,7 @@ export type SquadEventPayload =
   | { Step: SquadStep }
   | { Error: string }
   | { Chat: SquadChatMessage }
+  | { RunResult: SquadRunResult }
 
 export interface SquadEventEnvelope {
   task_id: string

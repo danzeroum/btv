@@ -56,6 +56,12 @@ Depois de criar ou editar um arquivo, rode um comando de verificação (ex.: sha
 _MAX_REACT_STEPS = 12
 _REACT_TIMEOUT_SECONDS = 600
 
+#: Orçamento de negação do motor de permissões (exit_code -1): interrompe o
+#: loop ReAct antes do teto de tempo quando o modelo insiste em caminhos
+#: negados — sintoma real que queimou 600s no run de produção.
+_MAX_IDENTICAL_DENIED_REPEATS = 2
+_MAX_TOTAL_DENIALS = 4
+
 
 class ReviewSystem(Protocol):
     """Contrato mínimo do review system (Fase 5, `btv_review`) — só o
@@ -179,14 +185,30 @@ class DeveloperAgent(BaseAgent):
         de verdade via `self.tool_client`, sob o motor de permissões do
         lado Rust) e `final_answer`, até um dos dois ou até estourar
         `_MAX_REACT_STEPS`/`_REACT_TIMEOUT_SECONDS` — nesse caso, devolve
-        honestamente `status: "incomplete"`, nunca fabrica sucesso."""
+        honestamente `status: "incomplete"`, nunca fabrica sucesso.
+
+        O orçamento de negação (`_MAX_IDENTICAL_DENIED_REPEATS`/
+        `_MAX_TOTAL_DENIALS`) interrompe o loop quando o motor de permissões
+        recusa — o sintoma real observado em produção (squad repetindo o
+        MESMO caminho fora do diretório de trabalho por 600s até o teto de
+        tempo). A `recovery_hint` do Rust entra na observação para o modelo
+        corrigir o rumo; sem ela e sem orçamento, o modelo gira no escuro
+        e a squad "conclui" sem artefato nenhum."""
+
+        # `tool_calls` vive FORA do loop para sobreviver ao cancelamento por
+        # timeout (asyncio.wait_for cancela a coroutine e o escopo do loop
+        # se perderia) — a evidência parcial nunca é descartada.
+        tool_calls: list[dict[str, Any]] = []
+        denials_total = 0
+        denials_identicos = 0
+        ultima_negacao: tuple[str, str] | None = None
 
         async def _run_loop() -> dict[str, Any]:
+            nonlocal denials_total, denials_identicos, ultima_negacao
             messages: list[dict[str, str]] = [
                 {"role": "system", "content": self.system_with_persona(_REACT_SYSTEM_PROMPT)},
                 {"role": "user", "content": task.strip() or "Tarefa não especificada"},
             ]
-            tool_calls: list[dict[str, Any]] = []
             for _ in range(_MAX_REACT_STEPS):
                 request = LlmRequest(model=self.model, messages=messages, requester=self.agent_type)
                 raw = await self.gateway.generate(request)
@@ -212,14 +234,48 @@ class DeveloperAgent(BaseAgent):
                             "args": action.get("args", {}),
                             "exit_code": result.exit_code,
                             "content": result.content,
+                            "recovery_hint": result.recovery_hint,
                         }
                     )
-                    observation = {
+                    observation: dict[str, Any] = {
                         "tool": action["tool"],
                         "content": result.content,
                         "truncated": result.truncated,
                         "exit_code": result.exit_code,
                     }
+                    if result.exit_code == -1:
+                        denials_total += 1
+                        chave = (action["tool"], json.dumps(action.get("args", {}), sort_keys=True))
+                        denials_identicos = denials_identicos + 1 if chave == ultima_negacao else 1
+                        ultima_negacao = chave
+                        # A causa específica (fora do diretório de trabalho,
+                        # etc.) é a ÚNICA informação que o modelo não tem —
+                        # o Rust é quem conhece o root real de permissão.
+                        if result.recovery_hint:
+                            observation["recovery_hint"] = result.recovery_hint
+                        if (
+                            denials_identicos > _MAX_IDENTICAL_DENIED_REPEATS
+                            or denials_total > _MAX_TOTAL_DENIALS
+                        ):
+                            logger.warning(
+                                "ReAct do developer interrompido: %d negações (%d idênticas em `%s`)",
+                                denials_total,
+                                denials_identicos,
+                                action["tool"],
+                            )
+                            return {
+                                "final_output": "",
+                                "status": "incomplete",
+                                "confidence": 0.0,
+                                "notes": (
+                                    f"ferramenta `{action['tool']}` negada pelo motor de permissões "
+                                    f"{denials_total}x ({denials_identicos} idênticas consecutivas) — "
+                                    "caminho fora do diretório de trabalho permitido; use caminhos "
+                                    "relativos ao workspace"
+                                    + (f" ({result.recovery_hint})" if result.recovery_hint else "")
+                                ),
+                                "tool_calls": tool_calls,
+                            }
                     messages.append({"role": "user", "content": json.dumps(observation, ensure_ascii=False)})
                     continue
 
@@ -248,12 +304,16 @@ class DeveloperAgent(BaseAgent):
         try:
             return await asyncio.wait_for(_run_loop(), timeout=_REACT_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
+            # A evidência parcial (tool_calls já executadas de verdade)
+            # sobrevive ao timeout — era descartada com `[]`, apagando o
+            # rastro do que realmente rodou antes do teto.
+            logger.warning("Loop ReAct do developer excedeu %ds", _REACT_TIMEOUT_SECONDS)
             return {
                 "final_output": "",
                 "status": "incomplete",
                 "confidence": 0.0,
                 "notes": f"loop de ferramentas excedeu {_REACT_TIMEOUT_SECONDS}s",
-                "tool_calls": [],
+                "tool_calls": tool_calls,
             }
 
     def _parse_react_action(self, raw_text: str) -> dict[str, Any]:

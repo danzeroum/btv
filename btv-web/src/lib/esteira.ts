@@ -45,6 +45,10 @@ export interface EsteiraView {
   /** true quando a posição atual foi INFERIDA dos eventos (não veio de um
    *  sinal direto do orquestrador) — a UI rotula (aprovação obs. 4). */
   inferida: boolean
+  /** Veredito final observável (`run_result` do stream). `null` enquanto a
+   *  run não termina; `approved: false` = reprovada pela auditoria — uma run
+   *  reprovada NÃO avança a esteira até o fim (não há entrega aprovada). */
+  veredito: { approved: boolean; public_status: string; public_reason: string } | null
 }
 
 /**
@@ -73,6 +77,7 @@ export function esteiraFromEvents(
   let erro: string | null = null
   let inferida = false
   let gatesPassados = 0
+  let veredito: EsteiraView['veredito'] = null
 
   const proximoGate = () => gateIdxs.find((g) => g > idx || (g === idx && !gateOpen))
 
@@ -115,6 +120,20 @@ export function esteiraFromEvents(
       gateOpen = false
       break
     }
+    if ('RunResult' in payload) {
+      // Veredito final: reprovada pela auditoria → a run termina SEM entrega
+      // aprovada (done, mas sem avançar a esteira até o fim); aprovada →
+      // conclusão limpa (o Step final_validation já avançou a Validação).
+      veredito = {
+        approved: payload.RunResult.approved,
+        public_status: payload.RunResult.public_status,
+        public_reason: payload.RunResult.public_reason,
+      }
+      if (payload.RunResult.approved) {
+        avancar(etapas.length, false)
+      }
+      continue
+    }
     if ('Hitl' in payload) {
       const g = gateIdxs[Math.min(gatesPassados, gateIdxs.length - 1)]
       if (g !== undefined && g >= idx) {
@@ -156,11 +175,15 @@ export function esteiraFromEvents(
 
   if (!erro && streamEnded && !gateOpen) {
     done = true
-    idx = etapas.length
+    // Reprovação explícita não vira "tudo concluído" — a esteira para na
+    // validação que falhou (honestidade: não há entrega aprovada).
+    if (veredito?.approved !== false) {
+      idx = etapas.length
+    }
   }
   if (proximoGate() === undefined && done) gateOpen = false
 
-  return { idx, gateOpen, done, erro, inferida }
+  return { idx, gateOpen, done, erro, inferida, veredito }
 }
 
 const HANDOFF_LABEL: Record<number, string> = {
@@ -194,9 +217,12 @@ export function feedFromEvents(events: SquadEventEnvelope[]): FeedItem[] {
         txt: `${p.Proposal.agent} propôs (confiança ${Math.round(p.Proposal.confidence * 100)}%)`,
       })
     } else if ('Consensus' in p) {
+      const limiar = p.Consensus.threshold_applied !== undefined
+        ? `, limiar ${Math.round(p.Consensus.threshold_applied * 100)}%`
+        : ''
       out.push({
         ts,
-        txt: `consenso de ${p.Consensus.decision_maker || 'squad'} (força ${Math.round(p.Consensus.strength * 100)}%)${p.Consensus.requires_human ? ' — aguarda humano' : ''}`,
+        txt: `consenso de ${p.Consensus.decision_maker || 'squad'} (participação do vencedor ${Math.round(p.Consensus.strength * 100)}%${limiar})${p.Consensus.requires_human ? ' — aguarda humano' : ''}`,
       })
     } else if ('Handoff' in p) {
       out.push({
@@ -204,7 +230,17 @@ export function feedFromEvents(events: SquadEventEnvelope[]): FeedItem[] {
         txt: `${p.Handoff.from_agent} ${HANDOFF_LABEL[p.Handoff.phase] ?? 'handoff'} ${p.Handoff.to_agent}`,
       })
     } else if ('Hitl' in p) {
-      out.push({ ts, txt: `✋ gate aberto — aguarda sua decisão (${p.Hitl.reason})` })
+      // O número exibido era a participação ponderada sem rótulo ("43%").
+      // Agora vem com `metric_definition`/`winner_share`/`threshold_applied`
+      // explícitos; `confidence` (confiança real do vencedor) fica para o
+      // detalhe do consenso.
+      const motivo =
+        p.Hitl.reason === 'auditor_veto'
+          ? 'auditor reprovou explicitamente'
+          : p.Hitl.winner_share !== undefined && p.Hitl.threshold_applied !== undefined
+            ? `consenso fraco: participação do vencedor ${Math.round(p.Hitl.winner_share * 100)}% < limiar ${Math.round(p.Hitl.threshold_applied * 100)}%`
+            : p.Hitl.reason
+      out.push({ ts, txt: `✋ gate aberto — aguarda sua decisão (${motivo})` })
     } else if ('Step' in p) {
       out.push({
         ts,
@@ -212,6 +248,13 @@ export function feedFromEvents(events: SquadEventEnvelope[]): FeedItem[] {
       })
     } else if ('Error' in p) {
       out.push({ ts, txt: `⚠ ${p.Error}` })
+    } else if ('RunResult' in p) {
+      out.push({
+        ts,
+        txt: p.RunResult.approved
+          ? `✓ validação final aprovada — ${p.RunResult.public_reason}`
+          : `✕ validação final reprovada — ${p.RunResult.public_reason}`,
+      })
     } else if ('Chat' in p && p.Chat.author_role === 'HUMAN') {
       out.push({ ts, txt: '💬 você orientou a squad pelo cockpit' })
     }

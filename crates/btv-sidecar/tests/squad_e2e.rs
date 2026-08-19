@@ -69,6 +69,7 @@ impl CoreBackend for ScriptedCore {
             content: "ScriptedCore não executa ferramentas".into(),
             truncated: false,
             exit_code: 1,
+            recovery_hint: String::new(),
         }
     }
 }
@@ -236,6 +237,7 @@ impl CoreBackend for SlowCore {
             content: "SlowCore não executa ferramentas".into(),
             truncated: false,
             exit_code: 1,
+            recovery_hint: String::new(),
         }
     }
 }
@@ -350,6 +352,7 @@ impl ScriptedCoreWithTools {
                     content: format!("args_json inválido: {e}"),
                     truncated: false,
                     exit_code: 1,
+                    recovery_hint: String::new(),
                 }
             }
         };
@@ -358,6 +361,7 @@ impl ScriptedCoreWithTools {
                 content: format!("ferramenta desconhecida: {}", call.tool),
                 truncated: false,
                 exit_code: 1,
+                recovery_hint: String::new(),
             };
         };
         let scope = tool.scope(&args);
@@ -371,6 +375,13 @@ impl ScriptedCoreWithTools {
                 content: format!("permissão negada para {} em {scope:?}", call.tool),
                 truncated: false,
                 exit_code: -1,
+                // Dica igual à de produção: o agente precisa saber o root
+                // real para corrigir o caminho (causa raiz do ciclo 600s).
+                recovery_hint: format!(
+                    "caminhos fora do diretório de trabalho permitido são recusados; \
+                     use caminhos relativos a '{}'",
+                    self.root.display()
+                ),
             }
         } else {
             match tool.run(&args) {
@@ -378,11 +389,13 @@ impl ScriptedCoreWithTools {
                     content: out.content,
                     truncated: out.truncated,
                     exit_code: 0,
+                    recovery_hint: String::new(),
                 },
                 Err(e) => ToolResult {
                     content: e.to_string(),
                     truncated: false,
                     exit_code: 1,
+                    recovery_hint: String::new(),
                 },
             }
         };

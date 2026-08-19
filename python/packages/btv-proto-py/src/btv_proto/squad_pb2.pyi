@@ -53,7 +53,7 @@ class PersonaSpec(_message.Message):
     def __init__(self, papel: _Optional[str] = ..., prompt: _Optional[str] = ..., funcao: _Optional[str] = ..., ordem: _Optional[int] = ..., custom: _Optional[bool] = ...) -> None: ...
 
 class SquadEvent(_message.Message):
-    __slots__ = ("task_id", "ts", "tenant_id", "actor", "proposal", "consensus", "handoff", "hitl", "step", "error", "chat")
+    __slots__ = ("task_id", "ts", "tenant_id", "actor", "proposal", "consensus", "handoff", "hitl", "step", "error", "chat", "run_result")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     TS_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -65,6 +65,7 @@ class SquadEvent(_message.Message):
     STEP_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CHAT_FIELD_NUMBER: _ClassVar[int]
+    RUN_RESULT_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     ts: str
     tenant_id: str
@@ -76,7 +77,8 @@ class SquadEvent(_message.Message):
     step: StepResult
     error: str
     chat: ChatMessage
-    def __init__(self, task_id: _Optional[str] = ..., ts: _Optional[str] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ..., proposal: _Optional[_Union[Proposal, _Mapping]] = ..., consensus: _Optional[_Union[Consensus, _Mapping]] = ..., handoff: _Optional[_Union[Handoff, _Mapping]] = ..., hitl: _Optional[_Union[HitlEscalation, _Mapping]] = ..., step: _Optional[_Union[StepResult, _Mapping]] = ..., error: _Optional[str] = ..., chat: _Optional[_Union[ChatMessage, _Mapping]] = ...) -> None: ...
+    run_result: RunResult
+    def __init__(self, task_id: _Optional[str] = ..., ts: _Optional[str] = ..., tenant_id: _Optional[str] = ..., actor: _Optional[str] = ..., proposal: _Optional[_Union[Proposal, _Mapping]] = ..., consensus: _Optional[_Union[Consensus, _Mapping]] = ..., handoff: _Optional[_Union[Handoff, _Mapping]] = ..., hitl: _Optional[_Union[HitlEscalation, _Mapping]] = ..., step: _Optional[_Union[StepResult, _Mapping]] = ..., error: _Optional[str] = ..., chat: _Optional[_Union[ChatMessage, _Mapping]] = ..., run_result: _Optional[_Union[RunResult, _Mapping]] = ...) -> None: ...
 
 class ChatMessage(_message.Message):
     __slots__ = ("author", "author_role", "text", "in_reply_to")
@@ -101,16 +103,24 @@ class Proposal(_message.Message):
     def __init__(self, agent: _Optional[str] = ..., confidence: _Optional[float] = ..., content_json: _Optional[str] = ...) -> None: ...
 
 class Consensus(_message.Message):
-    __slots__ = ("decision_maker", "strength", "decision_json", "requires_human")
+    __slots__ = ("decision_maker", "strength", "decision_json", "requires_human", "winner_confidence", "threshold_applied", "metric_definition", "proposal_confidences_json")
     DECISION_MAKER_FIELD_NUMBER: _ClassVar[int]
     STRENGTH_FIELD_NUMBER: _ClassVar[int]
     DECISION_JSON_FIELD_NUMBER: _ClassVar[int]
     REQUIRES_HUMAN_FIELD_NUMBER: _ClassVar[int]
+    WINNER_CONFIDENCE_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_APPLIED_FIELD_NUMBER: _ClassVar[int]
+    METRIC_DEFINITION_FIELD_NUMBER: _ClassVar[int]
+    PROPOSAL_CONFIDENCES_JSON_FIELD_NUMBER: _ClassVar[int]
     decision_maker: str
     strength: float
     decision_json: str
     requires_human: bool
-    def __init__(self, decision_maker: _Optional[str] = ..., strength: _Optional[float] = ..., decision_json: _Optional[str] = ..., requires_human: _Optional[bool] = ...) -> None: ...
+    winner_confidence: float
+    threshold_applied: float
+    metric_definition: str
+    proposal_confidences_json: str
+    def __init__(self, decision_maker: _Optional[str] = ..., strength: _Optional[float] = ..., decision_json: _Optional[str] = ..., requires_human: _Optional[bool] = ..., winner_confidence: _Optional[float] = ..., threshold_applied: _Optional[float] = ..., metric_definition: _Optional[str] = ..., proposal_confidences_json: _Optional[str] = ...) -> None: ...
 
 class Handoff(_message.Message):
     __slots__ = ("phase", "from_agent", "to_agent", "contract", "payload_digest")
@@ -139,12 +149,36 @@ class Handoff(_message.Message):
     def __init__(self, phase: _Optional[_Union[Handoff.Phase, str]] = ..., from_agent: _Optional[str] = ..., to_agent: _Optional[str] = ..., contract: _Optional[str] = ..., payload_digest: _Optional[str] = ...) -> None: ...
 
 class HitlEscalation(_message.Message):
-    __slots__ = ("reason", "confidence")
+    __slots__ = ("reason", "confidence", "winner_share", "threshold_applied", "metric_definition", "proposal_confidences_json", "dissenting_opinions_json", "auditor_verdict")
     REASON_FIELD_NUMBER: _ClassVar[int]
     CONFIDENCE_FIELD_NUMBER: _ClassVar[int]
+    WINNER_SHARE_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_APPLIED_FIELD_NUMBER: _ClassVar[int]
+    METRIC_DEFINITION_FIELD_NUMBER: _ClassVar[int]
+    PROPOSAL_CONFIDENCES_JSON_FIELD_NUMBER: _ClassVar[int]
+    DISSENTING_OPINIONS_JSON_FIELD_NUMBER: _ClassVar[int]
+    AUDITOR_VERDICT_FIELD_NUMBER: _ClassVar[int]
     reason: str
     confidence: float
-    def __init__(self, reason: _Optional[str] = ..., confidence: _Optional[float] = ...) -> None: ...
+    winner_share: float
+    threshold_applied: float
+    metric_definition: str
+    proposal_confidences_json: str
+    dissenting_opinions_json: str
+    auditor_verdict: bool
+    def __init__(self, reason: _Optional[str] = ..., confidence: _Optional[float] = ..., winner_share: _Optional[float] = ..., threshold_applied: _Optional[float] = ..., metric_definition: _Optional[str] = ..., proposal_confidences_json: _Optional[str] = ..., dissenting_opinions_json: _Optional[str] = ..., auditor_verdict: _Optional[bool] = ...) -> None: ...
+
+class RunResult(_message.Message):
+    __slots__ = ("approved", "public_status", "public_reason", "deliverable_count")
+    APPROVED_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_STATUS_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_REASON_FIELD_NUMBER: _ClassVar[int]
+    DELIVERABLE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    approved: bool
+    public_status: str
+    public_reason: str
+    deliverable_count: int
+    def __init__(self, approved: _Optional[bool] = ..., public_status: _Optional[str] = ..., public_reason: _Optional[str] = ..., deliverable_count: _Optional[int] = ...) -> None: ...
 
 class StepResult(_message.Message):
     __slots__ = ("step_id", "success", "summary")

@@ -105,4 +105,5 @@ class GrpcToolClient:
             content=result.content,
             truncated=result.truncated,
             exit_code=result.exit_code,
+            recovery_hint=result.recovery_hint,
         )

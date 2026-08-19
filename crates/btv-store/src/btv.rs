@@ -74,6 +74,8 @@ impl BtvStore {
                 gates_aprovados INTEGER NOT NULL DEFAULT 0,
                 created_ts TEXT NOT NULL,
                 updated_ts TEXT NOT NULL,
+                resultado TEXT,
+                motivo TEXT,
                 tenant_id TEXT NOT NULL DEFAULT '{local}',
                 UNIQUE (tenant_id, task_id)
             );
@@ -130,6 +132,12 @@ impl BtvStore {
         // coluna se ausente (SQLite não tem "ADD COLUMN IF NOT EXISTS"; um erro
         // de coluna duplicada em banco já migrado é ignorado).
         let _ = conn.execute("ALTER TABLE users ADD COLUMN pin_hash TEXT", []);
+        // PATCH ciclo completo: `resultado`/`motivo` (veredito final da run)
+        // são aditivos — bancos existentes ganham a coluna vazia; os novos já
+        // nascem com elas (CREATE acima), e o erro de coluna duplicada aqui é
+        // ignorado pelo mesmo motivo do pin_hash.
+        let _ = conn.execute("ALTER TABLE runs ADD COLUMN resultado TEXT", []);
+        let _ = conn.execute("ALTER TABLE runs ADD COLUMN motivo TEXT", []);
         Ok(Self { conn })
     }
 
@@ -165,6 +173,8 @@ impl BtvStore {
                 gates_aprovados INTEGER NOT NULL DEFAULT 0,
                 created_ts TEXT NOT NULL,
                 updated_ts TEXT NOT NULL,
+                resultado TEXT,
+                motivo TEXT,
                 tenant_id TEXT NOT NULL DEFAULT '{local}',
                 UNIQUE (tenant_id, task_id)
             );
@@ -294,6 +304,26 @@ impl BtvStore {
             "UPDATE runs SET status = ?2, updated_ts = ?3
              WHERE task_id = ?1 AND tenant_id = ?4",
             params![task_id, status.as_str(), now, Self::LOCAL_TENANT],
+        )?;
+        Ok(())
+    }
+
+    /// Veredito final da run (aditivo, PATCH ciclo completo): grava
+    /// `resultado`/`motivo` que o watcher derivou do evento `run_result` do
+    /// stream. Falha-closed na leitura (vocabulário fora de
+    /// aprovada/reprovada/incompleta é erro), silencioso para task_id
+    /// desconhecido — mesma política do `set_status`.
+    pub fn set_outcome(
+        &self,
+        task_id: &str,
+        outcome: btv_domain::RunOutcome,
+        motivo: Option<&str>,
+        now: &str,
+    ) -> Result<(), BtvStoreError> {
+        self.conn.execute(
+            "UPDATE runs SET resultado = ?2, motivo = ?3, updated_ts = ?4
+             WHERE task_id = ?1 AND tenant_id = ?5",
+            params![task_id, outcome.as_wire(), motivo, now, Self::LOCAL_TENANT],
         )?;
         Ok(())
     }
@@ -634,7 +664,8 @@ impl BtvStore {
 /// Colunas do SELECT de runs na ordem que `row_to_run` espera.
 pub(crate) const RUN_COLS: &str =
     "id, task_id, template_id, template_versao, nome, briefing_json, \
-                        papeis_json, status, gates_aprovados, created_ts, updated_ts, tenant_id";
+                        papeis_json, status, gates_aprovados, created_ts, updated_ts, tenant_id, \
+                        resultado, motivo";
 
 /// Colunas do SELECT de deliverables na ordem que `row_to_deliverable` espera.
 pub(crate) const DELIVERABLE_COLS: &str =
@@ -672,6 +703,17 @@ fn row_to_run(row: &rusqlite::Row) -> Result<BtvRun, rusqlite::Error> {
         created_ts: row.get(9)?,
         updated_ts: row.get(10)?,
         tenant: parse_tenant_col(row, 11)?,
+        outcome: match row.get::<_, Option<String>>(12)? {
+            Some(raw) => Some(btv_domain::RunOutcome::parse(&raw).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    12,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?),
+            None => None,
+        },
+        motivo: row.get(13)?,
     })
 }
 
@@ -1287,6 +1329,101 @@ mod tests {
         let runs = store.list_runs().unwrap();
         assert_eq!(runs[0].status, RunStatus::Concluida);
         assert_eq!(runs[0].updated_ts, "2026-07-08T00:10:00Z");
+    }
+
+    /// PATCH ciclo completo: o veredito final (resultado/motivo) persiste e
+    /// volta na leitura — e o wire da run legada continua SEM os campos
+    /// (None fica fora da serialização; goldens T1 intactos).
+    #[test]
+    fn veredito_final_roundtrip_e_wire() {
+        let store = BtvStore::open_in_memory().unwrap();
+        store
+            .insert_run("sq1", "editorial", "v1.4", "Run", "[]", "[]", "t0")
+            .unwrap();
+        let sem_veredito = store.get_run_by_task("sq1").unwrap().unwrap();
+        assert_eq!(sem_veredito.outcome, None);
+        assert_eq!(sem_veredito.motivo, None);
+        let json = serde_json::to_value(&sem_veredito).unwrap();
+        assert_eq!(
+            json.as_object().unwrap().len(),
+            11,
+            "legado: 11 campos de wire"
+        );
+
+        store
+            .set_outcome(
+                "sq1",
+                btv_domain::RunOutcome::Reprovada,
+                Some("o agente developer não produziu saída (loop de ferramentas excedeu 600s)"),
+                "t1",
+            )
+            .unwrap();
+        let com_veredito = store.get_run_by_task("sq1").unwrap().unwrap();
+        assert_eq!(
+            com_veredito.outcome,
+            Some(btv_domain::RunOutcome::Reprovada)
+        );
+        assert!(com_veredito.motivo.as_deref().unwrap().contains("600s"));
+        let json = serde_json::to_value(&com_veredito).unwrap();
+        assert_eq!(json["resultado"], "reprovada");
+        assert_eq!(json["motivo"].as_str().unwrap().contains("600s"), true);
+        assert_eq!(
+            json.as_object().unwrap().len(),
+            13,
+            "com veredito: 11 + resultado + motivo"
+        );
+    }
+
+    /// Migração: um banco criado ANTES das colunas de veredito ganha
+    /// `resultado`/`motivo` na abertura (mesmo padrão do pin_hash) e segue
+    /// lendo/gravando normal.
+    #[test]
+    fn migra_banco_sem_colunas_de_veredito() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("legado.db");
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    template_id TEXT NOT NULL,
+                    template_versao TEXT NOT NULL,
+                    nome TEXT NOT NULL,
+                    briefing_json TEXT NOT NULL,
+                    papeis_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    gates_aprovados INTEGER NOT NULL DEFAULT 0,
+                    created_ts TEXT NOT NULL,
+                    updated_ts TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
+                    UNIQUE (tenant_id, task_id)
+                );
+                INSERT INTO runs (task_id, template_id, template_versao, nome, briefing_json,
+                                   papeis_json, status, gates_aprovados, created_ts, updated_ts)
+                    VALUES ('sq9', 'editorial', 'v1.4', 'Legado', '[]', '[]', 'ativa', 0, 't0', 't0');",
+            )
+            .unwrap();
+        }
+        let store = BtvStore::open(db_path.to_str().unwrap()).unwrap();
+        let run = store.get_run_by_task("sq9").unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Ativa);
+        assert_eq!(
+            run.outcome, None,
+            "coluna nova nasce vazia, sem veredito fabricado"
+        );
+        store
+            .set_outcome(
+                "sq9",
+                btv_domain::RunOutcome::Incompleta,
+                Some("sem validação"),
+                "t1",
+            )
+            .unwrap();
+        assert_eq!(
+            store.get_run_by_task("sq9").unwrap().unwrap().outcome,
+            Some(btv_domain::RunOutcome::Incompleta)
+        );
     }
 
     #[test]

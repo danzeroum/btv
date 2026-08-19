@@ -23,11 +23,17 @@ function ev(payload: SquadEventPayload): SquadEventEnvelope {
 }
 
 const consensus = ev({
-  Consensus: { decision_maker: 'architect', strength: 0.5, decision_json: '{}', requires_human: true },
+  Consensus: { decision_maker: 'architect', strength: 0.5, decision_json: '{}', requires_human: true, winner_confidence: 0.6, threshold_applied: 0.5276, metric_definition: 'winner_share', proposal_confidences_json: '{}' },
 })
-const hitl = ev({ Hitl: { reason: 'weak_consensus', confidence: 0.5 } })
+const hitl = ev({ Hitl: { reason: 'weak_consensus', confidence: 0.6, winner_share: 0.4, threshold_applied: 0.5276, metric_definition: 'winner_share', proposal_confidences_json: '{}', dissenting_opinions_json: '[]' } })
 const stepOk = ev({ Step: { step_id: '1', success: true, summary: 'publicar' } })
 const stepFinal = ev({ Step: { step_id: 'final_validation', success: true, summary: 'ok' } })
+const runResultOk = ev({
+  RunResult: { approved: true, public_status: 'aprovada', public_reason: 'entrega validada pela auditoria do squad', deliverable_count: 1 },
+})
+const runResultReprovada = ev({
+  RunResult: { approved: false, public_status: 'reprovada', public_reason: 'nada escrito no workspace', deliverable_count: 0 },
+})
 
 describe('makeEtapas (regra do protótipo)', () => {
   it('gera as 8 etapas com papéis por índice e gates em Rascunho/Entrega', () => {
@@ -126,6 +132,32 @@ describe('esteiraFromEvents (mapeamento honesto de eventos reais)', () => {
     expect(v.done).toBe(true)
     expect(v.idx).toBe(etapas.length)
   })
+
+  it('run_result reprovada: done mas SEM avançar até o fim (não é conclusão limpa)', () => {
+    // PATCH ciclo completo: antes, uma run reprovada pela auditoria virava
+    // "concluída" com a esteira cheia — indistinguível de uma entrega limpa.
+    const v = esteiraFromEvents(etapas, [consensus, stepFinal, runResultReprovada], [], true)
+    expect(v.done).toBe(true)
+    expect(v.idx).toBe(6) // para na Validação que falhou, não no fim
+    expect(v.veredito).toEqual({
+      approved: false,
+      public_status: 'reprovada',
+      public_reason: 'nada escrito no workspace',
+    })
+  })
+
+  it('run_result aprovada: conclusão limpa até o fim', () => {
+    const v = esteiraFromEvents(etapas, [consensus, stepFinal, runResultOk], [], true)
+    expect(v.done).toBe(true)
+    expect(v.idx).toBe(etapas.length)
+    expect(v.veredito?.approved).toBe(true)
+  })
+
+  it('run_result reprovada sem fim de stream ainda não é done', () => {
+    const v = esteiraFromEvents(etapas, [consensus, stepFinal, runResultReprovada], [], false)
+    expect(v.done).toBe(false)
+    expect(v.veredito?.approved).toBe(false)
+  })
 })
 
 describe('feedFromEvents', () => {
@@ -149,6 +181,38 @@ describe('feedFromEvents', () => {
     // Nome cru do motor — a esteira é que rotula posições; o feed é honesto.
     expect(feed[0].txt).toContain('developer')
     expect(feed[0].txt).toContain('auditor')
+  })
+
+  it('Hitl honesto: participação do vencedor com limiar, não "43%" sem rótulo', () => {
+    const feed = feedFromEvents([hitl])
+    expect(feed[0].txt).toContain('participação do vencedor 40% < limiar 53%')
+    expect(feed[0].txt).not.toContain('0.4')
+  })
+
+  it('Hitl por veto do auditor diz a causa específica', () => {
+    const feed = feedFromEvents([
+      ev({ Hitl: { reason: 'auditor_veto', confidence: 0.6, winner_share: 0.7, threshold_applied: 0.53, metric_definition: 'winner_share', proposal_confidences_json: '{}', dissenting_opinions_json: '[]', auditor_verdict: false } }),
+    ])
+    expect(feed[0].txt).toContain('auditor reprovou explicitamente')
+  })
+
+  it('Hitl antigo (sem rótulos novos) degrada para o reason puro', () => {
+    const feed = feedFromEvents([ev({ Hitl: { reason: 'weak_consensus', confidence: 0.5 } })])
+    expect(feed[0].txt).toContain('weak_consensus')
+  })
+
+  it('consenso expõe participação do vencedor e limiar, rotulados', () => {
+    const feed = feedFromEvents([consensus])
+    expect(feed[0].txt).toContain('participação do vencedor 50%')
+    expect(feed[0].txt).toContain('limiar 53%')
+  })
+
+  it('run_result entra no feed com o veredito real', () => {
+    const ok = feedFromEvents([runResultOk])
+    expect(ok[0].txt).toContain('validação final aprovada')
+    const reprovada = feedFromEvents([runResultReprovada])
+    expect(reprovada[0].txt).toContain('validação final reprovada')
+    expect(reprovada[0].txt).toContain('nada escrito no workspace')
   })
 })
 

@@ -437,10 +437,10 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String, ctx: btv_domain::
             }
         }
         // Estado final honesto: kill-switch > erro no log > concluída.
+        let (log, _) = state.squad.hub.subscribe(&task_id);
         let status = if state.squad.hub.is_stopped(&task_id) {
             btv_domain::ports::RunStatus::Encerrada
         } else {
-            let (log, _) = state.squad.hub.subscribe(&task_id);
             let teve_erro = log.iter().any(|e| {
                 matches!(
                     &e.payload,
@@ -460,6 +460,17 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String, ctx: btv_domain::
                 eprintln!("btv: falha ao persistir status final do run ({task_id}): {e}");
             }
         }
+        // Veredito final (PATCH ciclo completo): só em conclusão limpa o
+        // watcher grava `resultado`/`motivo` derivados do stream — kill-switch
+        // e erro já carregam a verdade no `status` congelado.
+        if status == btv_domain::ports::RunStatus::Concluida {
+            if let Some((outcome, motivo)) = derivar_outcome(&log) {
+                let store = state.store.lock().unwrap_or_else(|e| e.into_inner());
+                if let Err(e) = store.set_outcome(&task_id, outcome, Some(&motivo), &now) {
+                    eprintln!("btv: falha ao persistir veredito final do run ({task_id}): {e}");
+                }
+            }
+        }
         // Entregas (U4): só em conclusão limpa — run com erro/encerrado não
         // "entrega". A escrituração vive em `registrar_entregas`, extraída para
         // ser pinada por teste dedicado (o corpo do `btv.export_generated` não
@@ -476,6 +487,70 @@ fn spawn_status_watcher(state: BtvAgentState, task_id: String, ctx: btv_domain::
             );
         }
     });
+}
+
+/// Deriva o veredito final da run do log de eventos do stream (PATCH ciclo
+/// completo). Prioriza o evento `run_result` (orquestrador novo); cai no
+/// passo `final_validation` (orquestrador anterior); sem nenhum dos dois, a
+/// conclusão é honestamente `incompleta` — nunca um veredito fabricado.
+/// Devolve `None` apenas quando a chamada decide não classificar (kill-switch
+/// e erro já carregam a verdade no `status` congelado).
+fn derivar_outcome(
+    log: &[btv_proto::squad::SquadEvent],
+) -> Option<(btv_domain::RunOutcome, String)> {
+    use btv_proto::squad::squad_event::Payload;
+
+    let mut veredito: Option<(btv_domain::RunOutcome, String)> = None;
+    for e in log {
+        match &e.payload {
+            Some(Payload::RunResult(rr)) => {
+                let outcome = if rr.approved {
+                    btv_domain::RunOutcome::Aprovada
+                } else {
+                    btv_domain::RunOutcome::Reprovada
+                };
+                veredito = Some((outcome, rr.public_reason.clone()));
+            }
+            Some(Payload::Step(s)) if s.step_id == "final_validation" => {
+                let outcome = if s.success {
+                    btv_domain::RunOutcome::Aprovada
+                } else {
+                    btv_domain::RunOutcome::Reprovada
+                };
+                let motivo = if s.success {
+                    "entrega validada pela auditoria do squad".to_string()
+                } else {
+                    // summary é o JSON `{"approved":…, "issues":[…]}` do
+                    // orquestrador — extrai as issues legíveis, sem despejar
+                    // JSON cru no motivo da run.
+                    let parsed: Option<serde_json::Value> = serde_json::from_str(&s.summary).ok();
+                    let issues = parsed
+                        .as_ref()
+                        .and_then(|v| v.get("issues"))
+                        .and_then(|i| i.as_array());
+                    issues
+                        .map(|issues| {
+                            issues
+                                .iter()
+                                .filter_map(|i| i.as_str())
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        })
+                        .filter(|m| !m.is_empty())
+                        .unwrap_or_else(|| s.summary.clone())
+                };
+                veredito = Some((outcome, motivo));
+            }
+            _ => {}
+        }
+    }
+    if veredito.is_none() {
+        veredito = Some((
+            btv_domain::RunOutcome::Incompleta,
+            "tarefa terminou sem validação final observável no stream".to_string(),
+        ));
+    }
+    veredito
 }
 
 /// Registra as entregas de uma conclusão de squad na Biblioteca (U4) e o fato
@@ -1679,6 +1754,93 @@ mod tests {
             },
         ];
         assert_eq!(arquivos_escritos(&runs), vec!["artigo.md", "notas.txt"]);
+    }
+
+    fn evento_payload(
+        payload: btv_proto::squad::squad_event::Payload,
+    ) -> btv_proto::squad::SquadEvent {
+        btv_proto::squad::SquadEvent {
+            task_id: "sq1".into(),
+            ts: "2026-08-18T00:00:00Z".into(),
+            tenant_id: String::new(),
+            actor: "test".into(),
+            payload: Some(payload),
+        }
+    }
+
+    /// PATCH ciclo completo: o evento `run_result` do orquestrador é a fonte
+    /// do veredito — reprovada NÃO vira "concluída sem artefato".
+    #[test]
+    fn derivar_outcome_usa_run_result_aprovada_e_reprovada() {
+        let log = vec![
+            evento_payload(btv_proto::squad::squad_event::Payload::Chat(
+                btv_proto::squad::ChatMessage {
+                    author: "auditor".into(),
+                    author_role: "AGENT".into(),
+                    text: "vai reprovar".into(),
+                    in_reply_to: String::new(),
+                },
+            )),
+            evento_payload(btv_proto::squad::squad_event::Payload::RunResult(
+                btv_proto::squad::RunResult {
+                    approved: false,
+                    public_status: "reprovada".into(),
+                    public_reason:
+                        "o agente developer não produziu saída (loop de ferramentas excedeu 600s)"
+                            .into(),
+                    deliverable_count: 0,
+                },
+            )),
+        ];
+        let (outcome, motivo) = derivar_outcome(&log).expect("veredito derivado");
+        assert_eq!(outcome, btv_domain::RunOutcome::Reprovada);
+        assert!(motivo.contains("600s"));
+
+        let log_aprovada = vec![evento_payload(
+            btv_proto::squad::squad_event::Payload::RunResult(btv_proto::squad::RunResult {
+                approved: true,
+                public_status: "aprovada".into(),
+                public_reason: "entrega validada pela auditoria do squad".into(),
+                deliverable_count: 1,
+            }),
+        )];
+        let (outcome, _) = derivar_outcome(&log_aprovada).expect("veredito derivado");
+        assert_eq!(outcome, btv_domain::RunOutcome::Aprovada);
+    }
+
+    /// Fallback: orquestrador antigo sem `run_result` — o passo
+    /// `final_validation` carrega o veredito (issues extraídas do JSON).
+    #[test]
+    fn derivar_outcome_cai_no_final_validation_sem_run_result() {
+        let log = vec![evento_payload(
+            btv_proto::squad::squad_event::Payload::Step(btv_proto::squad::StepResult {
+                step_id: "final_validation".into(),
+                success: false,
+                summary:
+                    r#"{"approved":false,"confidence":0.7,"issues":["nada escrito no workspace"]}"#
+                        .into(),
+            }),
+        )];
+        let (outcome, motivo) = derivar_outcome(&log).expect("veredito derivado");
+        assert_eq!(outcome, btv_domain::RunOutcome::Reprovada);
+        assert_eq!(motivo, "nada escrito no workspace");
+    }
+
+    /// Sem validação observável, o veredito é honestamente `incompleta` —
+    /// nunca sucesso fabricado.
+    #[test]
+    fn derivar_outcome_sem_validacao_vira_incompleta() {
+        let log = vec![evento_payload(
+            btv_proto::squad::squad_event::Payload::Chat(btv_proto::squad::ChatMessage {
+                author: "architect".into(),
+                author_role: "AGENT".into(),
+                text: "oi".into(),
+                in_reply_to: String::new(),
+            }),
+        )];
+        let (outcome, motivo) = derivar_outcome(&log).expect("veredito derivado");
+        assert_eq!(outcome, btv_domain::RunOutcome::Incompleta);
+        assert!(motivo.contains("sem validação final"));
     }
 
     #[test]

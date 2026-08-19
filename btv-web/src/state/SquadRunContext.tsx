@@ -192,7 +192,13 @@ export function SquadRunProvider({ children }: { children: ReactNode }) {
       squad: {
         nome: run.nome,
         cor: run.template.cor,
-        status: view.done ? 'concluída' : view.gateOpen ? 'aguardando você' : 'em produção',
+        status: view.done
+          ? view.veredito?.approved === false
+            ? 'reprovada'
+            : 'concluída'
+          : view.gateOpen
+            ? 'aguardando você'
+            : 'em produção',
         gateAberto: view.gateOpen,
       },
     })

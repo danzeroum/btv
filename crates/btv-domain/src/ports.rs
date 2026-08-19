@@ -349,6 +349,8 @@ impl Run {
             created_ts: ts.clone(),
             updated_ts: ts,
             tenant: ctx.tenant,
+            outcome: None,
+            motivo: None,
         })
     }
 
@@ -821,6 +823,8 @@ mod tests {
             created_ts: "2026-07-08T10:00:00Z".into(),
             updated_ts: "2026-07-08T10:00:00Z".into(),
             tenant: TenantId::LOCAL,
+            outcome: None,
+            motivo: None,
         }
     }
 
