@@ -1,7 +1,13 @@
 import asyncio
 import json
 
-from btv_squad.agents.developer import _MAX_REACT_STEPS, DeveloperAgent
+from btv_squad import agents
+from btv_squad.agents.developer import (
+    _MAX_IDENTICAL_DENIED_REPEATS,
+    _MAX_REACT_STEPS,
+    _MAX_TOTAL_DENIALS,
+    DeveloperAgent,
+)
 from btv_squad.gateway import LlmResponse, ScriptedGatewayClient
 from btv_squad.tool_client import ScriptedToolClient, ToolCallResult
 
@@ -146,3 +152,90 @@ def test_react_loop_esgota_passos_sem_final_answer_devolve_incomplete_honesto():
     assert result["status"] == "incomplete"
     assert result["final_output"] == ""
     assert len(result["tool_calls"]) == _MAX_REACT_STEPS
+
+
+def test_denial_budget_interrompe_loop_de_negacoes_identicas():
+    """PATCH ciclo completo: o sintoma real (modelo repetindo o MESMO caminho
+    negado até o teto de 600s) agora interrompe em poucas tentativas, com
+    causa específica no `notes` e o rastro de tool_calls preservado."""
+    tool_call_turn = json.dumps(
+        {"action": "tool_call", "tool": "bash", "args": {"command": "mkdir -p /tmp/composicao_rock"}}
+    )
+    agent = DeveloperAgent()
+    agent.attach_gateway(
+        ScriptedGatewayClient([LlmResponse(text=tool_call_turn)] * (_MAX_IDENTICAL_DENIED_REPEATS + 1))
+    )
+    negada = ToolCallResult(
+        content="permissão negada",
+        exit_code=-1,
+        recovery_hint="use caminhos relativos a '/work'",
+    )
+    agent.attach_tool_client(ScriptedToolClient([negada] * (_MAX_IDENTICAL_DENIED_REPEATS + 1)))
+
+    result = asyncio.run(agent.execute({"description": "crie a composição", "action": "implement"}))
+
+    assert result["status"] == "incomplete"
+    assert "negada pelo motor de permissões" in result["notes"]
+    assert "/work" in result["notes"], "recovery_hint entra no notes"
+    assert len(result["tool_calls"]) == _MAX_IDENTICAL_DENIED_REPEATS + 1
+    assert result["tool_calls"][0]["recovery_hint"] == "use caminhos relativos a '/work'"
+
+
+def test_denial_budget_total_interrompe_negacoes_diferentes():
+    # Caminhos DIFERENTES a cada negação: só o orçamento total (4) dispara —
+    # o orçamento de idênticas (2 consecutivas) nunca é alcançado.
+    agent = DeveloperAgent()
+    agent.attach_gateway(
+        ScriptedGatewayClient(
+            [
+                LlmResponse(
+                    text=json.dumps(
+                        {"action": "tool_call", "tool": "bash", "args": {"command": f"pwd {i}"}}
+                    )
+                )
+                for i in range(_MAX_TOTAL_DENIALS + 1)
+            ]
+        )
+    )
+    agent.attach_tool_client(
+        ScriptedToolClient(
+            [
+                ToolCallResult(content=f"negada {i}", exit_code=-1, recovery_hint="hint")
+                for i in range(_MAX_TOTAL_DENIALS + 1)
+            ]
+        )
+    )
+
+    result = asyncio.run(agent.execute({"description": "tarefa", "action": "implement"}))
+
+    assert result["status"] == "incomplete"
+    assert len(result["tool_calls"]) == _MAX_TOTAL_DENIALS + 1
+
+
+def test_timeout_preserva_tool_calls_parciais(monkeypatch):
+    """PATCH ciclo completo: o timeout de 600s NÃO apaga mais o rastro do que
+    já rodou de verdade — a evidência parcial sobrevive para o auditor."""
+    tool_call_turn = json.dumps({"action": "tool_call", "tool": "bash", "args": {"command": "ls"}})
+
+    class _HangingGateway:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, request) -> LlmResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return LlmResponse(text=tool_call_turn)
+            await asyncio.sleep(3600)
+            raise AssertionError("não deveria voltar")
+
+    monkeypatch.setattr(agents.developer, "_REACT_TIMEOUT_SECONDS", 0.2)
+    agent = DeveloperAgent()
+    agent.attach_gateway(_HangingGateway())
+    agent.attach_tool_client(ScriptedToolClient([ToolCallResult(content="arquivo.txt", exit_code=0)]))
+
+    result = asyncio.run(agent.execute({"description": "tarefa", "action": "implement"}))
+
+    assert result["status"] == "incomplete"
+    assert "600s" in result["notes"] or "excedeu" in result["notes"]
+    assert len(result["tool_calls"]) == 1, "tool_call executada ANTES do timeout é preservada"
+    assert result["tool_calls"][0]["exit_code"] == 0

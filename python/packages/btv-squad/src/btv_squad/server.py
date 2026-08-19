@@ -82,11 +82,42 @@ def _to_squad_event(
                 strength=float(event["strength"]),
                 decision_json=json.dumps(event["decision"], ensure_ascii=False),
                 requires_human=bool(event["requires_human"]),  # proto3: setar à mão ou vira false
+                winner_confidence=float(event.get("winner_confidence", 0.0)),
+                threshold_applied=float(event.get("threshold_applied", 0.7)),
+                metric_definition=event.get("metric_definition", "winner_share"),
+                proposal_confidences_json=json.dumps(
+                    event.get("proposal_confidences", {}), ensure_ascii=False
+                ),
             )
         )
     elif kind == "hitl":
         ev.hitl.CopyFrom(
-            squad_pb2.HitlEscalation(reason=event["reason"], confidence=float(event["confidence"]))
+            squad_pb2.HitlEscalation(
+                reason=event["reason"],
+                confidence=float(event["confidence"]),
+                winner_share=float(event.get("winner_share", 0.0)),
+                threshold_applied=float(event.get("threshold_applied", 0.7)),
+                metric_definition=event.get("metric_definition", "winner_share"),
+                proposal_confidences_json=json.dumps(
+                    event.get("proposal_confidences", {}), ensure_ascii=False
+                ),
+                dissenting_opinions_json=json.dumps(
+                    event.get("dissenting_opinions", []), ensure_ascii=False
+                ),
+            )
+        )
+        # proto3 optional: só seta quando o orquestrador disse algo (auditor
+        # ausente ≠ auditor aprovou).
+        if event.get("auditor_verdict") is not None:
+            ev.hitl.auditor_verdict = bool(event["auditor_verdict"])
+    elif kind == "run_result":
+        ev.run_result.CopyFrom(
+            squad_pb2.RunResult(
+                approved=bool(event["approved"]),
+                public_status=event.get("public_status", "aprovada" if event.get("approved") else "reprovada"),
+                public_reason=event.get("public_reason", ""),
+                deliverable_count=int(event.get("deliverable_count", 0)),
+            )
         )
     elif kind == "handoff":
         ev.handoff.CopyFrom(

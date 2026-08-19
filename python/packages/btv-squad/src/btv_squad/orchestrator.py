@@ -184,6 +184,11 @@ class UnifiedOrchestrator:
                 "kind": "consensus",
                 "decision_maker": consensus.decision_maker,
                 "strength": consensus.consensus_strength,
+                "winner_confidence": consensus.winner_confidence,
+                "threshold_applied": consensus.threshold_applied,
+                "metric_definition": consensus.metric_definition,
+                "proposal_confidences": consensus.proposal_confidences,
+                "agent_weights": consensus.agent_weights,
                 "requires_human": consensus.requires_human,
                 "decision": consensus.decision.model_dump() if consensus.decision else None,
             }
@@ -191,23 +196,47 @@ class UnifiedOrchestrator:
 
         # Narra o consenso na conversa (Fase 1) — o squad "fala" com o membro humano.
         _pct = round(consensus.consensus_strength * 100)
+        _limiar = round(consensus.threshold_applied * 100)
         if consensus.requires_human:
             await self._emit_chat(
                 "Squad",
                 "SYSTEM",
-                f"Consenso ficou fraco ({_pct}%). Preciso da sua orientação para seguir.",
+                f"Consenso ficou abaixo do limiar ({_pct}% < {_limiar}%). Preciso da sua orientação para seguir.",
             )
         else:
             await self._emit_chat(
                 "Squad",
                 "SYSTEM",
-                f"Consenso alcançado ({_pct}%), liderado por {_AGENT_DISPLAY.get(consensus.decision_maker, consensus.decision_maker)}.",
+                f"Consenso alcançado ({_pct}% ≥ {_limiar}%), liderado por {_AGENT_DISPLAY.get(consensus.decision_maker, consensus.decision_maker)}.",
             )
 
         # ADR 0004: usa a property centralizada, não o número mágico 0.7.
+        # Semântica honesta do payload: `confidence` = confiança REAL do
+        # vencedor (0.0-1.0); `winner_share` = participação dele no total
+        # ponderado (o número que a UI mostrava como "43%" sem rótulo —
+        # agora com `metric_definition` explícito). Veto do auditor
+        # (`auditor_verdict == false`) escala MESMO com consenso forte.
         if consensus.requires_human:
             await self._emit(
-                {"kind": "hitl", "reason": "weak_consensus", "confidence": consensus.consensus_strength}
+                {
+                    "kind": "hitl",
+                    "reason": (
+                        "auditor_veto"
+                        if consensus.auditor_verdict is False
+                        else "weak_consensus"
+                    ),
+                    "confidence": consensus.winner_confidence,
+                    "winner_share": consensus.consensus_strength,
+                    "threshold_applied": consensus.threshold_applied,
+                    "metric_definition": consensus.metric_definition,
+                    "proposal_confidences": consensus.proposal_confidences,
+                    "agent_weights": consensus.agent_weights,
+                    "dissenting_opinions": [
+                        {"agent": d.agent, "score": d.score}
+                        for d in consensus.dissenting_opinions
+                    ],
+                    "auditor_verdict": consensus.auditor_verdict,
+                }
             )
             approval = await self.autonomy.execute_with_autonomy(
                 "orchestrator",
@@ -267,6 +296,30 @@ class UnifiedOrchestrator:
                         "issues": final_validation.get("issues", []),
                     },
                     ensure_ascii=False,
+                ),
+            }
+        )
+
+        # Veredito final observável: o watcher Rust (status do run na UI)
+        # consome este evento para marcar a run como aprovada/reprovada —
+        # antes, uma run reprovada pela auditoria aparecia como "concluída"
+        # com zero entregas, indistinguível de uma conclusão limpa.
+        _issues = final_validation.get("issues") or []
+        await self._emit(
+            {
+                "kind": "run_result",
+                "approved": overall_success,
+                "public_status": "aprovada" if overall_success else "reprovada",
+                "public_reason": (
+                    "entrega validada pela auditoria do squad"
+                    if overall_success
+                    else ("; ".join(str(i) for i in _issues) or "entrega reprovada pela auditoria do squad")
+                ),
+                "deliverable_count": sum(
+                    1
+                    for r in execution_results
+                    for tc in (r.get("tool_calls") or [])
+                    if tc.get("tool") == "edit" and tc.get("exit_code") == 0
                 ),
             }
         )

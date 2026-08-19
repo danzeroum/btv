@@ -116,6 +116,101 @@ def test_consenso_fraco_com_hitl_negado_aborta(tmp_path):
     assert orch.autonomy.action_history[-1]["success"] is False
 
 
+def test_run_result_evento_final_aprovada(tmp_path):
+    """PATCH ciclo completo: o veredito final vira evento observável
+    (`run_result`) — sem ele o watcher Rust não distingue aprovada de
+    reprovada no status da run."""
+    orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
+    events: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        events.append(event)
+
+    asyncio.run(orch.execute_complex_task({"description": "tarefa"}, event_sink=sink))
+
+    rr = next(e for e in events if e["kind"] == "run_result")
+    assert rr["approved"] is True
+    assert rr["public_status"] == "aprovada"
+    assert rr["public_reason"]
+    assert rr["deliverable_count"] == 0
+    kinds = [e["kind"] for e in events]
+    assert kinds.index("run_result") > kinds.index("step")
+    fv = next(e for e in events if e["kind"] == "step" and e["step_id"] == "final_validation")
+    assert fv["success"] is True
+
+
+def test_run_result_evento_final_reprovada(tmp_path):
+    # auditor reprova (approved=False): veto → HITL aprovado pelo humano →
+    # validação final reprova → run_result "reprovada". Antes do patch, este
+    # veredito não era observável no stream (run aparecia "concluída").
+    orch = UnifiedOrchestrator(
+        _gateway(0.9, 0.2, 0.2, approved=False),
+        permission_client=ScriptedPermissionClient([PermissionDecision(approved=True)]),
+        memory=AgentMemorySystem(storage_dir=tmp_path),
+    )
+    events: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        events.append(event)
+
+    asyncio.run(orch.execute_complex_task({"description": "tarefa"}, event_sink=sink))
+
+    rr = next(e for e in events if e["kind"] == "run_result")
+    assert rr["approved"] is False
+    assert rr["public_status"] == "reprovada"
+    assert "reprovada" in rr["public_reason"]
+    fv = next(e for e in events if e["kind"] == "step" and e["step_id"] == "final_validation")
+    assert fv["success"] is False
+
+
+def test_hitl_evento_tem_semantica_honesta(tmp_path):
+    """PATCH ciclo completo: `confidence` no evento hitl é a confiança REAL
+    do vencedor (0.6), NÃO a participação ponderada (0.4) que a UI mostrava
+    como "43%" sem rótulo — a share viaja em `winner_share` com
+    `metric_definition` explícito."""
+    orch = UnifiedOrchestrator(
+        _gateway(0.6, 0.6, 0.9, approved=True),
+        permission_client=ScriptedPermissionClient([PermissionDecision(approved=True)]),
+        memory=AgentMemorySystem(storage_dir=tmp_path),
+    )
+    events: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        events.append(event)
+
+    asyncio.run(orch.execute_complex_task({"description": "tarefa crítica"}, event_sink=sink))
+
+    hitl = next(e for e in events if e["kind"] == "hitl")
+    assert hitl["reason"] == "weak_consensus"
+    assert hitl["confidence"] == 0.6, "confiança real do vencedor (architect 0.6)"
+    assert hitl["winner_share"] == pytest.approx(0.4), "participação ponderada do vencedor"
+    assert hitl["metric_definition"] == "winner_share"
+    assert hitl["threshold_applied"] == pytest.approx(0.5276, abs=0.001)
+    assert hitl["proposal_confidences"] == {"architect": 0.6, "developer": 0.6, "auditor": 0.9}
+    assert "auditor_verdict" in hitl
+
+
+def test_hitl_por_veto_do_auditor_mesmo_com_consenso_forte(tmp_path):
+    """Auditor reprovou (approved=False na proposta): o HITL dispara com
+    reason `auditor_veto` mesmo quando a participação ponderada passaria —
+    reprovação explícita nunca é atropelada por média alta."""
+    orch = UnifiedOrchestrator(
+        _gateway(0.9, 0.2, 0.2, approved=False),
+        permission_client=ScriptedPermissionClient([PermissionDecision(approved=True)]),
+        memory=AgentMemorySystem(storage_dir=tmp_path),
+    )
+    events: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        events.append(event)
+
+    asyncio.run(orch.execute_complex_task({"description": "tarefa"}, event_sink=sink))
+
+    hitl = next(e for e in events if e["kind"] == "hitl")
+    assert hitl["reason"] == "auditor_veto"
+    assert hitl["auditor_verdict"] is False
+
+
 def test_event_sink_emite_eventos_ao_vivo_na_ordem(tmp_path):
     orch = UnifiedOrchestrator(_gateway(0.9, 0.2, 0.2, approved=True), memory=AgentMemorySystem(storage_dir=tmp_path))
     events: list[dict] = []
