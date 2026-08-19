@@ -12,6 +12,8 @@ import { runSemArtefatoReal } from '../../../lib/entregas'
 const PILL: Record<string, CSSProperties> = {
   'em produção': { background: 'var(--paper)', color: 'var(--muted)' },
   concluída: { background: 'var(--ok-bg)', color: 'var(--ok-ink)' },
+  reprovada: { background: 'var(--err-bg)', color: 'var(--err-ink)' },
+  incompleta: { background: 'var(--paper)', color: 'var(--faint)' },
   encerrada: { background: 'var(--paper)', color: 'var(--faint)' },
   erro: { background: 'var(--err-bg)', color: 'var(--err-ink)' },
 }
@@ -62,7 +64,11 @@ export function Minhas() {
               ? 'aguardando você'
               : 'em produção'
             : r.status === 'concluida'
-              ? 'concluída'
+              ? r.resultado === 'reprovada'
+                ? 'reprovada'
+                : r.resultado === 'incompleta'
+                  ? 'incompleta'
+                  : 'concluída'
               : r.status
         // Progresso REAL só existe para a execução viva desta sessão (posição
         // da esteira); concluída = 100%; demais ficam sem barra fabricada.
@@ -75,13 +81,15 @@ export function Minhas() {
         // Entregas REAIS desta run (arquivo gravado por ferramenta). Concluída
         // com zero = o modelo não chamou a ferramenta de escrita.
         const numEntregas = entregas.filter((e) => e.run_id === r.id).length
-        const semArtefato = runSemArtefatoReal(r.status, numEntregas)
+        // "sem artefato real" só faz sentido para uma conclusão LIMPA (aprovada)
+        // — reprovada/incompleta já carregam o veredito no próprio badge.
+        const semArtefato = r.resultado === undefined && runSemArtefatoReal(r.status, numEntregas)
         const acao =
           r.status === 'ativa' && isLive
             ? { label: isGate ? 'Revisar' : 'abrir ao vivo', on: () => dispatch({ type: 'SET_SCREEN', screen: 'vivo' }) }
             : r.status === 'ativa'
               ? { label: 'reconectar', on: () => template && abrirRun(r, template) }
-              : r.status === 'concluida'
+              : r.status === 'concluida' && r.resultado === undefined
                 ? { label: 'ver entregas', on: () => dispatch({ type: 'SET_SCREEN', screen: 'biblioteca' }) }
                 : {
                     label: 'reativar',

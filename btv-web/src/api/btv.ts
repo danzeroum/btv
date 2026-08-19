@@ -30,7 +30,9 @@ export function ativarSquad(payload: AtivarSquadPayload): Promise<AtivarSquadRes
   })
 }
 
-/** Espelho de `btv_store::BtvRun` (GET /api/btv/squads). */
+/** Espelho de `btv_store::BtvRun` (GET /api/btv/squads). `resultado`/
+ *  `motivo` (veredito final da validação) só aparecem quando o watcher
+ *  observou a validação final no stream — run reprovada ≠ concluída. */
 export interface BtvRun {
   id: number
   task_id: string
@@ -42,6 +44,8 @@ export interface BtvRun {
   status: 'ativa' | 'concluida' | 'encerrada' | 'erro'
   created_ts: string
   updated_ts: string
+  resultado?: 'aprovada' | 'reprovada' | 'incompleta'
+  motivo?: string
 }
 
 export function listRuns(): Promise<BtvRun[]> {

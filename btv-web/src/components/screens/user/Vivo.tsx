@@ -332,7 +332,26 @@ export function Vivo() {
 
           {/* ── conclusão ── */}
           {view.done &&
-            (artefatosDaTask === 0 ? (
+            (view.veredito?.approved === false ? (
+              // Reprovada pela auditoria do squad: NÃO é conclusão limpa nem
+              // "concluída sem artefato" — o veredito real do stream (motivo
+              // da reprovação) é o que aparece, com a entrega ausente.
+              <div
+                data-testid="squad-done-reprovada"
+                style={{ background: 'var(--err-bg)', border: '1px solid var(--err-line)', borderRadius: 16, padding: '22px 24px', display: 'flex', alignItems: 'flex-start', gap: 14 }}
+              >
+                <span style={{ fontSize: 22 }}>✕</span>
+                <div>
+                  <div style={{ fontFamily: 'var(--disp)', fontWeight: 700, fontSize: 15.5, color: 'var(--err-ink)' }}>
+                    Entrega reprovada na validação final
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--err-ink)', marginTop: 3, lineHeight: 1.6 }}>
+                    {view.veredito.public_reason || 'a auditoria do squad reprovou a entrega.'}{' '}
+                    Nada foi para a Biblioteca. Refine o briefing/modelo e ative novamente.
+                  </div>
+                </div>
+              </div>
+            ) : artefatosDaTask === 0 ? (
               // Concluiu SEM gravar arquivo real: os agentes descreveram a
               // entrega sem usar a ferramenta de escrita → nada na Biblioteca.
               // Honestidade "Nada Fake": avisa em vez de apontar p/ tela vazia.

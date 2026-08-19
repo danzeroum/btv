@@ -35,6 +35,6 @@ export interface ActiveSquadInfo {
   nome: string
   /** Cor de identidade do modelo (handoff §4 — cores por squad). */
   cor: string
-  status: 'em produção' | 'aguardando você' | 'concluída'
+  status: 'em produção' | 'aguardando você' | 'concluída' | 'reprovada'
   gateAberto: boolean
 }
